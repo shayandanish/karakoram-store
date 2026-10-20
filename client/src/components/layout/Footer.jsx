@@ -45,10 +45,14 @@ export default function Footer() {
             <h3 className="font-display font-semibold text-cream-200 mb-4">Shop</h3>
             <ul className="space-y-2 text-sm text-mountain-300">
               <li><Link to="/shop" className="hover:text-apricot-400 transition-colors">All Products</Link></li>
-              <li><Link to="/shop?category=dry-fruits" className="hover:text-apricot-400 transition-colors">Dry Fruits</Link></li>
-              <li><Link to="/shop?category=caps-hats" className="hover:text-apricot-400 transition-colors">Caps & Hats</Link></li>
-              <li><Link to="/shop?category=handicrafts" className="hover:text-apricot-400 transition-colors">Handicrafts</Link></li>
-              <li><Link to="/shop?category=wallets-accessories" className="hover:text-apricot-400 transition-colors">Wallets & Accessories</Link></li>
+              <li><Link to="/shop?category=dry-fruits" className="hover:text-apricot-400 transition-colors">🍑 Dry Fruits</Link></li>
+              <li><Link to="/shop?category=organic-oils" className="hover:text-apricot-400 transition-colors">🫙 Organic Oils</Link></li>
+              <li><Link to="/shop?category=natural-herbs" className="hover:text-apricot-400 transition-colors">🌿 Natural Herbs</Link></li>
+              <li><Link to="/shop?category=seasonal-fruits" className="hover:text-apricot-400 transition-colors">🍒 Seasonal Fruits</Link></li>
+              <li><Link to="/shop?category=handmade-wallets" className="hover:text-apricot-400 transition-colors">👛 Handmade Wallets</Link></li>
+              <li><Link to="/shop?category=traditional-caps" className="hover:text-apricot-400 transition-colors">👑 Traditional Caps</Link></li>
+              <li><Link to="/shop?category=cultural-apparel" className="hover:text-apricot-400 transition-colors">🧥 Cultural Apparel</Link></li>
+              <li><Link to="/shop?category=handmade-cushions" className="hover:text-apricot-400 transition-colors">🛋️ Handmade Cushions</Link></li>
             </ul>
           </div>
 
