@@ -1,18 +1,58 @@
+/* ── Karakoram Store – Global Design System ─────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
 @import "tailwindcss";
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@theme {
+  /* Warm earthy palette */
+  --color-apricot-50:  #fff8f0;
+  --color-apricot-100: #feecd6;
+  --color-apricot-200: #fdd5a5;
+  --color-apricot-300: #fbb86a;
+  --color-apricot-400: #f89535;
+  --color-apricot-500: #f07a18;
+  --color-apricot-600: #e0630e;
+  --color-apricot-700: #ba4d0d;
+  --color-apricot-800: #943e12;
+  --color-apricot-900: #783414;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --color-mountain-50:  #eef3f8;
+  --color-mountain-100: #d8e4ef;
+  --color-mountain-200: #b5cae0;
+  --color-mountain-300: #87a9cc;
+  --color-mountain-400: #5f89b7;
+  --color-mountain-500: #3f6d9e;
+  --color-mountain-600: #2f5582;
+  --color-mountain-700: #1e3c5e;
+  --color-mountain-800: #132740;
+  --color-mountain-900: #0b1a2d;
+
+  --color-cream-50:  #fffef9;
+  --color-cream-100: #fdf9ed;
+  --color-cream-200: #f9f0d3;
+  --color-cream-300: #f3e2af;
+  --color-cream-400: #e8cc7e;
+  --color-cream-500: #d9b04d;
+
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body:    'Inter', system-ui, sans-serif;
 }
+
+/* ── Base ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
 
 body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+  font-family: var(--font-body);
+  background-color: var(--color-cream-100);
+  color: var(--color-mountain-900);
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
 }
+
+h1, h2, h3 { font-family: var(--font-display); }
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-cream-100); }
+::-webkit-scrollbar-thumb { background: var(--color-apricot-400); border-radius: 3px; }

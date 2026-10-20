@@ -3,7 +3,7 @@ import Category from '../models/Category.js';
 // GET /api/categories
 export const getCategories = async (req, res, next) => {
   try {
-    const categories = await Category.find().sort('name');
+    const categories = await Category.find().sort({ order: 1, name: 1 });
     res.json(categories);
   } catch (err) {
     next(err);

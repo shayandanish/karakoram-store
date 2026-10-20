@@ -70,6 +70,10 @@ export const adminDeleteProduct = async (req, res, next) => {
 const categorySchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2),
+  group: z.string().optional(),
+  description: z.string().optional(),
+  icon: z.string().optional(),
+  order: z.number().int().optional(),
   image: z.object({ url: z.string(), publicId: z.string() }).optional(),
 });
 
