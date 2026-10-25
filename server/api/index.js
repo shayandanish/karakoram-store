@@ -22,6 +22,7 @@ export default async function handler(req, res) {
     if (!res.headersSent) {
       res.status(500).json({
         message: 'Server initialization failed. Check the Vercel environment variables.',
+        details: error.message,
       });
     }
   }
