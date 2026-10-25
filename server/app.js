@@ -71,7 +71,19 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(sanitize); // strip $-prefixed / dot-containing keys from body, params, query
 
-// ── Health Check ─────────────────────────────
+// ── Health & Welcome Routes ───────────────────
+app.get('/', (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'Welcome to Karakoram Store API',
+    endpoints: {
+      health: '/api/health',
+      products: '/api/products',
+      categories: '/api/categories',
+    },
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'success', message: 'Karakoram Store API is running' });
 });
