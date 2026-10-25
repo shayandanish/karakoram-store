@@ -63,7 +63,7 @@ const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 200,
 });
-app.use('/api', limiter);
+app.use(['/api', '/app'], limiter);
 
 // ── Body / Cookie Parsers ────────────────────
 app.use(express.json());
@@ -84,19 +84,21 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/app/health'], (req, res) => {
   res.json({ status: 'success', message: 'Karakoram Store API is running' });
 });
 
-// ── API Routes ───────────────────────────────
-app.use('/api/auth', authRoutes);
-app.use('/api/otp', otpRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/cities', cityRoutes);
-app.use('/api/settings', settingsRoutes);
+// ── API Routes (Support both /api and /app) ──
+for (const prefix of ['/api', '/app']) {
+  app.use(`${prefix}/auth`, authRoutes);
+  app.use(`${prefix}/otp`, otpRoutes);
+  app.use(`${prefix}/products`, productRoutes);
+  app.use(`${prefix}/categories`, categoryRoutes);
+  app.use(`${prefix}/orders`, orderRoutes);
+  app.use(`${prefix}/admin`, adminRoutes);
+  app.use(`${prefix}/cities`, cityRoutes);
+  app.use(`${prefix}/settings`, settingsRoutes);
+}
 
 // ── Error Handling ───────────────────────────
 app.use(notFound);
