@@ -23,9 +23,10 @@ pnpm-debug.log*
 # Test coverage
 coverage/
 
-# Caches
+# Caches and local deployment metadata
 .cache/
 .vite/
+.vercel/
 
 # Editor and OS files
 .vscode/

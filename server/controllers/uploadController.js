@@ -71,20 +71,32 @@ export const uploadImage = async (req, res, next) => {
 
     const folder = req.query.folder ? req.query.folder.replace(/[^a-zA-Z0-9_-]/g, '') : 'karakoram-store';
 
+    // Vercel has a read-only/ephemeral filesystem. Uploads must use Cloudinary there.
+    if (process.env.VERCEL && !isCloudinaryConfigured()) {
+      res.status(503);
+      throw new Error(
+        'Image uploads require Cloudinary on Vercel. Add CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET to the project environment variables.'
+      );
+    }
+
     // 1. Try Cloudinary if configured
     if (isCloudinaryConfigured()) {
       try {
         const result = await streamUploadToCloudinary(req.file.buffer, folder);
         return res.status(201).json(result);
       } catch (cloudErr) {
-        console.warn('Cloudinary upload failed, falling back to local storage:', cloudErr.message);
-        // Fall back to local disk
+        console.warn('Cloudinary upload failed:', cloudErr.message);
+        if (process.env.VERCEL) {
+          res.status(502);
+          throw new Error('Cloudinary upload failed. Please try again.');
+        }
+        // Local development fallback when Cloudinary is temporarily unavailable
         const localResult = await saveToLocalDisk(req, req.file, folder);
         return res.status(201).json(localResult);
       }
     }
 
-    // 2. Cloudinary not configured — save locally so users can upload photos immediately
+    // 2. Cloudinary not configured — local development fallback
     const result = await saveToLocalDisk(req, req.file, folder);
     res.status(201).json(result);
   } catch (err) {
