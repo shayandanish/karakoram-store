@@ -1,5 +1,5 @@
 // ── Track Order Page ──────────────────────────────────────────
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import api from '../lib/axios';
 import { fmtPKR, fmtDate, getCleanWhatsAppNumber } from '../lib/utils';
@@ -21,6 +21,29 @@ export default function TrackOrderPage() {
   const [error, setError] = useState('');
 
   const wa = getCleanWhatsAppNumber();
+
+  // Auto-submit if URL contains orderId & phone query params
+  useEffect(() => {
+    const urlOrderId = searchParams.get('orderId');
+    const urlPhone = searchParams.get('phone');
+    if (urlOrderId && urlPhone && !order && !loading) {
+      setOrderId(urlOrderId);
+      setPhone(urlPhone);
+      (async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const res = await api.get('/orders/track', { params: { orderId: urlOrderId, phone: urlPhone } });
+          setOrder(res.data);
+        } catch (err) {
+          setError(err.response?.data?.message || err.response?.data?.error || 'Order not found.');
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleTrack = async (e) => {
     e.preventDefault();
@@ -71,6 +94,20 @@ export default function TrackOrderPage() {
         title="Track Your Order"
         description="Track the status of your Karakoram Store order. Enter your Order ID and phone number for real-time delivery updates."
       />
+
+      {/* Back to Shop Navigation Button */}
+      <div className="mb-6">
+        <Link
+          to="/shop"
+          id="track-back-to-shop-btn"
+          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
+        >
+          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
+            ←
+          </span>
+          <span>Back to Shop</span>
+        </Link>
+      </div>
 
       {/* Header */}
       <div className="text-center mb-10">
@@ -237,7 +274,9 @@ export default function TrackOrderPage() {
 
             <div className="pt-4 border-t border-cream-200 flex items-center justify-between">
               <div>
-                <p className="text-xs text-mountain-500">Total Amount (Cash on Delivery)</p>
+                <p className="text-xs text-mountain-500">
+                  Total Amount ({order.paymentMethod === 'easypaisa' ? 'Easypaisa' : order.paymentMethod === 'COD' ? 'Cash on Delivery' : order.paymentMethod || 'Easypaisa'})
+                </p>
                 <p className="font-display font-bold text-2xl text-apricot-600">{fmtPKR(order.total)}</p>
               </div>
 

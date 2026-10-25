@@ -1,7 +1,9 @@
 // ── Contact Page ───────────────────────────────────────────────
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getCleanWhatsAppNumber } from '../lib/utils';
 import SEO from '../components/ui/SEO';
+
 
 export default function ContactPage() {
   const wa = getCleanWhatsAppNumber();
@@ -36,6 +38,20 @@ export default function ContactPage() {
         description="Get in touch with Karakoram Store. Reach out via WhatsApp or phone for order inquiries, wholesale orders, and customer assistance."
       />
 
+      {/* Back to Home Navigation Button */}
+      <div className="mb-6">
+        <Link
+          to="/"
+          id="contact-back-btn"
+          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
+        >
+          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
+            ←
+          </span>
+          <span>Back to Home</span>
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="text-center mb-12">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-apricot-100 text-apricot-700 text-xs font-semibold mb-3">
@@ -62,17 +78,9 @@ export default function ContactPage() {
                 <div>
                   <p className="font-semibold text-mountain-800">Dispatch Center</p>
                   <p className="text-mountain-600 text-xs mt-0.5">
-                    Altit, Hunza Valley<br />Gilgit-Baltistan, Pakistan
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <span className="text-xl">⏰</span>
-                <div>
-                  <p className="font-semibold text-mountain-800">Operating Hours</p>
-                  <p className="text-mountain-600 text-xs mt-0.5">
-                    Mon – Sat: 9:00 AM – 9:00 PM PKT
+                    Zero Point, Karimabad<br />
+                    Sana Khan and Sons Market<br />
+                    Gilgit-Baltistan, Pakistan
                   </p>
                 </div>
               </div>
@@ -82,7 +90,7 @@ export default function ContactPage() {
                 <div>
                   <p className="font-semibold text-mountain-800">Delivery Information</p>
                   <p className="text-mountain-600 text-xs mt-0.5">
-                    Flat Rs. 200 Cash on Delivery across Pakistan (3–5 business days).
+                    Flat Rs. 200 delivery across Pakistan (3–5 business days). Payment via Easypaisa.
                   </p>
                 </div>
               </div>

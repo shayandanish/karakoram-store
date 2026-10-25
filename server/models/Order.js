@@ -35,8 +35,13 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ['COD', 'bank_transfer'],
+      enum: ['easypaisa', 'COD', 'bank_transfer'],
+      default: 'easypaisa',
       required: true,
+    },
+    transactionId: {
+      type: String,
+      default: '',
     },
     paymentStatus: {
       type: String,

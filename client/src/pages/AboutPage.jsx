@@ -10,6 +10,20 @@ export default function AboutPage() {
         description="Learn the story behind Karakoram Store. Bringing authentic, preservative-free organic dried fruits, honey, and artisan crafts from Hunza Valley to your doorstep."
       />
 
+      {/* Back to Home Navigation Button */}
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-4">
+        <Link
+          to="/"
+          id="about-back-btn"
+          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
+        >
+          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
+            ←
+          </span>
+          <span>Back to Home</span>
+        </Link>
+      </div>
+
       {/* Hero Header */}
       <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-16">
         <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-apricot-100 text-apricot-800 text-xs font-semibold mb-4">
@@ -91,7 +105,7 @@ export default function AboutPage() {
             {
               icon: '📦',
               title: 'Carefully Packed',
-              desc: 'Safely packaged in eco-conscious food-grade containers and delivered with nationwide Cash on Delivery.',
+              desc: 'Safely packaged in eco-conscious food-grade containers and delivered nationwide across Pakistan with secure Easypaisa payment.',
             },
           ].map((pillar) => (
             <div key={pillar.title} className="bg-white rounded-2xl p-6 shadow-sm border border-cream-200 text-center">

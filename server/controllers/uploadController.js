@@ -1,20 +1,67 @@
-import cloudinary from '../config/cloudinary.js';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
 import { Readable } from 'stream';
+import cloudinary from '../config/cloudinary.js';
 
-/** Stream a buffer to Cloudinary and return { url, publicId } */
-const streamUpload = (buffer, folder) =>
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+
+/** Check if valid Cloudinary credentials are set in .env */
+const isCloudinaryConfigured = () => {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  return (
+    Boolean(cloudName) &&
+    cloudName !== 'your_cloud_name' &&
+    Boolean(apiKey) &&
+    apiKey !== 'your_api_key' &&
+    Boolean(apiSecret) &&
+    apiSecret !== 'your_api_secret'
+  );
+};
+
+/** Stream a buffer to Cloudinary */
+const streamUploadToCloudinary = (buffer, folder) =>
   new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       { folder, resource_type: 'image' },
       (error, result) => {
         if (error) return reject(error);
-        resolve({ url: result.secure_url, publicId: result.public_id });
+        resolve({ url: result.secure_url, publicId: result.public_id, storage: 'cloudinary' });
       }
     );
     Readable.from(buffer).pipe(uploadStream);
   });
 
-// POST /api/upload — single image
+/** Save a buffer to local disk (fallback when Cloudinary is not configured) */
+const saveToLocalDisk = async (req, file, folder) => {
+  const folderDir = path.join(UPLOADS_DIR, folder);
+  await fs.promises.mkdir(folderDir, { recursive: true });
+
+  const ext = path.extname(file.originalname) || (file.mimetype === 'image/png' ? '.png' : file.mimetype === 'image/webp' ? '.webp' : '.jpg');
+  const filename = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${ext.toLowerCase()}`;
+  const filePath = path.join(folderDir, filename);
+
+  await fs.promises.writeFile(filePath, file.buffer);
+
+  // Build full public URL
+  const host = req.get('host') || 'localhost:5000';
+  const protocol = req.protocol || 'http';
+  const url = `${protocol}://${host}/uploads/${folder}/${filename}`;
+
+  return {
+    url,
+    publicId: `local_${folder}_${filename}`,
+    storage: 'local',
+  };
+};
+
+// POST /api/admin/upload — single image
 export const uploadImage = async (req, res, next) => {
   try {
     if (!req.file) {
@@ -22,16 +69,56 @@ export const uploadImage = async (req, res, next) => {
       throw new Error('No file provided');
     }
 
-    const folder = req.query.folder || 'karakoram-store';
-    const result = await streamUpload(req.file.buffer, folder);
+    const folder = req.query.folder ? req.query.folder.replace(/[^a-zA-Z0-9_-]/g, '') : 'karakoram-store';
 
+    // 1. Try Cloudinary if configured
+    if (isCloudinaryConfigured()) {
+      try {
+        const result = await streamUploadToCloudinary(req.file.buffer, folder);
+        return res.status(201).json(result);
+      } catch (cloudErr) {
+        console.warn('Cloudinary upload failed, falling back to local storage:', cloudErr.message);
+        // Fall back to local disk
+        const localResult = await saveToLocalDisk(req, req.file, folder);
+        return res.status(201).json(localResult);
+      }
+    }
+
+    // 2. Cloudinary not configured — save locally so users can upload photos immediately
+    const result = await saveToLocalDisk(req, req.file, folder);
     res.status(201).json(result);
   } catch (err) {
     next(err);
   }
 };
 
-// DELETE /api/upload — remove by publicId
+/** Delete a stored image by publicId. Safe to call when the file is already gone. */
+export const deleteStoredImage = async (publicId) => {
+  if (!publicId) return;
+
+  // Local file deletion
+  if (publicId.startsWith('local_')) {
+    const parts = publicId.split('_');
+    if (parts.length >= 3) {
+      const folder = parts[1];
+      const filename = parts.slice(2).join('_');
+      const filePath = path.join(UPLOADS_DIR, folder, filename);
+      try {
+        await fs.promises.unlink(filePath);
+      } catch {
+        // ignore if already deleted
+      }
+    }
+    return;
+  }
+
+  // Cloudinary deletion
+  if (isCloudinaryConfigured()) {
+    await cloudinary.uploader.destroy(publicId).catch(() => {});
+  }
+};
+
+// DELETE /api/admin/upload — remove by publicId
 export const deleteImage = async (req, res, next) => {
   try {
     const { publicId } = req.body;
@@ -40,8 +127,12 @@ export const deleteImage = async (req, res, next) => {
       throw new Error('publicId is required');
     }
 
-    await cloudinary.uploader.destroy(publicId);
-    res.json({ message: 'Image deleted' });
+    await deleteStoredImage(publicId);
+    res.json({
+      message: publicId.startsWith('local_')
+        ? 'Image deleted from local storage'
+        : 'Image deleted',
+    });
   } catch (err) {
     next(err);
   }

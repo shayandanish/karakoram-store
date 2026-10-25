@@ -1,6 +1,6 @@
 // ── Product Detail Page ───────────────────────────────────────
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useCart } from '../context/CartContext';
@@ -35,6 +35,7 @@ function StarRating({ avg, count }) {
 
 export default function ProductDetailPage() {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const { addToCart, items } = useCart();
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -80,9 +81,23 @@ export default function ProductDetailPage() {
         }}
       />
 
+      {/* Back to Shop Navigation Button */}
+      <div className="mb-5">
+        <button
+          type="button"
+          id="product-back-btn"
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
+        >
+          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
+            ←
+          </span>
+          <span>Back to Products</span>
+        </button>
+      </div>
+
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-mountain-500 mb-8" aria-label="Breadcrumb">
-
         <Link to="/" className="hover:text-apricot-500 transition-colors">Home</Link>
         <span aria-hidden="true">›</span>
         <Link to="/shop" className="hover:text-apricot-500 transition-colors">Shop</Link>
@@ -111,12 +126,14 @@ export default function ProductDetailPage() {
         <div className="grid md:grid-cols-2 gap-10 lg:gap-16">
           {/* Images */}
           <div className="space-y-3">
-            <div className="relative aspect-square rounded-2xl overflow-hidden bg-cream-200">
+            <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-cream-200">
               <ProductImage
                 src={product.images?.[activeImg]
                   ? thumbUrl(product.images[activeImg].url, 800)
                   : null}
                 alt={product.images?.[activeImg]?.alt || product.name}
+                fit="contain"
+                smartCrop
               />
               {product.isFeatured && (
                 <span className="absolute top-4 left-4 bg-apricot-500 text-white text-xs font-bold px-3 py-1 rounded-full">

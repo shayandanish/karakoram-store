@@ -1,8 +1,13 @@
 // ── ProductImage – shows a styled, artistic mountain placeholder if no image ─────
 import { useState } from 'react';
 
-export default function ProductImage({ src, alt, className = '' }) {
+export default function ProductImage({ src, alt, className = '', fit = 'cover', smartCrop = false }) {
   const [hasError, setHasError] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(null);
+
+  // Some uploaded product photos have black letterbox bars baked into the
+  // top/bottom. For tall images, trim those bars so the product fills the card.
+  const trimLetterbox = smartCrop && aspectRatio !== null && aspectRatio < 0.5;
 
   if (src && !hasError) {
     return (
@@ -11,7 +16,20 @@ export default function ProductImage({ src, alt, className = '' }) {
         alt={alt || 'Product image'}
         loading="lazy"
         onError={() => setHasError(true)}
-        className={`object-cover w-full h-full transition-all duration-300 ${className}`}
+        onLoad={(event) => {
+          const { naturalWidth, naturalHeight } = event.currentTarget;
+          if (naturalWidth && naturalHeight) setAspectRatio(naturalWidth / naturalHeight);
+        }}
+        style={{
+          objectFit: fit,
+          ...(trimLetterbox
+            ? {
+                clipPath: 'inset(14% 0 12% 0)',
+                transform: 'scale(1.25)',
+              }
+            : {}),
+        }}
+        className={`w-full h-full transition-all duration-300 ${className}`}
       />
     );
   }

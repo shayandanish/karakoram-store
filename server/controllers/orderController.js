@@ -3,6 +3,7 @@ import { z } from 'zod';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Coupon from '../models/Coupon.js';
+import User from '../models/User.js';
 
 const addressSchema = z.object({
   name: z.string().min(2),
@@ -28,7 +29,8 @@ const createOrderSchema = z.object({
 
   items: z.array(orderItemInputSchema).min(1),
   shippingAddress: addressSchema,
-  paymentMethod: z.enum(['COD', 'bank_transfer']),
+  paymentMethod: z.enum(['easypaisa', 'COD', 'bank_transfer']).default('easypaisa'),
+  transactionId: z.string().optional(),
   couponCode: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -109,16 +111,28 @@ export const createOrder = async (req, res, next) => {
 
     const total = Math.max(0, subtotal + SHIPPING_COST - discount);
 
+    // Link order to logged-in user or find matching registered user by email
+    let userId = req.user?._id || null;
+    if (!userId && data.guestEmail) {
+      const matchedUser = await User.findOne({
+        email: data.guestEmail.toLowerCase().trim(),
+      }).session(session);
+      if (matchedUser) {
+        userId = matchedUser._id;
+      }
+    }
+
     const order = await Order.create(
       [
         {
-          user: req.user?._id || null,
+          user: userId,
           guestName: data.guestName,
           guestEmail: data.guestEmail,
           guestPhone: data.guestPhone,
           items: orderItems,
           shippingAddress: data.shippingAddress,
-          paymentMethod: data.paymentMethod,
+          paymentMethod: data.paymentMethod || 'easypaisa',
+          transactionId: data.transactionId || '',
           couponCode: data.couponCode || '',
           notes: data.notes || '',
           subtotal,
@@ -144,7 +158,31 @@ export const createOrder = async (req, res, next) => {
 // GET /api/orders/my — logged-in user's orders
 export const getMyOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({ user: req.user._id }).sort('-createdAt');
+    const userEmail = req.user?.email?.toLowerCase().trim();
+    const userPhone = req.user?.phone?.trim();
+
+    const matchConditions = [];
+    if (userEmail) matchConditions.push({ guestEmail: userEmail });
+    if (userPhone) {
+      matchConditions.push({ guestPhone: userPhone });
+      matchConditions.push({ 'shippingAddress.phone': userPhone });
+    }
+
+    // Auto-link any matching orders that didn't have user ID set
+    if (matchConditions.length > 0) {
+      await Order.updateMany(
+        { user: null, $or: matchConditions },
+        { $set: { user: req.user._id } }
+      );
+    }
+
+    const orders = await Order.find({
+      $or: [
+        { user: req.user._id },
+        ...(matchConditions.length ? matchConditions : []),
+      ],
+    }).sort('-createdAt');
+
     res.json(orders);
   } catch (err) {
     next(err);

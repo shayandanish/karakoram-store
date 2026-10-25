@@ -44,9 +44,17 @@ export default function CheckoutPage() {
     city: user?.addresses?.[0]?.city || '',
     province: user?.addresses?.[0]?.province || '',
     postalCode: user?.addresses?.[0]?.postalCode || '',
+    transactionId: '',
     notes: '',
     couponCode: '',
   });
+
+  const [copiedNumber, setCopiedNumber] = useState(false);
+  const handleCopyNumber = () => {
+    navigator.clipboard?.writeText('03495144486');
+    setCopiedNumber(true);
+    setTimeout(() => setCopiedNumber(false), 2000);
+  };
 
   const [prefilledForUser, setPrefilledForUser] = useState(null);
   if (user && prefilledForUser !== user._id) {
@@ -122,7 +130,8 @@ export default function CheckoutPage() {
         postalCode: form.postalCode.trim() || undefined,
         country:    'Pakistan',
       },
-      paymentMethod: 'COD',
+      paymentMethod: 'easypaisa',
+      transactionId: form.transactionId?.trim() || undefined,
       couponCode: form.couponCode.trim() || undefined,
       notes: form.notes.trim() || undefined,
     };
@@ -130,6 +139,18 @@ export default function CheckoutPage() {
     try {
       const { data } = await api.post('/orders', payload);
       clearCart();
+      try {
+        localStorage.setItem(
+          'karakoram_last_order',
+          JSON.stringify({
+            orderId: data._id,
+            phone: data.shippingAddress?.phone || data.guestPhone || form.guestPhone.trim(),
+            placedAt: new Date().toISOString(),
+          })
+        );
+      } catch {
+        // storage disabled
+      }
       navigate('/order-success', { state: { order: data } });
     } catch (err) {
       const msg =
@@ -145,9 +166,24 @@ export default function CheckoutPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <SEO
-        title="Checkout – Cash on Delivery"
-        description="Fast guest checkout with nationwide Cash on Delivery. Order authentic handcrafted goods directly from Hunza."
+        title="Checkout – Easypaisa Payment"
+        description="Secure checkout with Easypaisa. Transfer directly to 03495144486 (Shayan Danish). Order authentic handcrafted goods directly from Hunza."
       />
+
+      {/* Back to Cart Navigation Button */}
+      <div className="mb-4">
+        <Link
+          to="/cart"
+          id="checkout-back-to-cart-btn"
+          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
+        >
+          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
+            ←
+          </span>
+          <span>Back to Cart</span>
+        </Link>
+      </div>
+
       <h1 className="font-display font-bold text-3xl text-mountain-900 mb-8">Checkout</h1>
 
 
@@ -298,16 +334,114 @@ export default function CheckoutPage() {
             {/* Payment */}
             <section className="bg-white rounded-2xl shadow-sm p-6">
               <h2 className="font-display font-semibold text-mountain-900 text-lg mb-4 flex items-center gap-2">
-                <span className="w-7 h-7 bg-apricot-100 text-apricot-600 rounded-full text-sm font-bold flex items-center justify-center">4</span>
+                <span className="w-7 h-7 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold flex items-center justify-center">4</span>
                 Payment Method
               </h2>
-              <label className="flex items-start gap-3 cursor-pointer bg-apricot-50 border-2 border-apricot-400 rounded-xl p-4">
-                <input type="radio" name="payment" defaultChecked className="accent-apricot-500 mt-0.5" readOnly />
-                <div>
-                  <p className="font-semibold text-mountain-900 text-sm">Cash on Delivery (COD)</p>
-                  <p className="text-xs text-mountain-500 mt-0.5">Pay in cash when your order arrives. No advance required.</p>
+
+              <div className="border-2 border-emerald-500/80 bg-gradient-to-br from-emerald-50/50 via-white to-stone-50/40 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+                {/* Header Badge */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shadow-emerald-600/30">
+                      📱
+                    </div>
+                    <div>
+                      <h3 className="font-display font-bold text-base text-stone-900 flex items-center gap-2">
+                        Easypaisa Payment
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 tracking-wide uppercase">
+                          Active
+                        </span>
+                      </h3>
+                      <p className="text-xs text-stone-500">Fast & secure mobile wallet transfer</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
+                    Direct Transfer
+                  </span>
                 </div>
-              </label>
+
+                {/* Account Credentials Box */}
+                <div className="bg-white rounded-xl p-4 sm:p-5 border border-emerald-200 shadow-xs space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-stone-100">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Account Title</span>
+                      <p className="text-base sm:text-lg font-bold text-stone-900 flex items-center gap-2">
+                        Shayan Danish
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                          <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Verified
+                        </span>
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Total Payable</span>
+                      <p className="text-base sm:text-lg font-display font-bold text-apricot-600">{fmtPKR(total)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Easypaisa Mobile Number</span>
+                      <p className="text-xl sm:text-2xl font-mono font-bold text-emerald-950 tracking-wider">03495144486</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyNumber}
+                      id="copy-easypaisa-btn"
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white transition-all shadow-sm hover:shadow-emerald-600/20"
+                    >
+                      {copiedNumber ? (
+                        <>
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Copied to Clipboard!</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          <span>Copy Number</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Steps */}
+                <div className="bg-emerald-50/80 border border-emerald-100 rounded-xl p-3.5 text-xs text-stone-700 space-y-2">
+                  <p className="font-bold text-emerald-950 flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center text-[10px]">✓</span>
+                    Quick Payment Steps:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-1 text-stone-600 pl-1 leading-relaxed">
+                    <li>Open <strong>Easypaisa App</strong> or dial <strong>*786#</strong> on your phone.</li>
+                    <li>Send <strong>{fmtPKR(total)}</strong> to <strong>03495144486</strong> (Title: <strong>Shayan Danish</strong>).</li>
+                    <li>Enter the 11-digit <strong>TRX ID</strong> or sender number below (or share screenshot on WhatsApp after ordering).</li>
+                  </ol>
+                </div>
+
+                {/* Optional TRX ID Input */}
+                <div className="pt-1">
+                  <Field
+                    id="field-transaction-id"
+                    label="Easypaisa TRX ID / Sender Number (Optional)"
+                    hint="Enter your 11-digit transaction ID or the mobile number used to pay."
+                  >
+                    <input
+                      id="field-transaction-id"
+                      type="text"
+                      value={form.transactionId}
+                      onChange={set('transactionId')}
+                      placeholder="e.g. 29481948201 or 0349XXXXXXX"
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+              </div>
             </section>
           </div>
 
@@ -334,7 +468,7 @@ export default function CheckoutPage() {
                   <span>{fmtPKR(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-mountain-600">
-                  <span>Shipping (COD)</span>
+                  <span>Shipping</span>
                   <span>{fmtPKR(SHIPPING)}</span>
                 </div>
                 <div className="border-t border-cream-200 pt-2 flex justify-between">

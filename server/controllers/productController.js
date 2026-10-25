@@ -1,11 +1,25 @@
 import Product from '../models/Product.js';
 
+const REGION_PATTERNS = {
+  hunza: 'Hunza',
+  nagar: 'Nagar',
+  ghizer: 'Ghizer',
+  skardu: 'Skardu',
+  astore: 'Astore',
+  diamer: 'Diamer',
+  // Avoid matching the generic "Gilgit-Baltistan" origin for every product.
+  gilgit: 'Gilgit(?!-Baltistan)',
+};
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // GET /api/products
 export const getProducts = async (req, res, next) => {
   try {
     const {
       search,
       category,
+      region,
       minPrice,
       maxPrice,
       inStock,
@@ -23,6 +37,13 @@ export const getProducts = async (req, res, next) => {
     if (category) {
       // Try to match by ObjectId first, then by slug via lookup
       filter.category = category;
+    }
+
+    // Region filter (matches the product origin)
+    if (region) {
+      const key = String(region).trim().toLowerCase();
+      const pattern = REGION_PATTERNS[key] || escapeRegex(String(region).trim());
+      if (pattern) filter.origin = { $regex: pattern, $options: 'i' };
     }
 
     // Price filter (checks at least one variant in range)

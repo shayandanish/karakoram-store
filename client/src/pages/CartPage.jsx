@@ -110,8 +110,22 @@ export default function CartPage() {
         title={`Cart (${items.length} ${items.length === 1 ? 'item' : 'items'})`}
         description="Review your items and proceed to checkout at Karakoram Store."
       />
-      <div className="flex items-center justify-between mb-8">
 
+      {/* Back to Shop Navigation Button */}
+      <div className="mb-4">
+        <Link
+          to="/shop"
+          id="cart-back-to-shop-btn"
+          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
+        >
+          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
+            ←
+          </span>
+          <span>Continue Shopping</span>
+        </Link>
+      </div>
+
+      <div className="flex items-center justify-between mb-8">
         <h1 className="font-display font-bold text-3xl text-mountain-900">Your Cart</h1>
         <button
           id="cart-clear-btn"

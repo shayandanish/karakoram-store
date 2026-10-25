@@ -16,8 +16,10 @@ export const fmtDate = (date) =>
   }).format(new Date(date));
 
 // ── WhatsApp order link builder ───────────────────────────────
+const DEFAULT_WHATSAPP_NUMBER = '923495144486';
+
 export const getCleanWhatsAppNumber = () => {
-  const raw = import.meta.env.VITE_WHATSAPP_NUMBER || '';
+  const raw = import.meta.env.VITE_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER;
   return raw.replace(/\D/g, '');
 };
 

@@ -7,6 +7,7 @@ import ProductCard from '../components/ui/ProductCard';
 import { SkeletonCard } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
 import SEO from '../components/ui/SEO';
+import { REGIONS } from '../lib/regions';
 
 const SORT_OPTIONS = [
   { value: '-createdAt', label: 'Newest' },
@@ -66,10 +67,7 @@ function FilterPanel({ categories, filters, onFilter, onReset }) {
                     onChange={() => onFilter('category', cat._id)}
                     className="accent-apricot-500"
                   />
-                  <span className="text-sm text-mountain-700 flex items-center gap-1.5">
-                    {cat.icon && <span className="text-xs">{cat.icon}</span>}
-                    <span>{cat.name}</span>
-                  </span>
+                  <span className="text-sm text-mountain-700">{cat.name}</span>
                 </label>
               </div>
             );
@@ -77,6 +75,39 @@ function FilterPanel({ categories, filters, onFilter, onReset }) {
         </div>
       </div>
 
+      {/* Region */}
+      <div>
+        <h3 className="text-sm font-semibold text-mountain-700 mb-3">Region</h3>
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-2 cursor-pointer py-0.5">
+            <input
+              type="radio"
+              name="region"
+              value=""
+              checked={!filters.region}
+              onChange={() => onFilter('region', '')}
+              className="accent-apricot-500"
+            />
+            <span className="text-sm font-medium text-mountain-700">All Regions</span>
+          </label>
+          {REGIONS.map((region) => (
+            <label
+              key={region.slug}
+              className="flex items-center gap-2 cursor-pointer py-0.5 hover:text-apricot-600 transition-colors"
+            >
+              <input
+                type="radio"
+                name="region"
+                value={region.slug}
+                checked={filters.region === region.slug}
+                onChange={() => onFilter('region', region.slug)}
+                className="accent-apricot-500"
+              />
+              <span className="text-sm text-mountain-700">{region.name}</span>
+            </label>
+          ))}
+        </div>
+      </div>
 
       {/* Price range */}
       <div>
@@ -177,6 +208,7 @@ export default function ShopPage() {
 
   const filters = {
     category: searchParams.get('category') || '',
+    region: searchParams.get('region') || '',
     minPrice: searchParams.get('minPrice') || '',
     maxPrice: searchParams.get('maxPrice') || '',
     inStock: searchParams.get('inStock') === 'true',
@@ -241,11 +273,13 @@ export default function ShopPage() {
     (c) => c._id === filters.category || c.slug === filters.category
   );
   const resolvedCategory = matchedCat ? matchedCat._id : filters.category;
+  const activeRegion = REGIONS.find((region) => region.slug === filters.region);
 
   // Products query
   const queryParams = new URLSearchParams();
   if (debouncedSearch) queryParams.set('search', debouncedSearch);
   if (resolvedCategory) queryParams.set('category', resolvedCategory);
+  if (filters.region) queryParams.set('region', filters.region);
   if (filters.minPrice) queryParams.set('minPrice', filters.minPrice);
   if (filters.maxPrice) queryParams.set('maxPrice', filters.maxPrice);
   if (filters.inStock) queryParams.set('inStock', 'true');
@@ -272,14 +306,18 @@ export default function ShopPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <SEO
-        title="Shop Authentic Himalayan Products"
-        description="Explore our handpicked collection of Hunza dried fruits, organic walnuts, Chitrali wool caps, and handmade gifts. Fast shipping across Pakistan."
+        title={activeRegion ? `Shop ${activeRegion.name} Products` : 'Shop Authentic Himalayan Products'}
+        description={activeRegion
+          ? `Shop authentic products from ${activeRegion.name}, Gilgit-Baltistan — dry fruits, organic oils, herbs, and handmade crafts. Fast shipping across Pakistan.`
+          : 'Explore our handpicked collection of Hunza dried fruits, organic walnuts, Chitrali wool caps, and handmade gifts. Fast shipping across Pakistan.'}
       />
 
       {/* Header */}
       <div className="mb-8">
 
-        <h1 className="font-display font-bold text-3xl text-mountain-900 mb-2">Shop</h1>
+        <h1 className="font-display font-bold text-3xl text-mountain-900 mb-2">
+          Shop{activeRegion ? ` from ${activeRegion.name}` : ''}
+        </h1>
         <p className="text-mountain-600 text-sm">
           {isLoading ? 'Loading…' : `${total} products found`}
         </p>
@@ -335,6 +373,20 @@ export default function ShopPage() {
           Filters
         </button>
       </div>
+
+      {activeRegion && (
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-apricot-200 bg-apricot-50 px-3 py-1 font-medium text-apricot-700">
+            Region: {activeRegion.name}
+          </span>
+          <button
+            onClick={() => setFilter('region', '')}
+            className="text-mountain-500 hover:text-apricot-600 underline underline-offset-2 transition-colors"
+          >
+            Clear region
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-6">
         {/* Filter sidebar – desktop always visible, mobile toggle */}

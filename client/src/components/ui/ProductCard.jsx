@@ -16,15 +16,33 @@ export default function ProductCard({ product }) {
     <Link
       to={`/products/${product.slug}`}
       id={`product-card-${product._id}`}
-      className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col"
+      className="group flex h-full flex-col overflow-hidden rounded-2xl bg-white shadow-sm transition-all duration-300 hover:shadow-xl"
     >
       {/* Image */}
-      <div className="relative overflow-hidden h-52">
-        <ProductImage
-          src={img}
-          alt={product.images?.[0]?.alt || product.name}
-          className="group-hover:scale-105 transition-transform duration-500"
-        />
+      <div className="relative aspect-[4/5] overflow-hidden bg-cream-100">
+        {img && (
+          <img
+            src={img}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+            className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl"
+          />
+        )}
+
+        <div className="absolute inset-0 p-4">
+          <ProductImage
+            src={img}
+            alt={product.images?.[0]?.alt || product.name}
+            fit="contain"
+            smartCrop
+            className="group-hover:scale-105"
+          />
+        </div>
+
         {product.isFeatured && (
           <span className="absolute top-3 left-3 bg-apricot-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
             Featured
@@ -48,11 +66,11 @@ export default function ProductCard({ product }) {
         {product.artisan?.name && (
           <p className="text-xs text-mountain-500 mb-2">by {product.artisan.name}</p>
         )}
-        <div className="mt-auto flex items-center justify-between pt-3 border-t border-cream-200">
-          <span className="font-display text-apricot-600 font-bold text-lg">
+        <div className="mt-auto flex items-end justify-between gap-2 border-t border-cream-200 pt-3">
+          <span className="shrink-0 whitespace-nowrap font-display text-base font-bold text-apricot-600 sm:text-lg">
             {lowestPrice !== null ? `From ${fmtPKR(lowestPrice)}` : 'N/A'}
           </span>
-          <span className="text-xs text-mountain-500">
+          <span className="min-w-0 truncate text-right text-[11px] text-mountain-500 sm:text-xs">
             {product.origin || ''}
           </span>
         </div>
