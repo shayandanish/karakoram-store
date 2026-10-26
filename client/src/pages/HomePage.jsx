@@ -12,10 +12,10 @@ import { useSiteSettings } from '../hooks/useSiteSettings';
 import { cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
 
 const HERO_STATS = [
-  { icon: '🛍️', value: '100+', label: 'Curated products' },
-  { icon: '💛', value: '5,000+', label: 'Happy customers' },
-  { icon: '🏔️', value: '100%', label: 'Locally sourced' },
-  { icon: '📱', value: 'Easypaisa', label: 'Instant transfer' },
+  { icon: 'bag', value: '100+', label: 'Curated products' },
+  { icon: 'heart', value: '5,000+', label: 'Happy customers' },
+  { icon: 'mountain', value: '100%', label: 'Locally sourced' },
+  { icon: 'wallet', value: 'Easypaisa', label: 'Instant transfer' },
 ];
 
 const PROMISES = [
@@ -105,14 +105,60 @@ function PromiseIcon({ name, className = 'h-6 w-6' }) {
   );
 }
 
+function StatIcon({ name, className = 'h-5 w-5' }) {
+  const iconProps = {
+    className,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.6,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  if (name === 'bag') {
+    return (
+      <svg {...iconProps}>
+        <path d="M20.6 13.4L13.4 20.6a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z" />
+        <circle cx="7.5" cy="7.5" r="1.3" />
+      </svg>
+    );
+  }
+
+  if (name === 'heart') {
+    return (
+      <svg {...iconProps}>
+        <path d="M12 20s-7-4.35-7-9a4 4 0 017-2.65A4 4 0 0119 11c0 4.65-7 9-7 9z" />
+      </svg>
+    );
+  }
+
+  if (name === 'mountain') {
+    return (
+      <svg {...iconProps}>
+        <path d="M3 19l6-9 3.5 5L16 9l5 10H3z" />
+        <path d="M7.5 7.5L9 5l1.5 2.5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...iconProps}>
+      <path d="M3 7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+      <path d="M3 9h18M16 13h2" />
+    </svg>
+  );
+}
+
 function HeroStat({ icon, value, label }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl p-2">
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-apricot-50 text-lg" aria-hidden="true">
-        {icon}
+    <div className="flex flex-col items-start gap-2 rounded-xl p-2 sm:flex-row sm:items-center sm:gap-3">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/80 text-apricot-600 shadow-sm ring-1 ring-apricot-100/70">
+        <StatIcon name={icon} />
       </span>
       <div>
-        <p className="font-display text-xl font-bold leading-none text-mountain-900">{value}</p>
+        <p className="font-display text-lg font-bold leading-none text-mountain-900 sm:text-xl">{value}</p>
         <p className="mt-1 text-[11px] font-medium text-mountain-500">{label}</p>
       </div>
     </div>
@@ -522,7 +568,7 @@ export default function HomePage() {
           </div>
 
           {/* Stats strip */}
-          <div className="mt-12 grid grid-cols-2 gap-2 rounded-2xl border border-cream-200 bg-white/70 p-3 backdrop-blur sm:mt-16 sm:grid-cols-4 sm:gap-3 sm:p-5">
+          <div className="mt-12 grid grid-cols-2 gap-2 rounded-2xl border border-cream-300/70 bg-cream-50/70 p-3 shadow-sm backdrop-blur-sm sm:mt-16 sm:grid-cols-4 sm:gap-3 sm:p-5">
             {HERO_STATS.map((stat) => (
               <HeroStat key={stat.label} {...stat} />
             ))}
