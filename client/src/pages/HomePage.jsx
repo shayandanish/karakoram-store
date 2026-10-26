@@ -1,5 +1,5 @@
 // ── Home Page ─────────────────────────────────────────────────
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
@@ -165,11 +165,23 @@ function HeroStat({ icon, value, label }) {
   );
 }
 
+function ChevronDownIcon({ className = 'h-3.5 w-3.5' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 function LandingSubnav({ categories }) {
   const { logo } = useSiteSettings();
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const categoriesMenuRef = useRef(null);
   const stickyTop = logo?.url ? 'top-[6.5rem]' : 'top-16';
   const linkClass =
     'shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-mountain-600 transition-colors hover:bg-apricot-50 hover:text-apricot-700';
+  const navLinkClass =
+    'shrink-0 rounded-full px-2 py-1.5 text-xs font-semibold text-mountain-600 transition-colors hover:bg-apricot-50 hover:text-apricot-700 lg:px-3';
 
   const extraItems = EXTRA_NAV_ITEMS.filter(
     (item) =>
@@ -179,63 +191,125 @@ function LandingSubnav({ categories }) {
           category.slug.includes(item.slug)
       )
   );
+  const quickCategories = categories.slice(0, 3);
+
+  useEffect(() => {
+    if (!categoriesOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (categoriesMenuRef.current && !categoriesMenuRef.current.contains(event.target)) {
+        setCategoriesOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setCategoriesOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [categoriesOpen]);
+
+  const closeCategories = () => setCategoriesOpen(false);
 
   return (
     <nav
       aria-label="Landing page shortcuts"
       className={`sticky ${stickyTop} z-40 border-b border-cream-200 bg-cream-50/95 shadow-sm backdrop-blur-md`}
     >
-      <div
-        className="mx-auto flex max-w-7xl items-center gap-1.5 overflow-x-auto px-4 py-2 sm:px-6 lg:flex-wrap lg:overflow-visible lg:px-8 [&::-webkit-scrollbar]:hidden"
-        style={{ scrollbarWidth: 'none' }}
-      >
-        <Link
-          to="/shop"
-          className="shrink-0 rounded-full bg-mountain-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-mountain-800"
-          title="Shop all categories"
-        >
-          Categories
-        </Link>
-
-        {categories.map((category) => (
-          <Link
-            key={category._id}
-            to={`/shop?category=${encodeURIComponent(category.slug)}`}
-            className={linkClass}
-            title={`Shop ${category.name}`}
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-1.5 px-4 py-2 sm:px-6 lg:flex-nowrap lg:px-8">
+        <div className="relative" ref={categoriesMenuRef}>
+          <button
+            type="button"
+            onClick={() => setCategoriesOpen((open) => !open)}
+            aria-expanded={categoriesOpen}
+            aria-controls="landing-categories-menu"
+            title="Browse all categories"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-mountain-900 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-mountain-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-400 focus-visible:ring-offset-2 lg:px-3"
           >
-            {category.name}
-          </Link>
-        ))}
+            Categories
+            <ChevronDownIcon
+              className={`h-3.5 w-3.5 transition-transform ${categoriesOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
 
-        {extraItems.map((item) => (
-          <Link
-            key={item.slug}
-            to={`/shop?search=${encodeURIComponent(item.search)}`}
-            className={linkClass}
-            title={`Shop ${item.name}`}
-          >
-            {item.name}
-          </Link>
-        ))}
+          {categoriesOpen && (
+            <div
+              id="landing-categories-menu"
+              className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-cream-200 bg-white p-2 shadow-xl lg:w-[min(42rem,calc(100vw-2rem))]"
+            >
+              <Link
+                to="/shop"
+                onClick={closeCategories}
+                className="flex items-center justify-between rounded-xl bg-mountain-900 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-mountain-800"
+              >
+                Shop all products
+                <ArrowRightIcon className="h-3.5 w-3.5" />
+              </Link>
 
-        <span className="mx-1 h-4 w-px shrink-0 bg-cream-300" aria-hidden="true" />
+              <div className="mt-1 grid grid-cols-2 gap-0.5 lg:grid-cols-3">
+                {categories.map((category) => (
+                  <Link
+                    key={category._id}
+                    to={`/shop?category=${encodeURIComponent(category.slug)}`}
+                    onClick={closeCategories}
+                    className="rounded-xl px-3 py-2 text-xs font-medium text-mountain-600 transition-colors hover:bg-apricot-50 hover:text-apricot-700"
+                  >
+                    {category.name}
+                  </Link>
+                ))}
 
-        <a href="#hero" className={linkClass}>
+                {extraItems.map((item) => (
+                  <Link
+                    key={item.slug}
+                    to={`/shop?search=${encodeURIComponent(item.search)}`}
+                    onClick={closeCategories}
+                    className="rounded-xl px-3 py-2 text-xs font-medium text-mountain-600 transition-colors hover:bg-apricot-50 hover:text-apricot-700"
+                  >
+                    {item.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="hidden items-center gap-1.5 lg:flex">
+          {quickCategories.map((category) => (
+            <Link
+              key={category._id}
+              to={`/shop?category=${encodeURIComponent(category.slug)}`}
+              className={linkClass}
+              title={`Shop ${category.name}`}
+            >
+              {category.name}
+            </Link>
+          ))}
+        </div>
+
+        <span className="mx-1 hidden h-4 w-px shrink-0 bg-cream-300 lg:block" aria-hidden="true" />
+
+        <a href="#hero" className={navLinkClass}>
           Our Story
         </a>
-        <a href="#featured-products" className={linkClass}>
+        <a href="#featured-products" className={navLinkClass}>
           Featured
         </a>
-        <a href="#explore-gb" className={linkClass}>
+        <a href="#explore-gb" className={navLinkClass}>
           Regions
         </a>
-      </div>
 
-      <div
-        className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-cream-50 via-cream-50/80 to-transparent lg:hidden"
-        aria-hidden="true"
-      />
+        <Link
+          to="/shop"
+          className="ml-auto hidden items-center gap-1 text-xs font-semibold text-apricot-700 transition-colors hover:text-apricot-800 lg:inline-flex"
+        >
+          Shop all
+          <ArrowRightIcon className="h-3.5 w-3.5" />
+        </Link>
+      </div>
     </nav>
   );
 }
