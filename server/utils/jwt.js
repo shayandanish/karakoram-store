@@ -6,7 +6,7 @@ export const sendTokenCookie = (res, userId) => {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
   res.cookie('token', token, {
     httpOnly: true,
@@ -20,5 +20,11 @@ export const sendTokenCookie = (res, userId) => {
 
 /** Clear the auth cookie */
 export const clearTokenCookie = (res) => {
-  res.cookie('token', '', { httpOnly: true, expires: new Date(0) });
+  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  res.cookie('token', '', {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'None' : 'Lax',
+    expires: new Date(0),
+  });
 };

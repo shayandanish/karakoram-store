@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { verifyFirebaseIdToken } from '../utils/firebaseAdmin.js';
 
-/** Protect route — requires valid JWT in httpOnly cookie */
+/** Protect route — requires valid JWT in httpOnly cookie or Authorization Bearer header */
 export const protect = async (req, res, next) => {
   try {
     let token = req.cookies?.token;
@@ -13,16 +14,32 @@ export const protect = async (req, res, next) => {
       throw new Error('Not authorised, no token');
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-passwordHash');
+    let user = null;
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      user = await User.findById(decoded.id).select('-passwordHash');
+    } catch (jwtErr) {
+      try {
+        const decodedFb = await verifyFirebaseIdToken(token);
+        if (decodedFb?.uid) {
+          user = await User.findOne({
+            $or: [{ firebaseUid: decodedFb.uid }, { email: decodedFb.email?.toLowerCase() }],
+          }).select('-passwordHash');
+        }
+      } catch {
+        throw jwtErr;
+      }
+    }
 
-    if (!req.user) {
+    if (!user) {
       res.status(401);
       throw new Error('Not authorised, user not found');
     }
 
+    req.user = user;
     next();
   } catch (err) {
+    if (res.statusCode === 200) res.status(401);
     next(err);
   }
 };
@@ -44,8 +61,21 @@ export const optionalAuth = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     }
     if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-passwordHash');
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = await User.findById(decoded.id).select('-passwordHash');
+      } catch {
+        try {
+          const decodedFb = await verifyFirebaseIdToken(token);
+          if (decodedFb?.uid) {
+            req.user = await User.findOne({
+              $or: [{ firebaseUid: decodedFb.uid }, { email: decodedFb.email?.toLowerCase() }],
+            }).select('-passwordHash');
+          }
+        } catch {
+          req.user = null;
+        }
+      }
     }
   } catch (err) {
     req.user = null;

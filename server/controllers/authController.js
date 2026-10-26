@@ -165,8 +165,11 @@ export const firebaseRegister = async (req, res, next) => {
       }
     }
 
-    sendTokenCookie(res, user._id);
-    res.status(201).json(publicUser(user));
+    const token = sendTokenCookie(res, user._id);
+    res.status(201).json({
+      ...publicUser(user),
+      token,
+    });
   } catch (err) {
     next(err);
   }
@@ -199,8 +202,11 @@ export const firebaseLogin = async (req, res, next) => {
       throw httpError('No account found for this email. Please register first.', 404);
     }
 
-    sendTokenCookie(res, user._id);
-    res.json(publicUser(user));
+    const token = sendTokenCookie(res, user._id);
+    res.json({
+      ...publicUser(user),
+      token,
+    });
   } catch (err) {
     next(err);
   }
@@ -224,8 +230,11 @@ export const login = async (req, res, next) => {
       throw httpError('Invalid email or password', 401);
     }
 
-    sendTokenCookie(res, user._id);
-    res.json(publicUser(user));
+    const token = sendTokenCookie(res, user._id);
+    res.json({
+      ...publicUser(user),
+      token,
+    });
   } catch (err) {
     next(err);
   }
@@ -334,12 +343,13 @@ export const verifyOtp = async (req, res, next) => {
     user.otpExpires = undefined;
     await user.save();
 
-    sendTokenCookie(res, user._id);
+    const token = sendTokenCookie(res, user._id);
 
     res.status(200).json({
       success: true,
       message: 'OTP verified successfully. Your account is now verified.',
       user: publicUser(user),
+      token,
     });
   } catch (err) {
     next(err);
@@ -405,7 +415,7 @@ export const register = async (req, res, next) => {
       }
     }
 
-    sendTokenCookie(res, user._id);
+    const token = sendTokenCookie(res, user._id);
 
     res.status(201).json({
       success: true,
@@ -414,6 +424,7 @@ export const register = async (req, res, next) => {
           ? 'Registration complete.'
           : 'Registration complete. Please verify your email with the OTP sent to your inbox.',
       user: publicUser(user),
+      token,
       previewUrl: previewUrl || undefined,
     });
   } catch (err) {

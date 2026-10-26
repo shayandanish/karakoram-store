@@ -27,6 +27,23 @@ const clearPendingVerification = () => {
   }
 };
 
+const saveAuthToken = (token) => {
+  if (!token) return;
+  try {
+    localStorage.setItem('token', token);
+  } catch {
+    // localStorage is unavailable
+  }
+};
+
+const clearAuthToken = () => {
+  try {
+    localStorage.removeItem('token');
+  } catch {
+    // localStorage is unavailable
+  }
+};
+
 const requireFirebaseAuth = () => {
   if (!firebaseAuth) {
     const err = new Error(
@@ -54,6 +71,7 @@ export function AuthProvider({ children }) {
       setUser(res.data);
       return res.data;
     } catch {
+      clearAuthToken();
       setUser(null);
       return null;
     }
@@ -74,6 +92,7 @@ export function AuthProvider({ children }) {
 
     const idToken = await firebaseUser.getIdToken(true);
     const res = await api.post('/auth/firebase-login', { idToken });
+    saveAuthToken(res.data?.token || idToken);
 
     setUser(res.data);
     clearPendingVerification();
@@ -113,6 +132,7 @@ export function AuthProvider({ children }) {
           const res = await api.get('/auth/me');
           return { user: res.data, error: redirectError };
         } catch {
+          clearAuthToken();
           return { user: null, error: redirectError };
         }
       })();
@@ -219,6 +239,7 @@ export function AuthProvider({ children }) {
       name: (name || firebaseUser.displayName || '').trim(),
       phone: phone?.trim() || undefined,
     });
+    saveAuthToken(res.data?.token || idToken);
 
     setUser(res.data);
     clearPendingVerification();
@@ -239,6 +260,7 @@ export function AuthProvider({ children }) {
 
     const idToken = await credential.user.getIdToken(true);
     const res = await api.post('/auth/firebase-login', { idToken });
+    saveAuthToken(res.data?.token || idToken);
 
     setUser(res.data);
     clearPendingVerification();
@@ -276,6 +298,7 @@ export function AuthProvider({ children }) {
    */
   const adminLogin = async (email, password) => {
     const res = await api.post('/auth/login', { email: email.trim(), password });
+    saveAuthToken(res.data?.token);
     setUser(res.data);
     clearPendingVerification();
     return res.data;
@@ -294,6 +317,7 @@ export function AuthProvider({ children }) {
 
   /** Sign out of both Firebase and the backend cookie. */
   const logout = async () => {
+    clearAuthToken();
     if (firebaseAuth) {
       try {
         await signOut(firebaseAuth);

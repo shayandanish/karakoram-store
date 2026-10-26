@@ -37,12 +37,17 @@ app.use(
 // On Vercel, uploads are stored in Cloudinary instead of this folder.
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const allowedOrigins = (process.env.CLIENT_URL || '')
+const defaultOrigins = ['https://karakoram-store.vercel.app'];
+
+const configuredOrigins = (process.env.CLIENT_URL || '')
   .split(',')
   .map((origin) => origin.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 
+const allowedOrigins = [...new Set([...defaultOrigins, ...configuredOrigins])];
+
 const localhostPattern = /^http:\/\/localhost:\d+$/;
+const vercelPreviewPattern = /^https:\/\/karakoram-store[\w-]*\.vercel\.app$/;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -50,7 +55,8 @@ app.use(cors({
     if (
       !origin ||
       allowedOrigins.includes(normalizedOrigin) ||
-      localhostPattern.test(origin)
+      localhostPattern.test(origin) ||
+      vercelPreviewPattern.test(origin)
     ) {
       return callback(null, true);
     }
