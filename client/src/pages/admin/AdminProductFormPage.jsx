@@ -8,6 +8,85 @@ import SEO from '../../components/ui/SEO';
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
 
+const WEIGHT_CATEGORY_SLUGS = new Set(['dry-fruits', 'natural-herbs']);
+const WEIGHT_VARIANT_LABELS = ['250g', '500g', '1kg'];
+
+function isWeightCategory(category) {
+  if (!category) return false;
+  return (
+    WEIGHT_CATEGORY_SLUGS.has(category.slug) ||
+    ['dry fruits', 'natural herbs'].includes(String(category.name || '').toLowerCase())
+  );
+}
+
+function toVariantRows(variants = []) {
+  return variants.map((v) => ({
+    label: v.label,
+    price: v.price,
+    stock: v.stock,
+  }));
+}
+
+// Keep Dry Fruits / Natural Herbs products on the three customer-facing sizes.
+// Existing single-variant products are converted using their old price/stock as
+// the 1kg base, so the storefront starts showing all three sizes immediately.
+function normalizeWeightVariants(variants = []) {
+  const rows = variants.map((v) => ({
+    label: String(v.label || '').trim(),
+    price: v.price === undefined || v.price === null ? '' : v.price,
+    stock: v.stock === undefined || v.stock === null ? '' : v.stock,
+  }));
+
+  const bySize = new Map();
+  rows.forEach((row) => {
+    const key = row.label.toLowerCase();
+    if (WEIGHT_VARIANT_LABELS.some((label) => label.toLowerCase() === key)) {
+      bySize.set(key, row);
+    }
+  });
+
+  const hasPrice = (row) => row && row.price !== '' && Number(row.price) > 0;
+  const hasStock = (row) => row && row.stock !== '' && !Number.isNaN(Number(row.stock));
+  const baseRow =
+    rows.filter(hasPrice).sort((a, b) => Number(b.price) - Number(a.price))[0] || rows[0];
+
+  let pricePerKg = '';
+  if (hasPrice(bySize.get('1kg'))) pricePerKg = Number(bySize.get('1kg').price);
+  else if (hasPrice(bySize.get('500g'))) pricePerKg = Number(bySize.get('500g').price) * 2;
+  else if (hasPrice(bySize.get('250g'))) pricePerKg = Number(bySize.get('250g').price) * 4;
+  else if (hasPrice(baseRow)) pricePerKg = Number(baseRow.price);
+
+  let stockPerKg = '';
+  if (hasStock(bySize.get('1kg'))) stockPerKg = Number(bySize.get('1kg').stock);
+  else if (hasStock(bySize.get('500g'))) stockPerKg = Number(bySize.get('500g').stock) * 0.5;
+  else if (hasStock(bySize.get('250g'))) stockPerKg = Number(bySize.get('250g').stock) * 0.25;
+  else {
+    const stockFallback = baseRow && hasStock(baseRow) ? baseRow : rows.find(hasStock);
+    if (stockFallback) stockPerKg = Number(stockFallback.stock);
+  }
+
+  return WEIGHT_VARIANT_LABELS.map((label) => {
+    const existing = bySize.get(label.toLowerCase());
+    const fraction = label === '250g' ? 0.25 : label === '500g' ? 0.5 : 1;
+    const multiplier = label === '250g' ? 4 : label === '500g' ? 2 : 1;
+    return {
+      label,
+      price:
+        existing && existing.price !== ''
+          ? existing.price
+          : pricePerKg !== ''
+          ? Math.max(1, Math.round(pricePerKg * fraction))
+          : '',
+      stock:
+        existing && existing.stock !== ''
+          ? existing.stock
+          : stockPerKg !== ''
+          ? Math.max(0, Math.round(stockPerKg * multiplier))
+          : '',
+    };
+  });
+}
+
 function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -31,15 +110,20 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
   );
 
   // Variants state (at least 1 row required)
-  const [variants, setVariants] = useState(
-    initialData?.variants && initialData.variants.length > 0
-      ? initialData.variants.map((v) => ({
-          label: v.label,
-          price: v.price,
-          stock: v.stock,
-        }))
-      : [{ label: 'Standard', price: '', stock: '' }]
-  );
+  const [variants, setVariants] = useState(() => {
+    const existing = initialData?.variants?.length
+      ? toVariantRows(initialData.variants)
+      : null;
+    const initialCategory =
+      initialData?.category && typeof initialData.category === 'object'
+        ? initialData.category
+        : categories.find((c) => c._id === (initialData?.category || ''));
+
+    if (isWeightCategory(initialCategory)) {
+      return normalizeWeightVariants(existing || []);
+    }
+    return existing || [{ label: 'Standard', price: '', stock: '' }];
+  });
 
   // Images state: [{ url, publicId, alt }]
   const [images, setImages] = useState(initialData?.images || []);
@@ -52,6 +136,13 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
 
   // Validation errors
   const [errors, setErrors] = useState({});
+
+  const selectedCategory =
+    categories.find((c) => c._id === category) ||
+    (category && initialData?.category && typeof initialData.category === 'object'
+      ? initialData.category
+      : null);
+  const weightCategorySelected = isWeightCategory(selectedCategory);
 
   const generateSlug = (text) =>
     text
@@ -69,11 +160,22 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
     }
   };
 
+  const handleCategoryChange = (e) => {
+    const nextCategoryId = e.target.value;
+    setCategory(nextCategoryId);
+    const nextCategory = categories.find((c) => c._id === nextCategoryId);
+    if (isWeightCategory(nextCategory)) {
+      setVariants((prev) => normalizeWeightVariants(prev));
+    }
+  };
+
   const addVariantRow = () => {
+    if (weightCategorySelected) return;
     setVariants((prev) => [...prev, { label: '', price: '', stock: '' }]);
   };
 
   const removeVariantRow = (index) => {
+    if (weightCategorySelected) return;
     if (variants.length <= 1) {
       toast.warning('A product must have at least one variant.');
       return;
@@ -178,6 +280,14 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
           errs[`variant_${i}_stock`] = 'Stock must be >= 0';
         }
       });
+
+      if (weightCategorySelected) {
+        const labels = variants.map((v) => v.label.trim().toLowerCase());
+        if (!WEIGHT_VARIANT_LABELS.every((label) => labels.includes(label.toLowerCase()))) {
+          errs.variants =
+            'Dry Fruits and Natural Herbs products must include 250g, 500g, and 1kg sizes.';
+        }
+      }
     }
 
     setErrors(errs);
@@ -305,7 +415,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
               <select
                 id="prod-cat"
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={handleCategoryChange}
                 className={`w-full px-3.5 py-2.5 text-sm bg-stone-50 border rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden transition ${
                   errors.category ? 'border-rose-400 bg-rose-50/30' : 'border-stone-200'
                 }`}
@@ -380,25 +490,33 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
 
         {/* Variants & Pricing */}
         <div className="space-y-4 pt-6 border-t border-stone-100">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold font-display text-mountain-900 uppercase tracking-wider text-apricot-700">
-                2. Variants & Inventory
+                2. {weightCategorySelected ? 'Sizes & Inventory' : 'Variants & Inventory'}
               </h2>
               <p className="text-xs text-stone-500 mt-0.5">
-                Specify package weights, sizes, price in PKR, and available stock units.
+                {weightCategorySelected
+                  ? 'This category uses fixed 250g, 500g, and 1kg sizes. Set the price and stock for each size.'
+                  : 'Specify package weights, sizes, price in PKR, and available stock units.'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={addVariantRow}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-lg transition"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Add Variant</span>
-            </button>
+            {weightCategorySelected ? (
+              <span className="inline-flex shrink-0 items-center rounded-full bg-apricot-50 px-2.5 py-1 text-[11px] font-semibold text-apricot-700">
+                250g · 500g · 1kg
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={addVariantRow}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-lg transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Add Variant</span>
+              </button>
+            )}
           </div>
 
           {errors.variants && <p className="text-rose-600 text-xs">{errors.variants}</p>}
@@ -411,14 +529,22 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
               >
                 <div className="flex-1">
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Variant Label (e.g. 250g, 500g, Small)
+                    {weightCategorySelected
+                      ? 'Size'
+                      : 'Variant Label (e.g. 250g, 500g, Small)'}
                   </label>
                   <input
                     type="text"
                     value={v.label}
                     onChange={(e) => updateVariantRow(idx, 'label', e.target.value)}
+                    readOnly={weightCategorySelected}
+                    aria-readonly={weightCategorySelected || undefined}
                     placeholder="e.g. 500g Jar"
-                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden ${
+                      weightCategorySelected
+                        ? 'bg-stone-100 border-stone-200 text-stone-500 cursor-not-allowed'
+                        : 'bg-white border-stone-200'
+                    }`}
                   />
                   {errors[`variant_${idx}_label`] && (
                     <span className="text-rose-600 text-[11px] block mt-0.5">
@@ -467,22 +593,30 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
                   )}
                 </div>
 
-                <div className="sm:self-end">
-                  <button
-                    type="button"
-                    onClick={() => removeVariantRow(idx)}
-                    disabled={variants.length <= 1}
-                    className="w-full sm:w-auto p-2 text-stone-400 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-stone-400 transition"
-                    aria-label="Remove variant"
-                  >
-                    <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
+                {!weightCategorySelected && (
+                  <div className="sm:self-end">
+                    <button
+                      type="button"
+                      onClick={() => removeVariantRow(idx)}
+                      disabled={variants.length <= 1}
+                      className="w-full sm:w-auto p-2 text-stone-400 hover:text-rose-600 disabled:opacity-30 disabled:hover:text-stone-400 transition"
+                      aria-label="Remove variant"
+                    >
+                      <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
+
+          {weightCategorySelected && (
+            <p className="text-[11px] text-stone-500">
+              Prices are per pack size. Stock is the number of packs available for each size.
+            </p>
+          )}
         </div>
 
         {/* Media Upload */}
@@ -659,7 +793,7 @@ export default function AdminProductFormPage() {
   const { id } = useParams();
   const isEditMode = Boolean(id);
 
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
       const res = await api.get('/categories');
@@ -684,7 +818,7 @@ export default function AdminProductFormPage() {
     enabled: isEditMode,
   });
 
-  if (isEditMode && isLoadingProduct) {
+  if (isLoadingCategories || (isEditMode && isLoadingProduct)) {
     return (
       <div className="p-8 text-center">
         <div className="w-10 h-10 border-4 border-apricot-200 border-t-apricot-500 rounded-full animate-spin mx-auto mb-3" />

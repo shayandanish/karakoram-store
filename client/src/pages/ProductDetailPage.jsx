@@ -37,7 +37,7 @@ export default function ProductDetailPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { addToCart, items } = useCart();
-  const [selectedVariant, setSelectedVariant] = useState(null);
+  const [selectedVariantLabel, setSelectedVariantLabel] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
@@ -47,8 +47,21 @@ export default function ProductDetailPage() {
     queryFn: () => api.get(`/products/${slug}`).then((r) => r.data),
   });
 
-  // Derive selected variant after load
-  const variant = selectedVariant || product?.variants?.[0] || null;
+  // Derive the selected size from the loaded product. Prefer the first size
+  // that is actually in stock so the Add to Cart button is usable immediately.
+  const variant =
+    product?.variants?.find((v) => v.label === selectedVariantLabel && v.stock > 0) ||
+    product?.variants?.find((v) => v.stock > 0) ||
+    product?.variants?.find((v) => v.label === selectedVariantLabel) ||
+    product?.variants?.[0] ||
+    null;
+
+  const handleVariantSelect = (nextVariant) => {
+    if (!nextVariant || nextVariant.stock <= 0) return;
+    setSelectedVariantLabel(nextVariant.label);
+    setQuantity((q) => Math.max(1, Math.min(q, nextVariant.stock)));
+    setAdded(false);
+  };
 
   const handleAddToCart = () => {
     if (!product || !variant) return;
@@ -246,7 +259,7 @@ export default function ProductDetailPage() {
                       <button
                         key={v.label}
                         id={`variant-${v.label.replace(/\s+/g, '-')}`}
-                        onClick={() => !outOfStock && setSelectedVariant(v)}
+                        onClick={() => handleVariantSelect(v)}
                         disabled={outOfStock}
                         className={`px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all ${
                           isSelected
@@ -290,7 +303,9 @@ export default function ProductDetailPage() {
                 </span>
                 <button
                   id="qty-increment"
-                  onClick={() => setQuantity((q) => Math.min(variant?.stock || 99, q + 1))}
+                  onClick={() =>
+                    setQuantity((q) => Math.min(Math.max(variant?.stock || 1, 1), q + 1))
+                  }
                   className="px-4 py-2.5 text-mountain-600 hover:bg-cream-100 transition-colors font-bold"
                   aria-label="Increase quantity"
                 >
