@@ -91,6 +91,26 @@ export default function AdminOrdersPage() {
     },
   });
 
+
+
+  // Delete order mutation
+  const deleteOrderMutation = useMutation({
+    mutationFn: async (orderId) => {
+      await api.delete(`/admin/orders/${orderId}`);
+      return orderId;
+    },
+    onSuccess: (deletedId) => {
+      toast.success(`Order #${deletedId.slice(-6).toUpperCase()} deleted`);
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to delete order');
+    },
+  });
+
+  
+
   const handleUpdateStatus = (e) => {
     e.preventDefault();
     if (!selectedOrder) return;

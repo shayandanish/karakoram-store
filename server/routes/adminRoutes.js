@@ -8,7 +8,7 @@ import {
   adminCreateCategory, adminUpdateCategory, adminDeleteCategory,
   adminGetArtisans, adminCreateArtisan, adminUpdateArtisan, adminDeleteArtisan,
   adminGetCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon,
-  adminGetOrders, adminUpdateOrder,
+  adminGetOrders, adminUpdateOrder, adminDeleteOrder,
   adminGetUsers, adminDeleteUser,
   adminGetStats,
 } from '../controllers/adminController.js';
@@ -55,6 +55,7 @@ router.delete('/coupons/:id', adminDeleteCoupon);
 // Orders
 router.get('/orders', adminGetOrders);
 router.put('/orders/:id', adminUpdateOrder);
+router.delete('/orders/:id', adminDeleteOrder);
 
 // Users
 router.get('/users', adminGetUsers);

@@ -6,6 +6,7 @@ import Artisan from '../models/Artisan.js';
 import Coupon from '../models/Coupon.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
+import Review from '../models/Review.js';
 import cloudinary from '../config/cloudinary.js';
 import { deleteFirebaseUser } from '../utils/firebaseAdmin.js';
 
@@ -302,6 +303,28 @@ export const adminUpdateOrder = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// DELETE /api/admin/orders/:id
+export const adminDeleteOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400);
+      throw new Error('Invalid order id');
+    }
+
+    const order = await Order.findById(id);
+    if (!order) {
+      res.status(404);
+      throw new Error('Order not found');
+    }
+
+    await order.deleteOne();
+
+    res.json({ message: 'Order deleted successfully' });
+  } catch (err) { next(err); }
+};
+
 /* ─────────────────────────────────────────────
    STATS (sales dashboard)
 ───────────────────────────────────────────── */
@@ -430,8 +453,18 @@ export const adminDeleteUser = async (req, res, next) => {
       }
     }
 
+    // Clean up all orders associated with this user
+    const orderFilter = [{ user: user._id }];
+    if (user.email) {
+      orderFilter.push({ guestEmail: user.email.toLowerCase() });
+    }
+    await Order.deleteMany({ $or: orderFilter });
+
+    // Clean up all reviews written by this user
+    await Review.deleteMany({ user: user._id });
+
     await user.deleteOne();
 
-    res.json({ message: 'User deleted successfully' });
+    res.json({ message: 'User and all associated orders deleted successfully' });
   } catch (err) { next(err); }
 };
