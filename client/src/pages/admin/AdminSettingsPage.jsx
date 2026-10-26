@@ -24,7 +24,6 @@ export default function AdminSettingsPage() {
   const publishLogo = async (nextLogo) => {
     const { data } = await api.put('/admin/settings', { logo: nextLogo });
     queryClient.setQueryData(SITE_SETTINGS_QUERY_KEY, data);
-    queryClient.invalidateQueries({ queryKey: SITE_SETTINGS_QUERY_KEY });
   };
 
   const handleFilePick = async (event) => {
@@ -71,7 +70,6 @@ export default function AdminSettingsPage() {
         logo: { url: '', publicId: '', alt: DEFAULT_ALT },
       });
       queryClient.setQueryData(SITE_SETTINGS_QUERY_KEY, data);
-      queryClient.invalidateQueries({ queryKey: SITE_SETTINGS_QUERY_KEY });
       toast.success('Logo removed. The default K mark is active again.');
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Could not remove the logo.');

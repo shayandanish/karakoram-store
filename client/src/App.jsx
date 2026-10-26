@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import Layout from './components/layout/Layout';
 import ScrollToTop from './components/layout/ScrollToTop';
+import { persistQueryUpdates, seedPersistedQueries } from './lib/queryPersistence';
 
 // Storefront pages
 import HomePage from './pages/HomePage';
@@ -43,6 +44,11 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Render the previous public catalog instantly on repeat visits, then let
+// React Query revalidate it in the background.
+seedPersistedQueries(queryClient);
+persistQueryUpdates(queryClient);
 
 export default function App() {
   return (

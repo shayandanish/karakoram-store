@@ -38,7 +38,7 @@ const PROMISES = [
 
 // Shown while the city/region API is loading or if no region images exist.
 const HERO_REGION_FALLBACK = [
-  { _id: 'hero-hunza', name: 'Hunza Valley', tagline: 'Heaven on Earth', image: { url: '/regions/hunza.webp' } },
+  { _id: 'hero-hunza', name: 'Hunza Valley', tagline: 'Heaven on Earth', image: { url: '/regions/hunza-960.webp' } },
   { _id: 'hero-nagar', name: 'Nagar Valley', tagline: 'Land of Glaciers & Orchards', image: { url: '/regions/nagar.webp' } },
   { _id: 'hero-ghizer', name: 'Ghizer Valley', tagline: "Gilgit-Baltistan's Green Crown", image: { url: '/regions/ghizer.webp' } },
   { _id: 'hero-astore', name: 'Astore Valley', tagline: 'In the Shadow of Nanga Parbat', image: { url: '/regions/astore.webp' } },
@@ -46,13 +46,14 @@ const HERO_REGION_FALLBACK = [
   { _id: 'hero-skardu', name: 'Skardu', tagline: 'Base Camp to the Giants', image: { url: '/regions/skardu.webp' } },
 ];
 
-// Avoid downloading the multi-megabyte local fallback photos while the city
-// API is still loading. The gradient placeholder keeps the hero layout stable.
+// Show a small, already-optimized Hunza image immediately while the city API
+// loads. It is replaced by the matching Cloudinary photo as soon as the API
+// responds, so the hero never starts as an empty block.
 const HERO_LOADING_REGION = {
   _id: 'hero-loading',
-  name: 'Gilgit-Baltistan',
-  tagline: 'Loading regions…',
-  image: { url: '' },
+  name: 'Hunza Valley',
+  tagline: 'Heaven on Earth',
+  image: { url: '/regions/hunza-960.webp' },
 };
 
 // Categories that should always be available in the landing navigation.
@@ -403,7 +404,7 @@ export default function HomePage() {
                           quality: 'auto:good',
                           format: 'auto',
                         })}
-                        srcSet={cloudinarySrcSet(imageUrl, [640, 960, 1280, 1600], {
+                        srcSet={cloudinarySrcSet(imageUrl, [480, 640, 960, 1280], {
                           ratio: 4 / 3,
                           crop: 'fill',
                           gravity: 'auto',

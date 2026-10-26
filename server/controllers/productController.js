@@ -1,4 +1,5 @@
 import Product from '../models/Product.js';
+import { setPublicCache } from '../utils/cache.js';
 
 const REGION_PATTERNS = {
   hunza: 'Hunza',
@@ -70,6 +71,7 @@ export const getProducts = async (req, res, next) => {
       Product.countDocuments(filter),
     ]);
 
+    setPublicCache(res, 30, 120);
     res.json({
       products,
       page: Number(page),
@@ -93,6 +95,7 @@ export const getProductBySlug = async (req, res, next) => {
       throw new Error('Product not found');
     }
 
+    setPublicCache(res, 30, 120);
     res.json(product);
   } catch (err) {
     next(err);

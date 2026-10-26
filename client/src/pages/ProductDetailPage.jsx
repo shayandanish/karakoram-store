@@ -71,7 +71,7 @@ export default function ProductDetailPage() {
     quality: 'auto:good',
     format: 'auto',
   });
-  const mainImageSrcSet = cloudinarySrcSet(mainImageUrl, [480, 800, 1200, 1600], {
+  const mainImageSrcSet = cloudinarySrcSet(mainImageUrl, [480, 800, 1200], {
     crop: 'limit',
     quality: 'auto:good',
     format: 'auto',

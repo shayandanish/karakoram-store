@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import City from '../models/City.js';
 import cloudinary from '../config/cloudinary.js';
+import { setPublicCache } from '../utils/cache.js';
 
 /* ── Preprocessors & Normalizers ────────────────────────────── */
 const normalizeImage = (val) => {
@@ -44,6 +45,7 @@ export const getCities = async (req, res, next) => {
     const cities = await City.find({ isActive: true })
       .sort({ order: 1, createdAt: 1 })
       .lean();
+    setPublicCache(res, 60, 300);
     res.json({ cities });
   } catch (err) {
     next(err);
@@ -58,6 +60,7 @@ export const getCityBySlug = async (req, res, next) => {
       res.status(404);
       throw new Error('City not found');
     }
+    setPublicCache(res, 300, 600);
     res.json({ city });
   } catch (err) {
     next(err);
