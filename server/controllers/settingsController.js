@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import SiteSettings from '../models/SiteSettings.js';
 import { deleteStoredImage } from './uploadController.js';
-import { setPublicCache } from '../utils/cache.js';
 
 const DEFAULT_LOGO_ALT = 'Karakoram Store';
 
@@ -26,9 +25,13 @@ const serializeSettings = (settings) => ({
 /* ── PUBLIC — GET /api/settings ─────────────────────────────── */
 export const getSettings = async (req, res, next) => {
   try {
-    // Branding can change at runtime, so keep the edge cache very short while
-    // still letting repeat page loads reuse the tiny JSON response.
-    setPublicCache(res, 10, 60);
+    // Branding can change at runtime. Never let a cached 304 response hide a
+    // newly uploaded logo, and keep the response out of browser caches.
+    res.set('Cache-Control', 'no-store, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    delete req.headers['if-none-match'];
+    delete req.headers['if-modified-since'];
 
     const settings = await SiteSettings.getSingleton();
     res.json(serializeSettings(settings));
