@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/axios';
+import { cloudinaryImage, cloudinarySrcSet } from '../../lib/utils';
 
 const AUTO_PLAY_MS = 5000;
 
@@ -11,27 +12,27 @@ const STATIC_REGIONS = [
   {
     _id: 's1', name: 'Hunza Valley', tagline: 'Heaven on Earth',
     body: 'Nestled between Rakaposhi and Ultar Sar, Hunza is famed for its turquoise river, ancient Baltit Fort, apricot orchards in bloom, and the legendary longevity of its people.',
-    image: { url: '/regions/hunza.jpg' }, accentColor: '#f89535',
+    image: { url: '/regions/hunza.webp' }, accentColor: '#f89535',
   },
   {
     _id: 's2', name: 'Nagar Valley', tagline: 'Land of Glaciers & Orchards',
     body: "Across the Hunza River from its twin valley, Nagar boasts spectacular views of Rakaposhi's south face, Batura Glacier, and terraced fields bursting with cherries and walnuts.",
-    image: { url: '/regions/nagar.jpg' }, accentColor: '#5f89b7',
+    image: { url: '/regions/nagar.webp' }, accentColor: '#5f89b7',
   },
   {
     _id: 's3', name: 'Ghizer Valley', tagline: "Gilgit-Baltistan's Green Crown",
     body: 'Carpeted in dense pine forests and threaded by the crystal-clear Ghizer River, this remote valley is a paradise for trout fishing, trekking, and experiencing unspoiled Shina culture.',
-    image: { url: '/regions/ghizer.jpg' }, accentColor: '#3f6d9e',
+    image: { url: '/regions/ghizer.webp' }, accentColor: '#3f6d9e',
   },
   {
     _id: 's4', name: 'Astore Valley', tagline: 'In the Shadow of Nanga Parbat',
     body: "Gateway to the Rupal face of Nanga Parbat — the world's ninth highest peak — Astore offers dramatic high-altitude meadows, glaciers, and the serene Rama Lake.",
-    image: { url: '/regions/astore.jpg' }, accentColor: '#f07a18',
+    image: { url: '/regions/astore.webp' }, accentColor: '#f07a18',
   },
   {
     _id: 's5', name: 'Diamer Valley', tagline: 'Gateway to the Killer Mountain',
     body: 'Home to the Diamer-Bhasha Dam site and the northern face of Nanga Parbat, Diamer is a rugged land of deep gorges, gushing rivers, and warm Kohistani hospitality.',
-    image: { url: '/regions/diamer.jpg' }, accentColor: '#ba4d0d',
+    image: { url: '/regions/diamer.webp' }, accentColor: '#ba4d0d',
   },
   {
     _id: 's6', name: 'Gilgit City', tagline: 'Crossroads of Civilisations',
@@ -46,7 +47,7 @@ const STATIC_REGIONS = [
   {
     _id: 's8', name: 'Skardu', tagline: 'Base Camp to the Giants',
     body: "Perched on a high plateau between towering peaks, Skardu is the launchpad for K2 expeditions and home to the mystical Deosai Plains, Sheosar Lake, and Kachura — one of the world's most photographed valleys.",
-    image: { url: '/regions/skardu.jpg' }, accentColor: '#5f89b7',
+    image: { url: '/regions/skardu.webp' }, accentColor: '#5f89b7',
   },
 ];
 
@@ -56,13 +57,17 @@ export default function RegionsCarousel() {
   const timerRef = useRef(null);
 
   /* Fetch from DB — fall back to static if empty */
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['cities'],
     queryFn: () => api.get('/cities').then((r) => r.data),
     staleTime: 5 * 60_000,
   });
 
-  const regions = (data?.cities && data.cities.length > 0) ? data.cities : STATIC_REGIONS;
+  const regions = data?.cities?.length
+    ? data.cities
+    : isLoading
+    ? []
+    : STATIC_REGIONS;
   const total = regions.length;
 
   const goTo = useCallback((idx) => {
@@ -96,7 +101,7 @@ export default function RegionsCarousel() {
 
   if (total === 0) return null;
 
-  const region = regions[active];
+  const nextIndex = total > 1 ? (active + 1) % total : -1;
 
   return (
     <section id="explore-gb" className="py-20 scroll-mt-40 bg-gradient-to-b from-cream-100 to-cream-200">
@@ -127,6 +132,11 @@ export default function RegionsCarousel() {
           {/* ── Slides ──────────────────────────────────────── */}
           <div className="relative h-[480px] sm:h-[520px] lg:h-[560px] w-full">
             {regions.map((r, idx) => {
+              // Keep only the visible slide and the next one mounted. All
+              // slides share the same viewport-sized box, so rendering the
+              // full list makes the browser fetch every region photo at once.
+              if (idx !== active && idx !== nextIndex) return null;
+
               const isActive = idx === active;
               const hasImage = Boolean(r.image?.url);
               return (
@@ -140,10 +150,23 @@ export default function RegionsCarousel() {
                   {/* Background */}
                   {hasImage ? (
                     <img
-                      src={r.image.url}
+                      src={cloudinaryImage(r.image.url, {
+                        width: 1280,
+                        crop: 'limit',
+                        quality: 'auto:good',
+                        format: 'auto',
+                      })}
+                      srcSet={cloudinarySrcSet(r.image.url, [640, 960, 1280, 1600], {
+                        crop: 'limit',
+                        quality: 'auto:good',
+                        format: 'auto',
+                      })}
+                      sizes="(min-width: 1280px) 1280px, 100vw"
                       alt={r.name}
                       className="absolute inset-0 w-full h-full object-cover"
                       loading="lazy"
+                      fetchPriority={isActive ? 'auto' : 'low'}
+                      decoding="async"
                     />
                   ) : (
                     <div
@@ -268,7 +291,21 @@ export default function RegionsCarousel() {
                   aria-current={idx === active ? 'true' : undefined}
                 >
                   {hasImg ? (
-                    <img src={r.image.url} alt={r.name} className="w-full h-full object-cover" loading="lazy" />
+                    <img
+                      src={cloudinaryImage(r.image.url, {
+                        width: 160,
+                        height: 112,
+                        crop: 'fill',
+                        gravity: 'auto',
+                        quality: 'auto:eco',
+                        format: 'auto',
+                      })}
+                      alt={r.name}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      fetchPriority="low"
+                      decoding="async"
+                    />
                   ) : (
                     <div
                       className="w-full h-full flex items-center justify-center bg-gradient-to-br from-mountain-800 to-mountain-900"

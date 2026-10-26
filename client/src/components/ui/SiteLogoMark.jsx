@@ -1,6 +1,7 @@
 // ── SiteLogoMark – admin-managed logo with the default K mark as fallback ─────
 import { useState } from 'react';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
+import { cloudinaryImage, cloudinarySrcSet } from '../../lib/utils';
 
 const SIZES = {
   sm: { height: 'h-8', box: 'w-8 h-8 rounded-lg', text: 'text-base' },
@@ -19,12 +20,27 @@ export default function SiteLogoMark({
   maxWidthClass = 'max-w-[9rem]',
   shadowClass = 'shadow-sm',
   alt = 'Karakoram Store',
+  priority = false,
+  sizes = '(min-width: 640px) 192px, 96px',
 }) {
   const { logo } = useSiteSettings();
   const [failedUrl, setFailedUrl] = useState('');
   const dimensions = SIZES[size] || SIZES.md;
   const imageUrl = logo?.url || '';
   const showImage = Boolean(imageUrl) && failedUrl !== imageUrl;
+  const optimizedUrl = cloudinaryImage(imageUrl, {
+    width: 384,
+    height: 192,
+    crop: 'limit',
+    quality: 'auto:good',
+    format: 'auto',
+  });
+  const logoSrcSet = cloudinarySrcSet(imageUrl, [96, 192, 288, 384], {
+    height: 192,
+    crop: 'limit',
+    quality: 'auto:good',
+    format: 'auto',
+  });
 
   if (showImage) {
     return (
@@ -32,8 +48,13 @@ export default function SiteLogoMark({
         className={`inline-flex items-center justify-center overflow-hidden rounded-2xl border border-apricot-200/70 bg-apricot-100 p-1 ${shadowClass} shrink-0 ${className}`}
       >
         <img
-          src={imageUrl}
-          alt={logo.alt || alt}
+          src={optimizedUrl}
+          srcSet={logoSrcSet}
+          sizes={sizes}
+          alt={logo?.alt || alt}
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
+          decoding="async"
           onError={() => setFailedUrl(imageUrl)}
           className={`${dimensions.height} w-auto ${maxWidthClass} object-contain block shrink-0 mix-blend-darken`}
         />

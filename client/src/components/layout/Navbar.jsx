@@ -145,6 +145,7 @@ export default function Navbar() {
               size={hasCustomLogo ? '4xl' : 'md'}
               maxWidthClass={hasCustomLogo ? 'max-w-[6rem] sm:max-w-[12rem]' : 'max-w-[7rem] sm:max-w-[9rem]'}
               className="group-hover:scale-105 transition-transform"
+              priority
             />
             <div className="flex flex-col leading-none">
               <span className="font-display font-bold text-mountain-900 text-base">Karakoram</span>

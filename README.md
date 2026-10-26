@@ -79,7 +79,7 @@ Deploy the frontend and backend as **two Vercel projects** from this repository.
 - Add these environment variables:
   - `VITE_API_URL=https://<backend-project>.vercel.app/api`
   - `VITE_WHATSAPP_NUMBER`
-  - `VITE_CLOUDINARY_CLOUD_NAME`
+  - `VITE_CLOUDINARY_CLOUD_NAME` — optional; the client derives the cloud name from each Cloudinary URL
   - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`
 - Deploy.
 
@@ -89,6 +89,7 @@ After the frontend URL is known, update the backend project's `CLIENT_URL` to th
 
 - Use MongoDB Atlas, not a local MongoDB instance, because Vercel cannot reach your computer.
 - `server/uploads/` is intentionally ignored by Git. Configure Cloudinary before using the admin image uploads.
+- Cloudinary images are resized and converted with `f_auto,q_auto` in the browser. The logo is capped at 384×192, product cards request responsive widths, and only the active/next carousel slides are mounted.
 - Cross-site authentication uses `SameSite=None; Secure` cookies, so the frontend and backend must both use HTTPS in production.
 - If you use a custom domain, set `CLIENT_URL` to the custom frontend domain.
 

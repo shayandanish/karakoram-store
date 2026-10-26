@@ -4,7 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useCart } from '../context/CartContext';
-import { fmtPKR, thumbUrl, buildProductWhatsAppLink } from '../lib/utils';
+import { fmtPKR, buildProductWhatsAppLink, cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
 import ProductImage from '../components/ui/ProductImage';
 import { SkeletonDetail } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
@@ -63,6 +63,19 @@ export default function ProductDetailPage() {
 
   const waLink = buildProductWhatsAppLink(product, variant, quantity);
 
+  const activeImage = product?.images?.[activeImg];
+  const mainImageUrl = activeImage?.url || '';
+  const mainImageSrc = cloudinaryImage(mainImageUrl, {
+    width: 1200,
+    crop: 'limit',
+    quality: 'auto:good',
+    format: 'auto',
+  });
+  const mainImageSrcSet = cloudinarySrcSet(mainImageUrl, [480, 800, 1200, 1600], {
+    crop: 'limit',
+    quality: 'auto:good',
+    format: 'auto',
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -73,7 +86,16 @@ export default function ProductDetailPage() {
             ? product.description.slice(0, 160)
             : 'Authentic handcrafted goods and organic food from Hunza, Gilgit-Baltistan.'
         }
-        image={product?.images?.[0]?.url || '/favicon.svg'}
+        image={
+          cloudinaryImage(product?.images?.[0]?.url, {
+            width: 1200,
+            height: 630,
+            crop: 'fill',
+            gravity: 'auto',
+            quality: 'auto',
+            format: 'auto',
+          }) || '/favicon.svg'
+        }
         type="product"
         productData={{
           price: variant?.price || 0,
@@ -128,12 +150,14 @@ export default function ProductDetailPage() {
           <div className="space-y-3">
             <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-cream-200">
               <ProductImage
-                src={product.images?.[activeImg]
-                  ? thumbUrl(product.images[activeImg].url, 800)
-                  : null}
-                alt={product.images?.[activeImg]?.alt || product.name}
+                src={mainImageSrc}
+                srcSet={mainImageSrcSet}
+                sizes="(min-width: 1024px) 560px, (min-width: 768px) 45vw, 100vw"
+                alt={activeImage?.alt || product.name}
                 fit="contain"
                 smartCrop
+                loading="eager"
+                fetchPriority="high"
               />
               {product.isFeatured && (
                 <span className="absolute top-4 left-4 bg-apricot-500 text-white text-xs font-bold px-3 py-1 rounded-full">
@@ -154,7 +178,18 @@ export default function ProductDetailPage() {
                     }`}
                     aria-label={`View image ${idx + 1}`}
                   >
-                    <ProductImage src={thumbUrl(img.url, 100)} alt={img.alt || product.name} />
+                    <ProductImage
+                      src={cloudinaryImage(img.url, {
+                        width: 160,
+                        height: 160,
+                        crop: 'fill',
+                        gravity: 'auto',
+                        quality: 'auto:eco',
+                        format: 'auto',
+                      })}
+                      sizes="64px"
+                      alt={img.alt || product.name}
+                    />
                   </button>
                 ))}
               </div>

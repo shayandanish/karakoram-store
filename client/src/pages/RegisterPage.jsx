@@ -258,6 +258,8 @@ export default function RegisterPage() {
             size={hasCustomLogo ? '5xl' : '3xl'}
             maxWidthClass={hasCustomLogo ? 'max-w-[16rem]' : 'max-w-[9rem]'}
             className="mx-auto mb-3"
+            priority
+            sizes="256px"
           />
           <h1 className="font-display font-bold text-2xl text-mountain-900 mb-1">
             {step === 'verify' ? 'Check Your Email' : 'Create an Account'}

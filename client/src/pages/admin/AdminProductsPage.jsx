@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../lib/axios';
-import { fmtPKR } from '../../lib/utils';
+import { fmtPKR, cloudinaryImage } from '../../lib/utils';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../components/ui/SEO';
 
@@ -215,7 +215,16 @@ export default function AdminProductsPage() {
                         : `${fmtPKR(minPrice)} – ${fmtPKR(maxPrice)}`;
                     const totalStock = (p.variants || []).reduce((acc, v) => acc + (v.stock || 0), 0);
                     const hasLowStock = (p.variants || []).some((v) => v.stock < 10);
-                    const thumb = p.images?.[0]?.url;
+                    const thumb = p.images?.[0]?.url
+                      ? cloudinaryImage(p.images[0].url, {
+                          width: 112,
+                          height: 112,
+                          crop: 'fill',
+                          gravity: 'auto',
+                          quality: 'auto:eco',
+                          format: 'auto',
+                        })
+                      : '';
 
                     return (
                       <tr key={p._id} className="hover:bg-stone-50/70 transition">
@@ -226,6 +235,8 @@ export default function AdminProductsPage() {
                                 <img
                                   src={thumb}
                                   alt={p.name}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
@@ -327,14 +338,29 @@ export default function AdminProductsPage() {
                     ? fmtPKR(minPrice)
                     : `${fmtPKR(minPrice)} – ${fmtPKR(maxPrice)}`;
                 const totalStock = (p.variants || []).reduce((acc, v) => acc + (v.stock || 0), 0);
-                const thumb = p.images?.[0]?.url;
+                const thumb = p.images?.[0]?.url
+                  ? cloudinaryImage(p.images[0].url, {
+                      width: 112,
+                      height: 112,
+                      crop: 'fill',
+                      gravity: 'auto',
+                      quality: 'auto:eco',
+                      format: 'auto',
+                    })
+                  : '';
 
                 return (
                   <div key={p._id} className="p-4 space-y-3">
                     <div className="flex items-start gap-3">
                       <div className="w-14 h-14 rounded-xl bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center">
                         {thumb ? (
-                          <img src={thumb} alt={p.name} className="w-full h-full object-cover" />
+                          <img
+                            src={thumb}
+                            alt={p.name}
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
                           <span className="text-[10px] font-bold text-apricot-600">No img</span>
                         )}

@@ -1,7 +1,18 @@
 // ── ProductImage – shows a styled, artistic mountain placeholder if no image ─────
 import { useState } from 'react';
 
-export default function ProductImage({ src, alt, className = '', fit = 'cover', smartCrop = false }) {
+export default function ProductImage({
+  src,
+  alt,
+  className = '',
+  fit = 'cover',
+  smartCrop = false,
+  srcSet,
+  sizes,
+  loading = 'lazy',
+  fetchPriority = 'auto',
+  decoding = 'async',
+}) {
   const [hasError, setHasError] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(null);
 
@@ -13,8 +24,12 @@ export default function ProductImage({ src, alt, className = '', fit = 'cover', 
     return (
       <img
         src={src}
+        srcSet={srcSet}
+        sizes={sizes}
         alt={alt || 'Product image'}
-        loading="lazy"
+        loading={loading}
+        fetchPriority={fetchPriority}
+        decoding={decoding}
         onError={() => setHasError(true)}
         onLoad={(event) => {
           const { naturalWidth, naturalHeight } = event.currentTarget;

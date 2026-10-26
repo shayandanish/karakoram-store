@@ -9,6 +9,7 @@ import ErrorState from '../components/ui/ErrorState';
 import SEO from '../components/ui/SEO';
 import RegionsCarousel from '../components/ui/RegionsCarousel';
 import { useSiteSettings } from '../hooks/useSiteSettings';
+import { cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
 
 const HERO_STATS = [
   { icon: '🛍️', value: '100+', label: 'Curated products' },
@@ -37,13 +38,22 @@ const PROMISES = [
 
 // Shown while the city/region API is loading or if no region images exist.
 const HERO_REGION_FALLBACK = [
-  { _id: 'hero-hunza', name: 'Hunza Valley', tagline: 'Heaven on Earth', image: { url: '/regions/hunza.jpg' } },
-  { _id: 'hero-nagar', name: 'Nagar Valley', tagline: 'Land of Glaciers & Orchards', image: { url: '/regions/nagar.jpg' } },
-  { _id: 'hero-ghizer', name: 'Ghizer Valley', tagline: "Gilgit-Baltistan's Green Crown", image: { url: '/regions/ghizer.jpg' } },
-  { _id: 'hero-astore', name: 'Astore Valley', tagline: 'In the Shadow of Nanga Parbat', image: { url: '/regions/astore.jpg' } },
-  { _id: 'hero-diamer', name: 'Diamer Valley', tagline: 'Gateway to the Killer Mountain', image: { url: '/regions/diamer.jpg' } },
-  { _id: 'hero-skardu', name: 'Skardu', tagline: 'Base Camp to the Giants', image: { url: '/regions/skardu.jpg' } },
+  { _id: 'hero-hunza', name: 'Hunza Valley', tagline: 'Heaven on Earth', image: { url: '/regions/hunza.webp' } },
+  { _id: 'hero-nagar', name: 'Nagar Valley', tagline: 'Land of Glaciers & Orchards', image: { url: '/regions/nagar.webp' } },
+  { _id: 'hero-ghizer', name: 'Ghizer Valley', tagline: "Gilgit-Baltistan's Green Crown", image: { url: '/regions/ghizer.webp' } },
+  { _id: 'hero-astore', name: 'Astore Valley', tagline: 'In the Shadow of Nanga Parbat', image: { url: '/regions/astore.webp' } },
+  { _id: 'hero-diamer', name: 'Diamer Valley', tagline: 'Gateway to the Killer Mountain', image: { url: '/regions/diamer.webp' } },
+  { _id: 'hero-skardu', name: 'Skardu', tagline: 'Base Camp to the Giants', image: { url: '/regions/skardu.webp' } },
 ];
+
+// Avoid downloading the multi-megabyte local fallback photos while the city
+// API is still loading. The gradient placeholder keeps the hero layout stable.
+const HERO_LOADING_REGION = {
+  _id: 'hero-loading',
+  name: 'Gilgit-Baltistan',
+  tagline: 'Loading regions…',
+  image: { url: '' },
+};
 
 // Categories that should always be available in the landing navigation.
 // They link to shop search until a matching category is created in the database.
@@ -193,7 +203,7 @@ export default function HomePage() {
     staleTime: 5 * 60_000,
   });
 
-  const { data: citiesData } = useQuery({
+  const { data: citiesData, isLoading: citiesLoading } = useQuery({
     queryKey: ['cities'],
     queryFn: () => api.get('/cities').then((r) => r.data),
     staleTime: 5 * 60_000,
@@ -214,9 +224,16 @@ export default function HomePage() {
   const featured = featuredData?.products || [];
 
   const cityRegions = (citiesData?.cities || []).filter((region) => region.image?.url);
-  const heroRegions = cityRegions.length > 0 ? cityRegions : HERO_REGION_FALLBACK;
+  const heroRegions =
+    cityRegions.length > 0
+      ? cityRegions
+      : citiesLoading
+      ? [HERO_LOADING_REGION]
+      : HERO_REGION_FALLBACK;
   const activeRegionIndexSafe = heroRegions.length ? activeRegionIndex % heroRegions.length : 0;
   const activeRegion = heroRegions[activeRegionIndexSafe] || HERO_REGION_FALLBACK[0];
+  const nextRegionIndex =
+    heroRegions.length > 1 ? (activeRegionIndexSafe + 1) % heroRegions.length : -1;
 
   // Map a city/region record to the slug understood by the shop filter.
   const regionKey = ['hunza', 'nagar', 'ghizer', 'skardu', 'astore', 'diamer', 'gilgit'].find((key) =>
@@ -352,19 +369,59 @@ export default function HomePage() {
                 aria-label="Featured regions of Gilgit-Baltistan"
               >
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  {heroRegions.map((region, index) => (
-                    <img
-                      key={region._id}
-                      src={region.image.url}
-                      alt={index === activeRegionIndexSafe ? region.name : ''}
-                      aria-hidden={index !== activeRegionIndexSafe}
-                      className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${
-                        index === activeRegionIndexSafe ? 'opacity-100' : 'opacity-0'
-                      }`}
-                      loading={index === 0 ? 'eager' : 'lazy'}
-                      decoding="async"
-                    />
-                  ))}
+                  {heroRegions.map((region, index) => {
+                    // Only keep the active slide and the next one mounted. The
+                    // browser otherwise downloads every off-screen slide because
+                    // they all occupy the same viewport-sized box.
+                    if (index !== activeRegionIndexSafe && index !== nextRegionIndex) {
+                      return null;
+                    }
+
+                    const isActive = index === activeRegionIndexSafe;
+                    const imageUrl = region.image?.url;
+
+                    if (!imageUrl) {
+                      return (
+                        <div
+                          key={region._id}
+                          className={`absolute inset-0 bg-gradient-to-br from-mountain-900 via-mountain-800 to-mountain-700 transition-opacity duration-700 ease-out ${
+                            isActive ? 'opacity-100' : 'opacity-0'
+                          }`}
+                          aria-hidden="true"
+                        />
+                      );
+                    }
+
+                    return (
+                      <img
+                        key={region._id}
+                        src={cloudinaryImage(imageUrl, {
+                          width: 1280,
+                          height: 960,
+                          crop: 'fill',
+                          gravity: 'auto',
+                          quality: 'auto:good',
+                          format: 'auto',
+                        })}
+                        srcSet={cloudinarySrcSet(imageUrl, [640, 960, 1280, 1600], {
+                          ratio: 4 / 3,
+                          crop: 'fill',
+                          gravity: 'auto',
+                          quality: 'auto:good',
+                          format: 'auto',
+                        })}
+                        sizes="(min-width: 1024px) 640px, 100vw"
+                        alt={isActive ? region.name : ''}
+                        aria-hidden={!isActive}
+                        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${
+                          isActive ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        loading={isActive ? 'eager' : 'lazy'}
+                        fetchPriority={isActive ? 'high' : 'low'}
+                        decoding="async"
+                      />
+                    );
+                  })}
 
                   <span className="absolute left-4 top-4 z-10 inline-flex max-w-[calc(100%_-_2rem)] items-center gap-2 rounded-full border border-white/60 bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-mountain-800 shadow-sm backdrop-blur">
                     <span className="h-2 w-2 shrink-0 rounded-full bg-apricot-500" aria-hidden="true" />

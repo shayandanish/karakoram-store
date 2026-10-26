@@ -1,6 +1,6 @@
 // ── Product Card ──────────────────────────────────────────────
 import { Link } from 'react-router-dom';
-import { fmtPKR, thumbUrl } from '../../lib/utils';
+import { fmtPKR, cloudinaryImage, cloudinarySrcSet, isCloudinaryUrl } from '../../lib/utils';
 import ProductImage from './ProductImage';
 
 export default function ProductCard({ product }) {
@@ -8,8 +8,28 @@ export default function ProductCard({ product }) {
     ? Math.min(...product.variants.map((v) => v.price))
     : null;
 
-  const img = product.images?.[0]?.url
-    ? thumbUrl(product.images[0].url, 500)
+  const imageUrl = product.images?.[0]?.url || '';
+  const img = imageUrl
+    ? cloudinaryImage(imageUrl, {
+        width: 640,
+        crop: 'limit',
+        quality: 'auto:eco',
+        format: 'auto',
+      })
+    : null;
+  const imgSrcSet = cloudinarySrcSet(imageUrl, [240, 360, 480, 640, 800], {
+    crop: 'limit',
+    quality: 'auto:eco',
+    format: 'auto',
+  });
+  const blurSrc = isCloudinaryUrl(imageUrl)
+    ? cloudinaryImage(imageUrl, {
+        width: 64,
+        crop: 'limit',
+        quality: 'auto:low',
+        format: 'auto',
+        blur: 1200,
+      })
     : null;
 
   return (
@@ -20,12 +40,14 @@ export default function ProductCard({ product }) {
     >
       {/* Image */}
       <div className="relative aspect-[4/5] overflow-hidden bg-cream-100">
-        {img && (
+        {blurSrc && (
           <img
-            src={img}
+            src={blurSrc}
             alt=""
             aria-hidden="true"
             loading="lazy"
+            fetchPriority="low"
+            decoding="async"
             onError={(event) => {
               event.currentTarget.style.display = 'none';
             }}
@@ -36,6 +58,8 @@ export default function ProductCard({ product }) {
         <div className="absolute inset-0 p-4">
           <ProductImage
             src={img}
+            srcSet={imgSrcSet}
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
             alt={product.images?.[0]?.alt || product.name}
             fit="contain"
             smartCrop

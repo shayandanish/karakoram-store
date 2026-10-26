@@ -5,6 +5,7 @@ import api from '../../lib/axios';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../components/ui/SEO';
 import SiteLogoMark from '../../components/ui/SiteLogoMark';
+import { cloudinaryImage } from '../../lib/utils';
 import {
   SITE_SETTINGS_QUERY_KEY,
   useSiteSettings,
@@ -121,8 +122,16 @@ export default function AdminSettingsPage() {
               <div className="w-10 h-10 rounded-full border-2 border-apricot-500 border-t-transparent animate-spin" />
             ) : logo.url ? (
               <img
-                src={logo.url}
+                src={cloudinaryImage(logo.url, {
+                  width: 384,
+                  height: 192,
+                  crop: 'limit',
+                  quality: 'auto:good',
+                  format: 'auto',
+                })}
                 alt={logo.alt || 'Karakoram Store logo'}
+                loading="lazy"
+                decoding="async"
                 className="max-h-44 max-w-full object-contain drop-shadow-sm"
               />
             ) : (

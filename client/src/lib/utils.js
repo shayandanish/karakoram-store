@@ -52,11 +52,70 @@ export const buildProductWhatsAppLink = (product, variant, quantity = 1) => {
     : `https://wa.me/?text=${encodeURIComponent(msg)}`;
 };
 
-// ── Cloudinary thumbnail URL ──────────────────────────────────
-export const thumbUrl = (url, w = 400) => {
-  const cloud = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-  if (!url || !cloud) return url;
-  // Insert transformation before /upload/ in Cloudinary URLs
-  return url.replace('/upload/', `/upload/w_${w},q_auto,f_auto/`);
+// ── Cloudinary image helpers ──────────────────────────────────
+// Cloudinary URLs already contain the cloud name, so transformations work
+// even when VITE_CLOUDINARY_CLOUD_NAME is not present at build time.
+const CLOUDINARY_UPLOAD_PATH = '/image/upload/';
+
+export const isCloudinaryUrl = (url) =>
+  typeof url === 'string' && url.includes(CLOUDINARY_UPLOAD_PATH);
+
+const buildTransformation = ({
+  width,
+  height,
+  crop,
+  gravity,
+  quality,
+  format,
+  dpr,
+  blur,
+}) =>
+  [
+    width && `w_${Math.round(width)}`,
+    height && `h_${Math.round(height)}`,
+    crop && `c_${crop}`,
+    gravity && `g_${gravity}`,
+    blur && `e_blur:${blur}`,
+    quality && `q_${quality}`,
+    format && `f_${format}`,
+    dpr && 'dpr_auto',
+  ]
+    .filter(Boolean)
+    .join(',');
+
+/**
+ * Add a Cloudinary transformation to an existing upload URL.
+ * Non-Cloudinary URLs are returned unchanged.
+ */
+export const cloudinaryImage = (url, options = {}) => {
+  if (!isCloudinaryUrl(url)) return url;
+
+  const transformation = buildTransformation(options);
+  if (!transformation) return url;
+
+  const [base, rest] = url.split(CLOUDINARY_UPLOAD_PATH);
+  // Replace any existing transformation segment while preserving the version.
+  const versionMatch = rest.match(/^(?:[^/]+\/)?(v\d+\/.*)$/);
+  const assetPath = versionMatch ? versionMatch[1] : rest;
+
+  return `${base}${CLOUDINARY_UPLOAD_PATH}${transformation}/${assetPath}`;
+};
+
+/**
+ * Build a responsive Cloudinary srcset. Returns undefined for local images so
+ * the browser simply uses the normal src attribute.
+ */
+export const cloudinarySrcSet = (url, widths, options = {}) => {
+  if (!isCloudinaryUrl(url)) return undefined;
+
+  return widths
+    .filter(Boolean)
+    .map((width) => {
+      const height = options.ratio
+        ? Math.round(width / options.ratio)
+        : options.height;
+      return `${cloudinaryImage(url, { ...options, width, height })} ${width}w`;
+    })
+    .join(', ');
 };
 
