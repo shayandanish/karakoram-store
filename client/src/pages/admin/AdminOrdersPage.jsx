@@ -321,12 +321,18 @@ export default function AdminOrdersPage() {
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-5 text-right">
+                        <td className="py-3.5 px-5 text-right flex gap-2 justify-end">
                           <button
                             onClick={() => openOrderDetails(o)}
                             className="px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded-lg transition"
                           >
                             View
+                          </button>
+                          <button
+                            onClick={() => deleteOrderMutation.mutate(o._id)}
+                            className="px-3 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-semibold rounded-lg transition"
+                          >
+                            Delete
                           </button>
                         </td>
                       </tr>

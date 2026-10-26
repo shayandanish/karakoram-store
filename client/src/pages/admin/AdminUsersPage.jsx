@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { fmtDate } from '../../lib/utils';
 import SEO from '../../components/ui/SEO';
+import ResponsiveTable from '../../components/ResponsiveTable';
 
 const PAGE_SIZE = 10;
 
@@ -222,102 +223,72 @@ export default function AdminUsersPage() {
           </p>
         </div>
       )}
-
-      {/* Table */}
-      {!isLoading && !isError && users.length > 0 && (
-        <div className={`bg-white rounded-3xl border border-stone-200 overflow-hidden transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-left">
-              <thead>
-                <tr className="border-b border-stone-100 bg-stone-50/70">
-                  <th scope="col" className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-500">User</th>
-                  <th scope="col" className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-500">Email</th>
-                  <th scope="col" className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-500">Role</th>
-                  <th scope="col" className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-500">Joined</th>
-                  <th scope="col" className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-stone-500 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {users.map((user) => {
-                  const isSelf = user._id === currentUser?._id;
-
-                  return (
-                    <tr key={user._id} className="hover:bg-stone-50/60 transition-colors">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <UserAvatar name={user.name} />
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-mountain-900 truncate">
-                              {user.name}
-                              {isSelf && (
-                                <span className="ml-2 text-[10px] font-semibold text-apricot-600 bg-apricot-50 border border-apricot-200 px-1.5 py-0.5 rounded-sm">
-                                  You
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-[11px] text-stone-400 font-mono truncate">
-                              #{user._id?.slice(-8)}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-sm text-mountain-700 break-all">{user.email}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <RoleBadge role={user.role} />
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-sm text-stone-600 whitespace-nowrap">{fmtDate(user.createdAt)}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setDeleteTarget(user)}
-                          disabled={isSelf}
-                          title={isSelf ? 'You cannot delete your own account' : `Delete ${user.name}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
-                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                          </svg>
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+ {/* Table */}
+{!isLoading && !isError && users.length > 0 && (
+  <ResponsiveTable
+    columns={[
+      {
+        header: 'User',
+        accessor: 'name',
+        render: (row) => (
+          <div className="flex items-center gap-3 min-w-0">
+            <UserAvatar name={row.name} />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-mountain-900 truncate">
+                {row.name}
+                {row._id === currentUser?._id && (
+                  <span className="ml-2 text-[10px] font-semibold text-apricot-600 bg-apricot-50 border border-apricot-200 px-1.5 py-0.5 rounded-sm">
+                    You
+                  </span>
+                )}
+              </p>
+              <p className="text-[11px] text-stone-400 font-mono truncate">#{row._id?.slice(-8)}</p>
+            </div>
           </div>
-
-          {/* Pagination */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 border-t border-stone-100 bg-stone-50/50">
-            <p className="text-xs text-stone-500">
-              Showing <span className="font-semibold text-stone-700">{start}</span>–
-              <span className="font-semibold text-stone-700">{end}</span> of{' '}
-              <span className="font-semibold text-stone-700">{total}</span> users
-            </p>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1 || isFetching}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-stone-200 bg-white text-stone-700 hover:bg-stone-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
-              <span className="text-xs font-medium text-stone-600 px-1 whitespace-nowrap">
-                Page {page} of {pages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                disabled={page >= pages || isFetching}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-stone-200 bg-white text-stone-700 hover:bg-stone-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
+        ),
+      },
+      {
+        header: 'Email',
+        accessor: 'email',
+        render: (row) => (
+          <span className="text-sm text-mountain-700 break-all">{row.email}</span>
+        ),
+      },
+      {
+        header: 'Role',
+        accessor: 'role',
+        render: (row) => <RoleBadge role={row.role} />, 
+      },
+      {
+        header: 'Joined',
+        accessor: 'createdAt',
+        render: (row) => (
+          <span className="text-sm text-stone-600 whitespace-nowrap">{fmtDate(row.createdAt)}</span>
+        ),
+      },
+    ]}
+    rows={users}
+    rowKey="_id"
+    actions={(row) => (
+      <button
+        type="button"
+        onClick={() => setDeleteTarget(row)}
+        disabled={row._id === currentUser?._id}
+        title={row._id === currentUser?._id ? 'You cannot delete your own account' : `Delete ${row.name}`}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
+          <path
+            fillRule="evenodd"
+            d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+            clipRule="evenodd"
+          />
+        </svg>
+        Delete
+      </button>
+    ))}
+  />
+)}          Next
               </button>
             </div>
           </div>
