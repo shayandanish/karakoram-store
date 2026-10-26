@@ -13,7 +13,7 @@ import { cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
 
 const HERO_STATS = [
   { icon: 'bag', value: '100+', label: 'Curated products' },
-  { icon: 'heart', value: '5,000+', label: 'Happy customers' },
+  { icon: 'heart', value: '10', label: 'Happy customers' },
   { icon: 'mountain', value: '100%', label: 'Locally sourced' },
   { icon: 'wallet', value: 'Easypaisa', label: 'Instant transfer' },
 ];
