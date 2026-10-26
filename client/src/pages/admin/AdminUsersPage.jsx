@@ -195,7 +195,7 @@ export default function AdminUsersPage() {
         <div className="bg-white rounded-3xl border border-stone-200 overflow-hidden">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="h-16 border-b border-stone-100 last:border-0 animate-pulse bg-stone-50/50" />
-          ))}
+           ))}
         </div>
       )}
 
@@ -286,14 +286,9 @@ export default function AdminUsersPage() {
         </svg>
         Delete
       </button>
-    ))}
+    )}
   />
-)}          Next
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+)}
 
       {/* Delete confirmation */}
       {deleteTarget && (
