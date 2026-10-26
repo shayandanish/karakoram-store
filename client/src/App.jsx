@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CartProvider } from './context/CartContext';
@@ -7,34 +8,37 @@ import Layout from './components/layout/Layout';
 import ScrollToTop from './components/layout/ScrollToTop';
 import { persistQueryUpdates, seedPersistedQueries } from './lib/queryPersistence';
 
-// Storefront pages
+// Storefront pages — Home stays in the initial bundle, everything else is
+// loaded on navigation so the first paint is not blocked by admin/checkout code.
 import HomePage from './pages/HomePage';
-import ShopPage from './pages/ShopPage';
-import ProductDetailPage from './pages/ProductDetailPage';
-import CartPage from './pages/CartPage';
-import CheckoutPage from './pages/CheckoutPage';
-import OrderSuccessPage from './pages/OrderSuccessPage';
-import TrackOrderPage from './pages/TrackOrderPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import MyOrdersPage from './pages/MyOrdersPage';
-import AboutPage from './pages/AboutPage';
-import ContactPage from './pages/ContactPage';
-import NotFoundPage from './pages/NotFoundPage';
+
+const ShopPage = lazy(() => import('./pages/ShopPage'));
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
+const CartPage = lazy(() => import('./pages/CartPage'));
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
+const OrderSuccessPage = lazy(() => import('./pages/OrderSuccessPage'));
+const TrackOrderPage = lazy(() => import('./pages/TrackOrderPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
+const AboutPage = lazy(() => import('./pages/AboutPage'));
+const ContactPage = lazy(() => import('./pages/ContactPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 // Admin dashboard pages & layout
 import AdminGuard from './components/admin/AdminGuard';
 import AdminLayout from './components/admin/AdminLayout';
-import AdminDashboardPage from './pages/admin/AdminDashboardPage';
-import AdminProductsPage from './pages/admin/AdminProductsPage';
-import AdminProductFormPage from './pages/admin/AdminProductFormPage';
-import AdminCategoriesPage from './pages/admin/AdminCategoriesPage';
-import AdminArtisansPage from './pages/admin/AdminArtisansPage';
-import AdminOrdersPage from './pages/admin/AdminOrdersPage';
-import AdminCouponsPage from './pages/admin/AdminCouponsPage';
-import AdminCitiesPage from './pages/admin/AdminCitiesPage'; // cities & regions
-import AdminUsersPage from './pages/admin/AdminUsersPage';
-import AdminSettingsPage from './pages/admin/AdminSettingsPage';
+
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
+const AdminProductsPage = lazy(() => import('./pages/admin/AdminProductsPage'));
+const AdminProductFormPage = lazy(() => import('./pages/admin/AdminProductFormPage'));
+const AdminCategoriesPage = lazy(() => import('./pages/admin/AdminCategoriesPage'));
+const AdminArtisansPage = lazy(() => import('./pages/admin/AdminArtisansPage'));
+const AdminOrdersPage = lazy(() => import('./pages/admin/AdminOrdersPage'));
+const AdminCouponsPage = lazy(() => import('./pages/admin/AdminCouponsPage'));
+const AdminCitiesPage = lazy(() => import('./pages/admin/AdminCitiesPage')); // cities & regions
+const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {

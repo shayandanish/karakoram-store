@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import SiteLogoMark from '../ui/SiteLogoMark';
+import PageLoading from '../ui/PageLoading';
 
 const NAV_ITEMS = [
   {
@@ -300,7 +301,9 @@ export default function AdminLayout() {
       {/* ── Main Content Area ───────────────────────────────────── */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          <Outlet />
+          <Suspense fallback={<PageLoading />}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
     </div>
