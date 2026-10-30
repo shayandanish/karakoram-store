@@ -52,6 +52,35 @@ export const buildProductWhatsAppLink = (product, variant, quantity = 1) => {
     : `https://wa.me/?text=${encodeURIComponent(msg)}`;
 };
 
+// ── Phone helpers (Pakistan-aware) ────────────────────────────
+/**
+ * Normalize a phone number for WhatsApp/E.164 use without the leading "+".
+ * Accepts 03XX XXXXXXX, +92 3XX XXXXXXX, 0092…, 923… and international numbers.
+ * Returns '' when the input cannot be a usable number.
+ */
+export const normalizePkPhone = (value) => {
+  let digits = String(value || '').replace(/\D/g, '');
+  if (!digits) return '';
+
+  if (digits.startsWith('0092')) digits = digits.slice(4);
+  if (digits.startsWith('92') && digits.length >= 12) return digits;
+  if (digits.startsWith('0') && digits.length === 11) return `92${digits.slice(1)}`;
+  if (digits.startsWith('3') && digits.length === 10) return `92${digits}`;
+
+  return digits.length >= 10 ? digits : '';
+};
+
+/** Format a phone number for display: 923495144486 -> 0349 5144486. */
+export const formatPhoneDisplay = (value) => {
+  const normalized = normalizePkPhone(value);
+  if (!normalized) return String(value || '').trim();
+  if (normalized.startsWith('92') && normalized.length === 12) {
+    const local = `0${normalized.slice(2)}`;
+    return `${local.slice(0, 4)} ${local.slice(4)}`;
+  }
+  return `+${normalized}`;
+};
+
 // ── Cloudinary image helpers ──────────────────────────────────
 // Cloudinary URLs already contain the cloud name, so transformations work
 // even when VITE_CLOUDINARY_CLOUD_NAME is not present at build time.

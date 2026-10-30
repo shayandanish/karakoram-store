@@ -1,7 +1,14 @@
-import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env') });
+
 import app from './app.js';
 import { connectDB } from './config/db.js';
 import { initFirebaseAdmin } from './utils/firebaseAdmin.js';
+import { startPaymentReminderScheduler } from './services/paymentReminderService.js';
 
 const start = async () => {
   try {
@@ -16,6 +23,7 @@ const start = async () => {
 
   try {
     await connectDB();
+    startPaymentReminderScheduler();
   } catch {
     process.exit(1);
   }

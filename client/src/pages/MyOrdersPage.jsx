@@ -8,6 +8,8 @@ import { fmtPKR, fmtDate, getCleanWhatsAppNumber } from '../lib/utils';
 import ProductImage from '../components/ui/ProductImage';
 import ErrorState from '../components/ui/ErrorState';
 import SEO from '../components/ui/SEO';
+import OrderTimeline, { STATUS_MAP } from '../components/ui/OrderTimeline';
+import CourierInfoBlock from '../components/ui/CourierInfoBlock';
 
 const STATUS_CONFIG = {
   pending: {
@@ -22,20 +24,41 @@ const STATUS_CONFIG = {
     dot: 'bg-blue-500',
     label: 'Confirmed',
     step: 2,
-    desc: 'Order confirmed and currently being packed.',
+    desc: 'Order verified and queued for fulfillment.',
   },
-  shipped: {
+  processing: {
+    bg: 'bg-indigo-100 text-indigo-900 border-indigo-200',
+    dot: 'bg-indigo-500',
+    label: 'Processing',
+    step: 3,
+    desc: 'Authentic items being prepared by artisans.',
+  },
+  packed: {
     bg: 'bg-purple-100 text-purple-900 border-purple-200',
     dot: 'bg-purple-500',
+    label: 'Packed',
+    step: 4,
+    desc: 'Quality checked & securely packed for shipping.',
+  },
+  shipped: {
+    bg: 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-200',
+    dot: 'bg-fuchsia-500',
     label: 'Dispatched',
-    step: 3,
+    step: 5,
     desc: 'Handed over to courier from Hunza / Gilgit.',
+  },
+  out_for_delivery: {
+    bg: 'bg-orange-100 text-orange-900 border-orange-200',
+    dot: 'bg-orange-500',
+    label: 'Out for Delivery',
+    step: 6,
+    desc: 'Rider is delivering your parcel to your address today.',
   },
   delivered: {
     bg: 'bg-emerald-100 text-emerald-900 border-emerald-200',
     dot: 'bg-emerald-500',
     label: 'Delivered',
-    step: 4,
+    step: 7,
     desc: 'Package delivered safely to your address.',
   },
   cancelled: {
@@ -45,12 +68,19 @@ const STATUS_CONFIG = {
     step: 0,
     desc: 'This order was cancelled.',
   },
+  returned: {
+    bg: 'bg-stone-200 text-stone-800 border-stone-300',
+    dot: 'bg-stone-500',
+    label: 'Returned',
+    step: 0,
+    desc: 'Return recorded for this parcel.',
+  },
 };
 
 // ── Printable Invoice Receipt Modal ──────────────────────────────
 function InvoiceModal({ order, onClose }) {
   if (!order) return null;
-  const shortId = order._id ? order._id.slice(-8).toUpperCase() : '';
+  const displayId = order.orderId || (order._id ? `#${order._id.slice(-8).toUpperCase()}` : '');
 
   return (
     <div
@@ -77,7 +107,7 @@ function InvoiceModal({ order, onClose }) {
             <p className="text-xs text-mountain-500">Official Purchase Receipt</p>
           </div>
           <div className="text-right">
-            <span className="font-mono text-sm font-bold text-mountain-900">#{shortId}</span>
+            <span className="font-mono text-sm font-bold text-mountain-900">{displayId}</span>
             <p className="text-xs text-mountain-500 mt-0.5">{fmtDate(order.createdAt)}</p>
           </div>
         </div>
@@ -172,13 +202,13 @@ function OrderCard({ order, onOpenInvoice }) {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState(false);
   const wa = getCleanWhatsAppNumber();
-  const shortId = order._id ? order._id.slice(-8).toUpperCase() : '';
+  const displayId = order.orderId || (order._id ? `#${order._id.slice(-8).toUpperCase()}` : '');
   const statusInfo = STATUS_CONFIG[order.orderStatus?.toLowerCase()] || STATUS_CONFIG.pending;
   const isEasypaisa = order.paymentMethod === 'easypaisa' || !order.paymentMethod || order.paymentMethod === 'COD';
   const isPaymentPending = order.paymentStatus === 'pending';
 
   const handleCopyId = () => {
-    navigator.clipboard?.writeText(order._id);
+    navigator.clipboard?.writeText(order.orderId || order._id);
     setCopiedId(true);
     setTimeout(() => setCopiedId(false), 2000);
   };
@@ -191,7 +221,7 @@ function OrderCard({ order, onOpenInvoice }) {
 
   const phoneParam = order.shippingAddress?.phone || order.guestPhone || '';
   const waMessage = encodeURIComponent(
-    `Assalam o Alaikum! Inquiring about Order #${shortId} for ${fmtPKR(order.total)} at Karakoram Store.`
+    `Assalam o Alaikum! Inquiring about Order ${displayId} for ${fmtPKR(order.total)} at Karakoram Store.`
   );
 
   return (
@@ -208,14 +238,14 @@ function OrderCard({ order, onOpenInvoice }) {
               <button
                 type="button"
                 onClick={handleCopyId}
-                className="text-[10px] text-apricot-600 hover:underline font-semibold"
+                className="text-[10px] text-apricot-600 hover:underline font-semibold cursor-pointer"
                 title="Copy Full Order ID"
               >
                 {copiedId ? '✓ Copied' : 'Copy'}
               </button>
             </div>
             <p className="font-mono text-sm sm:text-base font-bold text-mountain-900 tracking-wide">
-              #{shortId}
+              {displayId}
             </p>
           </div>
           <span className="text-cream-300 hidden sm:inline">•</span>
@@ -249,37 +279,18 @@ function OrderCard({ order, onOpenInvoice }) {
         </div>
       </div>
 
-      {/* 4-Step Visual Progress Stepper */}
+      {/* Visual Progress Stepper */}
       {order.orderStatus !== 'cancelled' && (
         <div className="px-6 py-5 bg-cream-50/50 border-b border-cream-200">
-          <div className="grid grid-cols-4 gap-2 relative">
-            {[
-              { num: 1, label: 'Placed', active: statusInfo.step >= 1 },
-              { num: 2, label: 'Confirmed', active: statusInfo.step >= 2 },
-              { num: 3, label: 'Dispatched', active: statusInfo.step >= 3 },
-              { num: 4, label: 'Delivered', active: statusInfo.step >= 4 },
-            ].map((step, sIdx) => (
-              <div key={sIdx} className="flex flex-col items-center text-center">
-                <div
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm transition-all ${
-                    step.active
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-cream-200 text-mountain-400'
-                  }`}
-                >
-                  {step.active && step.num < statusInfo.step ? '✓' : step.num}
-                </div>
-                <span
-                  className={`text-[11px] sm:text-xs font-semibold mt-1.5 ${
-                    step.active ? 'text-mountain-900 font-bold' : 'text-mountain-400'
-                  }`}
-                >
-                  {step.label}
-                </span>
-              </div>
-            ))}
-          </div>
+          <OrderTimeline currentStatus={order.orderStatus} statusHistory={order.statusHistory} compact />
           <p className="text-center text-xs text-mountain-500 mt-3">{statusInfo.desc}</p>
+        </div>
+      )}
+
+      {/* Courier Shipment Details Block (if assigned) */}
+      {order.shipment && (order.shipment.courierName || order.shipment.trackingId) && (
+        <div className="px-6 pt-5">
+          <CourierInfoBlock shipment={order.shipment} />
         </div>
       )}
 
@@ -378,7 +389,7 @@ function OrderCard({ order, onOpenInvoice }) {
 
         <div className="flex items-center gap-2 flex-wrap">
           <Link
-            to={`/track-order?orderId=${order._id}&phone=${phoneParam}`}
+            to={`/track-order?orderId=${encodeURIComponent(order.orderId || order._id)}&phone=${encodeURIComponent(phoneParam)}`}
             className="px-4 py-2 bg-apricot-500 hover:bg-apricot-600 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
           >
             <span>📍</span>

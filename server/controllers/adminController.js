@@ -9,6 +9,7 @@ import User from '../models/User.js';
 import Review from '../models/Review.js';
 import cloudinary from '../config/cloudinary.js';
 import { deleteFirebaseUser } from '../utils/firebaseAdmin.js';
+import { dispatchOrderNotifications } from '../utils/notificationService.js';
 
 /* ─────────────────────────────────────────────
    PRODUCTS
@@ -29,38 +30,38 @@ const imageSchema = z.object({
 const videoSchema = z.object({
   url: z.string().optional().default(''),
   publicId: z.string().optional().default(''),
-}).optional();
+});
 
 const productSchema = z.object({
   name: z.string().min(2),
   slug: z.string().min(2),
-  category: z.string().length(24),
-  artisan: z.string().length(24).optional().nullable(),
   description: z.string().min(10),
+  shortDescription: z.string().optional().default(''),
+  category: z.string().length(24),
+  artisan: z.string().length(24).optional(),
   variants: z.array(variantSchema).min(1),
-  images: z.array(imageSchema).optional(),
-  video: videoSchema,
-  origin: z.string().optional(),
-  isSeasonal: z.boolean().optional(),
-  isFeatured: z.boolean().optional(),
-  isActive: z.boolean().optional(),
+  images: z.array(imageSchema).optional().default([]),
+  video: videoSchema.optional(),
+  tags: z.array(z.string()).optional().default([]),
+  region: z.string().optional().default('Hunza'),
+  isFeatured: z.boolean().optional().default(false),
+  isActive: z.boolean().optional().default(true),
+  seoTitle: z.string().optional().default(''),
+  seoDescription: z.string().optional().default(''),
 });
 
 export const adminGetProducts = async (req, res, next) => {
   try {
-    const { search, category, page = 1, limit = 20 } = req.query;
+    const { category, search, page = 1, limit = 20, active } = req.query;
     const filter = {};
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { slug: { $regex: search, $options: 'i' } },
-      ];
+    if (category) filter.category = category;
+    if (active !== undefined) filter.isActive = active === 'true';
+    if (search && search.trim()) {
+      filter.$text = { $search: search.trim() };
     }
-    if (category) {
-      filter.category = category;
-    }
+
     const skip = (Number(page) - 1) * Number(limit);
+
     const [products, total] = await Promise.all([
       Product.find(filter)
         .populate('category', 'name slug')
@@ -252,28 +253,66 @@ export const adminDeleteCoupon = async (req, res, next) => {
 
 export const adminGetOrders = async (req, res, next) => {
   try {
-    const { status, search, page = 1, limit = 20 } = req.query;
-    const filter = {};
-    if (status) filter.orderStatus = status;
+    const {
+      status,
+      payment,
+      paymentStatus,
+      search,
+      page = 1,
+      limit = 20,
+      startDate,
+      endDate,
+    } = req.query;
 
+    const filter = {};
+
+    // Status filter (support 9 statuses or 'all')
+    const activeStatus = status && status !== 'all' ? status : null;
+    if (activeStatus) {
+      filter.orderStatus = activeStatus;
+    }
+
+    // Payment status filter
+    const activePayment = payment || paymentStatus;
+    if (activePayment && activePayment !== 'all') {
+      filter.paymentStatus = activePayment;
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      filter.createdAt = {};
+      if (startDate) filter.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = end;
+      }
+    }
+
+    // Comprehensive text search (Order ID, names, phone, email, tracking CN)
     if (search && search.trim()) {
       const q = search.trim();
       const searchConditions = [
+        { orderId: { $regex: q, $options: 'i' } },
         { 'shippingAddress.phone': { $regex: q, $options: 'i' } },
+        { 'shippingAddress.name': { $regex: q, $options: 'i' } },
         { guestPhone: { $regex: q, $options: 'i' } },
         { guestName: { $regex: q, $options: 'i' } },
-        { 'shippingAddress.name': { $regex: q, $options: 'i' } },
+        { guestEmail: { $regex: q, $options: 'i' } },
+        { 'shipment.trackingId': { $regex: q, $options: 'i' } },
+        { 'shipment.courierName': { $regex: q, $options: 'i' } },
       ];
-      if (/^[0-9a-fA-F]{24}$/.test(q)) {
+
+      if (mongoose.isValidObjectId(q)) {
         searchConditions.push({ _id: q });
       }
 
-      if (filter.orderStatus) {
-        filter.$and = [
-          { orderStatus: filter.orderStatus },
-          { $or: searchConditions },
-        ];
+      if (Object.keys(filter).length > 0) {
+        filter.$and = [{ ...filter }, { $or: searchConditions }];
+        // clear top-level filters that are now in $and
         delete filter.orderStatus;
+        delete filter.paymentStatus;
+        delete filter.createdAt;
       } else {
         filter.$or = searchConditions;
       }
@@ -282,24 +321,167 @@ export const adminGetOrders = async (req, res, next) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     const [orders, total] = await Promise.all([
-      Order.find(filter).populate('user', 'name email').sort('-createdAt').skip(skip).limit(Number(limit)),
+      Order.find(filter)
+        .populate('user', 'name email')
+        .sort('-createdAt')
+        .skip(skip)
+        .limit(Number(limit)),
       Order.countDocuments(filter),
     ]);
 
-    res.json({ orders, page: Number(page), pages: Math.ceil(total / Number(limit)), total });
+    res.json({
+      orders,
+      page: Number(page),
+      pages: Math.max(1, Math.ceil(total / Number(limit))),
+      total,
+    });
   } catch (err) { next(err); }
 };
 
+// GET /api/admin/orders/:id — single order full details
+export const adminGetOrderById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const query = mongoose.isValidObjectId(id)
+      ? { $or: [{ _id: id }, { orderId: id.toUpperCase() }] }
+      : { orderId: id.toUpperCase() };
+
+    const order = await Order.findOne(query).populate('user', 'name email');
+    if (!order) {
+      res.status(404);
+      throw new Error('Order not found');
+    }
+
+    res.json(order);
+  } catch (err) { next(err); }
+};
+
+// PUT /api/admin/orders/:id — update status, shipment, notes
 export const adminUpdateOrder = async (req, res, next) => {
   try {
-    const schema = z.object({
-      orderStatus: z.enum(['pending', 'confirmed', 'shipped', 'delivered', 'cancelled']).optional(),
+    const updateSchema = z.object({
+      orderStatus: z.enum([
+        'pending',
+        'confirmed',
+        'processing',
+        'packed',
+        'shipped',
+        'out_for_delivery',
+        'delivered',
+        'cancelled',
+        'returned',
+      ]).optional(),
       paymentStatus: z.enum(['pending', 'paid', 'failed', 'refunded']).optional(),
+      shipment: z.object({
+        courierName: z.string().optional().default(''),
+        trackingId: z.string().optional().default(''),
+        trackingUrl: z.string().optional().default(''),
+        shippedAt: z.string().optional().nullable(),
+        estimatedDelivery: z.string().optional().nullable(),
+      }).optional(),
+      adminNotes: z.string().optional(),
+      notes: z.string().optional(),
+      statusNote: z.string().optional(),
+      notifyCustomer: z.boolean().optional().default(true),
     });
-    const data = schema.parse(req.body);
-    const order = await Order.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (!order) { res.status(404); throw new Error('Order not found'); }
+
+    const data = updateSchema.parse(req.body);
+
+    const order = await Order.findById(req.params.id).populate('user', 'name email');
+    if (!order) {
+      res.status(404);
+      throw new Error('Order not found');
+    }
+
+    const previousStatus = order.orderStatus;
+    const previousTracking = order.shipment?.trackingId || '';
+
+    // Handle status change
+    let statusChanged = false;
+    if (data.orderStatus && data.orderStatus !== previousStatus) {
+      statusChanged = true;
+      order.orderStatus = data.orderStatus;
+      order.statusHistory.push({
+        status: data.orderStatus,
+        changedAt: new Date(),
+        note: data.statusNote?.trim() || `Status updated from ${previousStatus} to ${data.orderStatus}`,
+        changedBy: req.user?.name || 'Administrator',
+      });
+    }
+
+    // Handle shipment details
+    let shipmentChanged = false;
+    if (data.shipment) {
+      if (!order.shipment) order.shipment = {};
+      if (data.shipment.courierName !== undefined) order.shipment.courierName = data.shipment.courierName;
+      if (data.shipment.trackingId !== undefined) {
+        if (data.shipment.trackingId !== previousTracking) shipmentChanged = true;
+        order.shipment.trackingId = data.shipment.trackingId;
+      }
+      if (data.shipment.trackingUrl !== undefined) order.shipment.trackingUrl = data.shipment.trackingUrl;
+
+      if (data.shipment.shippedAt) {
+        order.shipment.shippedAt = new Date(data.shipment.shippedAt);
+      } else if (order.orderStatus === 'shipped' && !order.shipment.shippedAt) {
+        order.shipment.shippedAt = new Date();
+      }
+
+      if (data.shipment.estimatedDelivery) {
+        order.shipment.estimatedDelivery = new Date(data.shipment.estimatedDelivery);
+      }
+    }
+
+    // Handle payment status
+    if (data.paymentStatus) {
+      order.paymentStatus = data.paymentStatus;
+    }
+
+    // Handle notes
+    if (data.adminNotes !== undefined) {
+      order.adminNotes = data.adminNotes;
+    }
+    if (data.notes !== undefined) {
+      order.notes = data.notes;
+    }
+
+    await order.save();
+
+    // Customer Notification Trigger
+    if (data.notifyCustomer) {
+      if (statusChanged) {
+        dispatchOrderNotifications(order, order.orderStatus).catch((err) => {
+          console.error(`[Admin notification error on ${order.orderStatus}]:`, err);
+        });
+      } else if (shipmentChanged && order.orderStatus === 'shipped') {
+        dispatchOrderNotifications(order, 'shipment_updated').catch((err) => {
+          console.error('[Admin notification error on shipment_updated]:', err);
+        });
+      }
+    }
+
     res.json(order);
+  } catch (err) { next(err); }
+};
+
+// POST /api/admin/orders/:id/resend-notification
+export const adminResendNotification = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { event, channel = 'all' } = req.body;
+
+    const order = await Order.findById(id).populate('user', 'name email');
+    if (!order) {
+      res.status(404);
+      throw new Error('Order not found');
+    }
+
+    const targetEvent = event || order.orderStatus || 'order_placed';
+    const result = await dispatchOrderNotifications(order, targetEvent, {
+      force: true,
+      channel,
+    });
+
+    res.json({ message: 'Notification dispatched successfully', result });
   } catch (err) { next(err); }
 };
 

@@ -8,7 +8,7 @@ import {
   adminCreateCategory, adminUpdateCategory, adminDeleteCategory,
   adminGetArtisans, adminCreateArtisan, adminUpdateArtisan, adminDeleteArtisan,
   adminGetCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon,
-  adminGetOrders, adminUpdateOrder, adminDeleteOrder,
+  adminGetOrders, adminGetOrderById, adminUpdateOrder, adminResendNotification, adminDeleteOrder,
   adminGetUsers, adminDeleteUser,
   adminGetStats,
 } from '../controllers/adminController.js';
@@ -52,9 +52,11 @@ router.post('/coupons', adminCreateCoupon);
 router.put('/coupons/:id', adminUpdateCoupon);
 router.delete('/coupons/:id', adminDeleteCoupon);
 
-// Orders
+// Orders & Shipment Logistics
 router.get('/orders', adminGetOrders);
+router.get('/orders/:id', adminGetOrderById);
 router.put('/orders/:id', adminUpdateOrder);
+router.post('/orders/:id/resend-notification', adminResendNotification);
 router.delete('/orders/:id', adminDeleteOrder);
 
 // Users

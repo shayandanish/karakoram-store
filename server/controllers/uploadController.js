@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 
 /** Check if valid Cloudinary credentials are set in .env */
-const isCloudinaryConfigured = () => {
+export const isCloudinaryConfigured = () => {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -26,7 +26,7 @@ const isCloudinaryConfigured = () => {
 };
 
 /** Stream a buffer to Cloudinary */
-const streamUploadToCloudinary = (buffer, folder) =>
+export const streamUploadToCloudinary = (buffer, folder) =>
   new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       { folder, resource_type: 'image' },
@@ -39,7 +39,7 @@ const streamUploadToCloudinary = (buffer, folder) =>
   });
 
 /** Save a buffer to local disk (fallback when Cloudinary is not configured) */
-const saveToLocalDisk = async (req, file, folder) => {
+export const saveToLocalDisk = async (req, file, folder) => {
   const folderDir = path.join(UPLOADS_DIR, folder);
   await fs.promises.mkdir(folderDir, { recursive: true });
 
