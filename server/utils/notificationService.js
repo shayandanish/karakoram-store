@@ -85,31 +85,9 @@ export async function dispatchOrderNotifications(orderInput, event, options = {}
     }
   }
 
-  // ── 2. WhatsApp Notification ───────────────────────────────────────
-  if ((channel === 'all' || channel === 'whatsapp') && recipientPhone) {
-    // Only send if customer consented or if it's a vital transactional update
-    const hasConsent = order.whatsappConsent !== false;
-    const alreadySent = !force && isDuplicateNotification(order, 'whatsapp', event);
-
-    if (!hasConsent) {
-      console.log(`[NotificationService] WhatsApp skipped for order ${order._id}: Customer did not consent.`);
-      results.whatsappResult = { skipped: true, reason: 'No consent' };
-    } else if (alreadySent) {
-      console.log(`[NotificationService] Skipping duplicate WhatsApp for order ${order._id} (${event})`);
-      results.whatsappResult = { skipped: true, reason: 'Duplicate prevention' };
-    } else {
-      const waRes = await sendWhatsAppNotification(order, event);
-      results.whatsappResult = waRes;
-      logsToPush.push({
-        type: 'whatsapp',
-        event,
-        recipient: recipientPhone,
-        sentAt: new Date(),
-        success: waRes.success,
-        error: waRes.error || '',
-        messageId: waRes.messageId || '',
-      });
-    }
+  // ── 2. WhatsApp Notification (Disabled for customers; order communication handled via Email) ──
+  if (channel === 'whatsapp') {
+    results.whatsappResult = { skipped: true, reason: 'Customer WhatsApp order messaging disabled' };
   }
 
   // Persist notification log into the order document

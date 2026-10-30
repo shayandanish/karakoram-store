@@ -877,7 +877,7 @@ export default function AdminOrdersPage() {
                       onChange={(e) => setNotifyCustomer(e.target.checked)}
                       className="w-4 h-4 text-apricot-500 rounded border-stone-300"
                     />
-                    <span>Automatically trigger Email & WhatsApp notifications on save</span>
+                    <span>Automatically trigger customer email notification on save</span>
                   </label>
 
                   <button
@@ -962,20 +962,6 @@ export default function AdminOrdersPage() {
                     >
                       Re-send Email
                     </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        resendNotificationMutation.mutate({
-                          id: selectedOrder._id,
-                          event: selectedOrder.orderStatus,
-                          channel: 'whatsapp',
-                        })
-                      }
-                      disabled={resendNotificationMutation.isPending}
-                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
-                    >
-                      Re-send WhatsApp
-                    </button>
                   </div>
                 </div>
 
@@ -1036,15 +1022,6 @@ export default function AdminOrdersPage() {
                 <div className="flex items-center gap-2 pt-1">
                   <span className="text-[10px] bg-stone-200 px-2 py-0.5 rounded text-stone-700 font-semibold">
                     {selectedOrder.user ? 'Registered User' : 'Guest Checkout'}
-                  </span>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
-                      selectedOrder.whatsappConsent !== false
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-stone-200 text-stone-600'
-                    }`}
-                  >
-                    WhatsApp Alerts: {selectedOrder.whatsappConsent !== false ? 'Consented' : 'Declined'}
                   </span>
                 </div>
               </div>

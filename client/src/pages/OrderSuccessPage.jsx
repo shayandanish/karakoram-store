@@ -142,8 +142,8 @@ export default function OrderSuccessPage() {
                 📬
               </div>
               <div>
-                <p className="font-bold text-slate-800">Notifications Sent</p>
-                <p className="text-slate-500">Email & WhatsApp Active</p>
+                <p className="font-bold text-slate-800">Order Updates</p>
+                <p className="text-slate-500">Email Confirmation Sent</p>
               </div>
             </div>
 
@@ -288,7 +288,7 @@ export default function OrderSuccessPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-900 font-bold flex items-center justify-center shrink-0 text-[11px]">3</span>
-                  <span><strong>Dispatched with Courier Tracking:</strong> You will receive SMS, Email & WhatsApp tracking with your Courier Consignment # (CN).</span>
+                  <span><strong>Dispatched with Courier Tracking:</strong> You will receive Email & tracking notifications with your Courier Consignment # (CN).</span>
                 </li>
               </ol>
             </div>
