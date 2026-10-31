@@ -1,12 +1,26 @@
 // ── Product Card ──────────────────────────────────────────────
 import { Link } from 'react-router-dom';
 import { fmtPKR, cloudinaryImage, cloudinarySrcSet, isCloudinaryUrl } from '../../lib/utils';
+import { getBestVariantDiscount } from '../../lib/discountUtils';
 import ProductImage from './ProductImage';
 
 export default function ProductCard({ product }) {
-  const lowestPrice = product.variants?.length
-    ? Math.min(...product.variants.map((v) => v.price))
+  const variants = product.variants || [];
+  const variantDiscounts = variants.map((v) => {
+    const d = getVariantDiscount(v);
+    return {
+      effectivePrice: d.hasDiscount ? d.salePrice : Number(v.price),
+      originalPrice: d.hasDiscount ? d.originalPrice : null,
+      discount: d,
+    };
+  });
+
+  const cheapest = variantDiscounts.length > 0
+    ? variantDiscounts.sort((a, b) => a.effectivePrice - b.effectivePrice)[0]
     : null;
+
+  const displayPrice = cheapest ? cheapest.effectivePrice : null;
+  const bestBadge = getBestVariantDiscount(variants);
 
   const imageUrl = product.images?.[0]?.url || '';
   const img = imageUrl
@@ -77,6 +91,16 @@ export default function ProductCard({ product }) {
             Seasonal
           </span>
         )}
+        {bestBadge.hasDiscount && !product.isFeatured && (
+          <span className="absolute top-3 left-3 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+            🔖 {bestBadge.badge}
+          </span>
+        )}
+        {bestBadge.hasDiscount && product.isFeatured && (
+          <span className="absolute top-10 left-3 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+            🔖 {bestBadge.badge}
+          </span>
+        )}
       </div>
 
       {/* Body */}
@@ -91,8 +115,15 @@ export default function ProductCard({ product }) {
           <p className="text-xs text-mountain-500 mb-2">by {product.artisan.name}</p>
         )}
         <div className="mt-auto flex items-end justify-between gap-2 border-t border-cream-200 pt-3">
-          <span className="shrink-0 whitespace-nowrap font-display text-base font-bold text-apricot-600 sm:text-lg">
-            {lowestPrice !== null ? `From ${fmtPKR(lowestPrice)}` : 'N/A'}
+          <span className="shrink-0 whitespace-nowrap">
+            <span className="font-display text-base font-bold text-apricot-600 sm:text-lg">
+              {displayPrice !== null ? `From ${fmtPKR(displayPrice)}` : 'N/A'}
+            </span>
+            {cheapest?.originalPrice && (
+              <span className="block text-[11px] text-mountain-400 line-through leading-none">
+                {fmtPKR(cheapest.originalPrice)}
+              </span>
+            )}
           </span>
           <span className="min-w-0 truncate text-right text-[11px] text-mountain-500 sm:text-xs">
             {product.origin || ''}

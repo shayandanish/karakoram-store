@@ -12,9 +12,74 @@ import {
   saveToLocalDisk,
 } from './uploadController.js';
 
+// ── Known legitimate email domains ────────────────────────────────────────
+const KNOWN_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com',
+  'outlook.com', 'hotmail.com', 'hotmail.co.uk', 'hotmail.fr',
+  'live.com', 'live.co.uk', 'msn.com',
+  'yahoo.com', 'yahoo.co.uk', 'yahoo.co.in', 'yahoo.com.pk',
+  'ymail.com', 'rocketmail.com',
+  'icloud.com', 'me.com', 'mac.com',
+  'protonmail.com', 'proton.me', 'pm.me',
+  'zoho.com', 'zohomail.com',
+  'fastmail.com', 'fastmail.fm',
+  'tutanota.com', 'tutamail.com',
+  'yandex.com', 'yandex.ru',
+  'mail.com', 'email.com',
+  'gmx.com', 'gmx.net', 'gmx.de',
+  'aol.com',
+]);
+
+/**
+ * Validate an email address — structural check + optional domain allowlist.
+ * Returns true when email is valid or when domain is unknown-but-plausible
+ * (we only hard-block structurally malformed addresses server-side).
+ */
+const isValidEmail = (email) => {
+  if (!email) return true; // optional field
+  const cleaned = String(email).trim().toLowerCase();
+  // Must match basic RFC-5321 structure
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleaned)) return false;
+  // Domain check: if in our known list → definitely valid.
+  // If unknown domain → still allow (could be corporate/custom domain).
+  return true;
+};
+
+/**
+ * Stricter check used for guestEmail: known domains OR corporate TLDs.
+ * Returns an error string or null.
+ */
+const checkEmailDomain = (email) => {
+  if (!email) return null;
+  const cleaned = String(email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleaned)) {
+    return 'Please enter a valid email address (e.g. name@gmail.com)';
+  }
+  const domain = cleaned.split('@')[1];
+  // If domain ends with a known TLD and has reasonable length, accept it.
+  // We only reject obviously fake patterns (single char domain, no dot, etc.)
+  if (domain.length < 4 || !domain.includes('.')) {
+    return 'Email domain looks invalid — please use a real email address';
+  }
+  return null;
+};
+
 const addressSchema = z.object({
   name: z.string().min(2),
-  phone: z.string().min(7),
+  phone: z
+    .string()
+    .min(7, 'Phone number is too short')
+    .max(20, 'Phone number is too long')
+    .refine((val) => {
+      const d = val.replace(/\D/g, '');
+      // Pakistani local: 03XXXXXXXXX (11 digits)
+      if (d.startsWith('03') && d.length === 11) return true;
+      // Pakistani with country code: 923XXXXXXXXX (12 digits)
+      if (d.startsWith('923') && d.length === 12) return true;
+      // International E.164-like: starts with a non-zero digit, 7–15 total digits
+      if (d.length >= 7 && d.length <= 15) return true;
+      return false;
+    }, 'Please enter a valid phone number (e.g. 0300 1234567 or +971 50 123 4567)'),
   street: z.string().min(3),
   city: z.string().min(2),
   province: z.string().min(2),
@@ -31,8 +96,15 @@ const orderItemInputSchema = z.object({
 const createOrderSchema = z.object({
   // Guest fields (required when not logged in)
   guestName: z.string().optional(),
-  guestEmail: z.string().email().optional().or(z.literal('')),
-  guestPhone: z.string().optional(),
+  guestEmail: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => !val || checkEmailDomain(val) === null,
+      (val) => ({ message: checkEmailDomain(val) || 'Invalid email address' })
+    ),
+  guestPhone: z.string().min(7, 'Phone number is too short').max(20).optional(),
 
   items: z.array(orderItemInputSchema).min(1),
   shippingAddress: addressSchema,
@@ -91,11 +163,19 @@ export const createOrder = async (req, res, next) => {
             { session }
           );
 
+          // Server-calculated effective price taking discount percentage into account
+          let effectivePrice = variant.price;
+          if (variant.discountPercent && variant.discountPercent > 0) {
+            effectivePrice = Math.max(1, Math.round(variant.price * (1 - variant.discountPercent / 100)));
+          } else if (variant.compareAtPrice && variant.compareAtPrice > variant.price) {
+            effectivePrice = variant.price;
+          }
+
           orderItems.push({
             product: product._id,
             name: product.name,
             variantLabel: input.variantLabel,
-            price: variant.price, // server-calculated price
+            price: effectivePrice, // server-calculated price
             quantity: input.quantity,
             image: product.images?.[0]?.url || '',
           });

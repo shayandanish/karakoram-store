@@ -1,5 +1,15 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import { Resend } from 'resend';
+
+// Initialize Resend client if API key is provided
+const getResendClient = () => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (apiKey && apiKey.trim() && apiKey !== 'your_resend_api_key') {
+    return new Resend(apiKey.trim());
+  }
+  return null;
+};
 
 let cachedTransporter = null;
 
@@ -80,11 +90,10 @@ export const generateOtp = () => {
  * Sends a 6-digit OTP verification email to the user.
  */
 export const sendOtpEmail = async ({ to, otp, userName = 'Customer' }) => {
-  const transporter = await getTransporter();
   const from =
     process.env.EMAIL_FROM ||
     process.env.SMTP_USER ||
-    '"Karakoram Store" <noreply@karakoramstore.com>';
+    'Karakoram Store <onboarding@resend.dev>';
 
   const subject = `Your Verification Code: ${otp} - Karakoram Store`;
   const text = `Hello ${userName},\n\nYour 6-digit verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you did not request this verification code, please ignore this email.\n\nBest regards,\nKarakoram Store Team`;
@@ -109,6 +118,25 @@ export const sendOtpEmail = async ({ to, otp, userName = 'Customer' }) => {
 </body>
 </html>`;
 
+  // 1. Try Resend API if configured
+  const resend = getResendClient();
+  if (resend) {
+    const { data, error } = await resend.emails.send({
+      from,
+      to: [to],
+      subject,
+      text,
+      html,
+    });
+    if (error) {
+      console.warn('[Resend OTP Error]:', error.message, 'falling back to SMTP');
+    } else {
+      return { success: true, messageId: data.id };
+    }
+  }
+
+  // 2. Fallback to Nodemailer
+  const transporter = await getTransporter();
   return transporter.sendMail({ from, to, subject, text, html });
 };
 
@@ -283,7 +311,6 @@ function buildItemsHtml(items = []) {
  */
 export async function sendOrderNotificationEmail(order, event, recipient = null) {
   try {
-    const transporter = await getTransporter();
     const fromAddress = (process.env.SMTP_USER || process.env.EMAIL_USER || 'inamkarim348@gmail.com').trim();
     const from = {
       name: 'Karakoram Store',
@@ -564,6 +591,38 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
       'Karakoram Store — Direct from Artisans of Gilgit-Baltistan'
     ].filter(Boolean).join('\n');
 
+    // 1. Send via Resend HTTPS API if RESEND_API_KEY is configured
+    const resend = getResendClient();
+    if (resend) {
+      const resendFrom =
+        process.env.EMAIL_FROM ||
+        'Karakoram Store <onboarding@resend.dev>';
+      const replyTo =
+        process.env.REPLY_TO_EMAIL ||
+        fromAddress;
+
+      const { data, error } = await resend.emails.send({
+        from: resendFrom,
+        to: [targetEmail],
+        replyTo,
+        subject: meta.subject,
+        html,
+        text: plainText,
+        headers: {
+          'X-Entity-Ref-ID': displayOrderId,
+        },
+      });
+
+      if (!error && data?.id) {
+        console.log(`[Resend] Successfully delivered "${event}" email to ${targetEmail} (ID: ${data.id})`);
+        return { success: true, messageId: data.id };
+      }
+
+      console.warn(`[Resend] Delivery returned error (${error?.message || 'unknown'}), falling back to SMTP...`);
+    }
+
+    // 2. Fallback to standard Nodemailer SMTP
+    const transporter = await getTransporter();
     const info = await transporter.sendMail({
       from,
       to: targetEmail,

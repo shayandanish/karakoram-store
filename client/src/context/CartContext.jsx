@@ -1,5 +1,6 @@
 // ── Cart Context (localStorage-backed) ───────────────────────
 import { createContext, useContext, useReducer, useEffect } from 'react';
+import { getVariantDiscount } from '../lib/discountUtils';
 
 const CartContext = createContext(null);
 
@@ -25,6 +26,8 @@ function cartReducer(state, action) {
           i.key === key ? { ...i, quantity: i.quantity + quantity } : i
         );
       }
+      const disc = getVariantDiscount(variant);
+      const effectivePrice = disc.hasDiscount ? disc.salePrice : Number(variant.price);
       return [
         ...state,
         {
@@ -34,7 +37,10 @@ function cartReducer(state, action) {
           productSlug: product.slug,
           image: product.images?.[0]?.url || '',
           variantLabel: variant.label,
-          price: variant.price,
+          price: effectivePrice,
+          originalPrice: disc.hasDiscount ? disc.originalPrice : null,
+          discountPercent: disc.hasDiscount ? disc.savingsPct : null,
+          discountLabel: disc.badge || '',
           quantity,
         },
       ];

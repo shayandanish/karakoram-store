@@ -26,6 +26,23 @@ function RoleBadge({ role }) {
   );
 }
 
+function StatusBadge({ user }) {
+  const verified = user.role === 'admin' || user.isVerified || user.status === 'verified';
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+        verified
+          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+          : 'bg-amber-50 text-amber-700 border border-amber-200'
+      }`}
+      title={verified ? 'Email verified' : 'Email not verified yet — the account cannot sign in'}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${verified ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+      {verified ? 'Verified' : 'Pending'}
+    </span>
+  );
+}
+
 function UserAvatar({ name }) {
   const initials = (name || '?')
     .split(/\s+/)
@@ -154,6 +171,17 @@ export default function AdminUsersPage() {
     },
   });
 
+  const verifyMutation = useMutation({
+    mutationFn: (id) => api.post(`/admin/users/${id}/verify`),
+    onSuccess: () => {
+      toast.success('User verified — they can sign in now');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || 'Failed to verify user');
+    },
+  });
+
   const start = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const end = Math.min(page * PAGE_SIZE, total);
 
@@ -251,13 +279,21 @@ export default function AdminUsersPage() {
         header: 'Email',
         accessor: 'email',
         render: (row) => (
-          <span className="text-sm text-mountain-700 break-all">{row.email}</span>
+          <div className="min-w-0">
+            <p className="text-sm text-mountain-700 break-all">{row.email}</p>
+            {row.phone && <p className="text-[11px] text-stone-400">{row.phone}</p>}
+          </div>
         ),
       },
       {
         header: 'Role',
         accessor: 'role',
         render: (row) => <RoleBadge role={row.role} />, 
+      },
+      {
+        header: 'Status',
+        accessor: 'status',
+        render: (row) => <StatusBadge user={row} />,
       },
       {
         header: 'Joined',
@@ -270,22 +306,46 @@ export default function AdminUsersPage() {
     rows={users}
     rowKey="_id"
     actions={(row) => (
-      <button
-        type="button"
-        onClick={() => setDeleteTarget(row)}
-        disabled={row._id === currentUser?._id}
-        title={row._id === currentUser?._id ? 'You cannot delete your own account' : `Delete ${row.name}`}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
-          <path
-            fillRule="evenodd"
-            d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-            clipRule="evenodd"
-          />
-        </svg>
-        Delete
-      </button>
+      <>
+        {row.role !== 'admin' && !row.isVerified && row.status !== 'verified' && (
+          <button
+            type="button"
+            onClick={() => verifyMutation.mutate(row._id)}
+            disabled={verifyMutation.isPending && verifyMutation.variables === row._id}
+            title={`Mark ${row.name}'s email as verified so they can sign in`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {verifyMutation.isPending && verifyMutation.variables === row._id ? (
+              <span className="w-3.5 h-3.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
+                <path
+                  fillRule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            )}
+            {verifyMutation.isPending && verifyMutation.variables === row._id ? 'Verifying…' : 'Verify'}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setDeleteTarget(row)}
+          disabled={row._id === currentUser?._id}
+          title={row._id === currentUser?._id ? 'You cannot delete your own account' : `Delete ${row.name}`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5" aria-hidden="true">
+            <path
+              fillRule="evenodd"
+              d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Delete
+        </button>
+      </>
     )}
   />
 )}

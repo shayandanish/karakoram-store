@@ -8,7 +8,7 @@ import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Review from '../models/Review.js';
 import cloudinary from '../config/cloudinary.js';
-import { deleteFirebaseUser } from '../utils/firebaseAdmin.js';
+import { deleteFirebaseUser, getFirebaseAuth } from '../utils/firebaseAdmin.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
 
 /* ─────────────────────────────────────────────
@@ -19,6 +19,9 @@ const variantSchema = z.object({
   label: z.string().min(1),
   price: z.number().positive(),
   stock: z.number().int().min(0),
+  discountPercent: z.number().min(0).max(99).nullable().optional(),
+  compareAtPrice: z.number().nullable().optional(),
+  discountLabel: z.string().optional().default(''),
 });
 
 const imageSchema = z.object({
@@ -38,7 +41,9 @@ const productSchema = z.object({
   description: z.string().min(10),
   shortDescription: z.string().optional().default(''),
   category: z.string().length(24),
-  artisan: z.string().length(24).optional(),
+  artisan: z.string().length(24).nullable().optional(),
+  origin: z.string().optional().default('Hunza, Gilgit-Baltistan'),
+  isSeasonal: z.boolean().optional().default(false),
   variants: z.array(variantSchema).min(1),
   images: z.array(imageSchema).optional().default([]),
   video: videoSchema.optional(),
@@ -571,7 +576,7 @@ export const adminGetUsers = async (req, res, next) => {
     const [users, total] = await Promise.all([
       User.find(filter)
         // passwordHash is never selected, so it can never be returned
-        .select('name email role createdAt')
+        .select('name email phone role status isVerified createdAt')
         .sort('-createdAt')
         .skip((page - 1) * limit)
         .limit(limit)
@@ -585,6 +590,53 @@ export const adminGetUsers = async (req, res, next) => {
       pages: Math.max(1, Math.ceil(total / limit)),
       total,
     });
+  } catch (err) { next(err); }
+};
+
+// POST /api/admin/users/:id/verify
+// Lets the admin activate a sign-up when the customer never managed to click
+// the Firebase verification link (spam folder, blocked email, etc.).
+export const adminVerifyUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      res.status(400);
+      throw new Error('Invalid user id');
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    if (user.firebaseUid) {
+      try {
+        await getFirebaseAuth().updateUser(user.firebaseUid, { emailVerified: true });
+      } catch (fbErr) {
+        if (fbErr.code === 'FIREBASE_NOT_CONFIGURED') {
+          res.status(503);
+          throw new Error(
+            'Firebase Admin is not configured, so the linked Firebase account cannot be verified.'
+          );
+        }
+        if (fbErr.code !== 'auth/user-not-found') {
+          res.status(502);
+          throw new Error(`Could not verify the linked Firebase account: ${fbErr.message}`);
+        }
+      }
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      id,
+      { $set: { status: 'verified', isVerified: true } },
+      { new: true, runValidators: false }
+    )
+      .select('name email phone role status isVerified createdAt')
+      .lean();
+
+    res.json({ message: 'User verified', user: updated });
   } catch (err) { next(err); }
 };
 

@@ -57,8 +57,8 @@ const httpError = (message, statusCode, code) => {
   return err;
 };
 
-/** Verify the Firebase token and refuse unverified email addresses. */
-const verifyFirebaseToken = async (idToken) => {
+/** Verify a Firebase ID token without requiring a verified email address. */
+const decodeFirebaseToken = async (idToken) => {
   let decoded;
   try {
     decoded = await verifyFirebaseIdToken(idToken);
@@ -69,6 +69,13 @@ const verifyFirebaseToken = async (idToken) => {
   if (!decoded.email || typeof decoded.email !== 'string') {
     throw httpError('This account has no email address.', 400);
   }
+
+  return decoded;
+};
+
+/** Verify the Firebase token and refuse unverified email addresses. */
+const verifyFirebaseToken = async (idToken) => {
+  const decoded = await decodeFirebaseToken(idToken);
 
   if (decoded.email_verified !== true) {
     throw httpError('Please verify your email address before continuing.', 403, 'EMAIL_NOT_VERIFIED');
@@ -137,12 +144,15 @@ const findOrLinkFirebaseUser = async (decoded, { name, phone, createIfMissing = 
 
 /**
  * POST /api/auth/firebase-register
- * Creates (or returns) the MongoDB user only after Firebase confirms the email.
+ * Creates the MongoDB user as soon as the Firebase account exists, so new
+ * sign-ups are visible to admins immediately with an "unverified" status.
+ * A login token is only issued once Firebase confirms the email address.
  */
 export const firebaseRegister = async (req, res, next) => {
   try {
     const data = firebaseRegisterSchema.parse(req.body);
-    const decoded = await verifyFirebaseToken(data.idToken);
+    const decoded = await decodeFirebaseToken(data.idToken);
+    const emailVerified = decoded.email_verified === true;
 
     let user;
     try {
@@ -163,6 +173,20 @@ export const firebaseRegister = async (req, res, next) => {
       } else {
         throw err;
       }
+    }
+
+    // Unverified sign-ups are recorded for the admin panel but cannot log in.
+    if (!emailVerified) {
+      res.status(202).json({
+        pending: true,
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status || 'unverified',
+        isVerified: false,
+      });
+      return;
     }
 
     const token = sendTokenCookie(res, user._id);

@@ -81,6 +81,7 @@ export const formatPhoneDisplay = (value) => {
   return `+${normalized}`;
 };
 
+
 // ── Cloudinary image helpers ──────────────────────────────────
 // Cloudinary URLs already contain the cloud name, so transformations work
 // even when VITE_CLOUDINARY_CLOUD_NAME is not present at build time.

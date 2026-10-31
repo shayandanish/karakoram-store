@@ -24,6 +24,12 @@ function toVariantRows(variants = []) {
     label: v.label,
     price: v.price,
     stock: v.stock,
+    discountPercent: v.discountPercent != null ? v.discountPercent : (
+      (v.compareAtPrice && v.compareAtPrice > v.price)
+        ? Math.round(((v.compareAtPrice - v.price) / v.compareAtPrice) * 100)
+        : ''
+    ),
+    discountLabel: v.discountLabel || '',
   }));
 }
 
@@ -35,6 +41,8 @@ function normalizeWeightVariants(variants = []) {
     label: String(v.label || '').trim(),
     price: v.price === undefined || v.price === null ? '' : v.price,
     stock: v.stock === undefined || v.stock === null ? '' : v.stock,
+    discountPercent: v.discountPercent !== undefined && v.discountPercent !== null ? v.discountPercent : '',
+    discountLabel: v.discountLabel || '',
   }));
 
   const bySize = new Map();
@@ -83,6 +91,8 @@ function normalizeWeightVariants(variants = []) {
           : stockPerKg !== ''
           ? Math.max(0, Math.round(stockPerKg * multiplier))
           : '',
+      discountPercent: existing?.discountPercent != null ? existing.discountPercent : '',
+      discountLabel:  existing?.discountLabel || '',
     };
   });
 }
@@ -122,7 +132,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
     if (isWeightCategory(initialCategory)) {
       return normalizeWeightVariants(existing || []);
     }
-    return existing || [{ label: 'Standard', price: '', stock: '' }];
+    return existing || [{ label: 'Standard', price: '', stock: '', discountPercent: '', discountLabel: '' }];
   });
 
   // Images state: [{ url, publicId, alt }]
@@ -171,7 +181,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
 
   const addVariantRow = () => {
     if (weightCategorySelected) return;
-    setVariants((prev) => [...prev, { label: '', price: '', stock: '' }]);
+    setVariants((prev) => [...prev, { label: '', price: '', stock: '', discountPercent: '', discountLabel: '' }]);
   };
 
   const removeVariantRow = (index) => {
@@ -333,9 +343,13 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
       isSeasonal,
       isActive,
       variants: variants.map((v) => ({
-        label: v.label.trim(),
-        price: Number(v.price),
-        stock: parseInt(v.stock, 10),
+        label:          v.label.trim(),
+        price:          Number(v.price),
+        stock:          parseInt(v.stock, 10),
+        discountPercent: v.discountPercent !== '' && !isNaN(Number(v.discountPercent)) && Number(v.discountPercent) > 0
+                          ? Math.min(99, Math.max(1, Math.round(Number(v.discountPercent))))
+                          : null,
+        discountLabel:  v.discountLabel?.trim() || '',
       })),
       images: images.map((img) => ({
         url: img.url,
@@ -591,6 +605,102 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
                       {errors[`variant_${idx}_stock`]}
                     </span>
                   )}
+                </div>
+
+                {/* ── Percentage Discount & Calculated Price ───────── */}
+                <div className="w-full sm:w-28">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-stone-600">
+                      Discount (%)
+                    </label>
+                    {v.discountPercent !== '' && Number(v.discountPercent) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => updateVariantRow(idx, 'discountPercent', '')}
+                        className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold"
+                        title="Remove discount"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="99"
+                      step="1"
+                      value={v.discountPercent}
+                      onChange={(e) => updateVariantRow(idx, 'discountPercent', e.target.value)}
+                      placeholder="0"
+                      className="w-full px-3 py-2 pr-7 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden font-medium"
+                    />
+                    <span className="absolute right-2.5 top-2 text-xs text-stone-400 pointer-events-none">
+                      %
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-stone-400 block mt-0.5">
+                    0 to 99% off
+                  </span>
+                </div>
+
+                {/* System Calculated After-Discount Price */}
+                <div className="w-full sm:w-44">
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                    After Discount Price
+                  </label>
+                  {(() => {
+                    const price = Number(v.price);
+                    const pct = Number(v.discountPercent);
+                    const hasDiscount = price > 0 && pct > 0 && pct < 100;
+
+                    if (hasDiscount) {
+                      const finalPrice = Math.max(1, Math.round(price * (1 - pct / 100)));
+                      const savings = price - finalPrice;
+                      return (
+                        <div>
+                          <div className="px-3 py-2 text-sm bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-950 font-bold flex items-center justify-between shadow-2xs">
+                            <span>Rs {finalPrice}</span>
+                            <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100/90 px-1.5 py-0.5 rounded-full">
+                              -{pct}%
+                            </span>
+                          </div>
+                          <span className="text-emerald-700 text-[11px] block mt-0.5 font-medium">
+                            Customer saves Rs {savings}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div>
+                        <div className="px-3 py-2 text-sm bg-stone-50 border border-stone-200 rounded-lg text-stone-600 font-medium">
+                          {price > 0 ? `Rs ${price}` : '—'}
+                        </div>
+                        <span className="text-stone-400 text-[11px] block mt-0.5">
+                          Regular price (No discount)
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                <div className="w-full sm:w-32">
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                    Sale Label{' '}
+                    <span className="font-normal text-stone-400">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={20}
+                    value={v.discountLabel}
+                    onChange={(e) => updateVariantRow(idx, 'discountLabel', e.target.value)}
+                    placeholder="e.g. Eid Sale"
+                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                  />
+                  <span className="text-stone-400 text-[10px] block mt-0.5">
+                    Custom badge text
+                  </span>
                 </div>
 
                 {!weightCategorySelected && (

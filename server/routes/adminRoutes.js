@@ -9,7 +9,7 @@ import {
   adminGetArtisans, adminCreateArtisan, adminUpdateArtisan, adminDeleteArtisan,
   adminGetCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon,
   adminGetOrders, adminGetOrderById, adminUpdateOrder, adminResendNotification, adminDeleteOrder,
-  adminGetUsers, adminDeleteUser,
+  adminGetUsers, adminDeleteUser, adminVerifyUser,
   adminGetStats,
 } from '../controllers/adminController.js';
 import {
@@ -61,6 +61,7 @@ router.delete('/orders/:id', adminDeleteOrder);
 
 // Users
 router.get('/users', adminGetUsers);
+router.post('/users/:id/verify', adminVerifyUser);
 router.delete('/users/:id', adminDeleteUser);
 
 // Media upload (admin only — front-end uploads go here first)

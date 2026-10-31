@@ -2,6 +2,7 @@
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { fmtPKR, buildWhatsAppLink } from '../lib/utils';
+import { getVariantDiscount } from '../lib/discountUtils';
 import ProductImage from '../components/ui/ProductImage';
 import SEO from '../components/ui/SEO';
 
@@ -58,9 +59,16 @@ function CartItem({ item }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="font-display font-bold text-apricot-600">
-              {fmtPKR(item.price * item.quantity)}
-            </span>
+            <div className="text-right">
+              <span className="font-display font-bold text-apricot-600">
+                {fmtPKR(item.price * item.quantity)}
+              </span>
+              {((item.originalPrice != null && item.originalPrice > item.price) || (item.compareAtPrice != null && item.compareAtPrice > item.price)) && (
+                <p className="text-[11px] text-mountain-400 line-through leading-none mt-0.5">
+                  {fmtPKR((item.originalPrice || item.compareAtPrice) * item.quantity)}
+                </p>
+              )}
+            </div>
             <button
               id={`cart-remove-${item.key}`}
               onClick={() => removeFromCart(item.key)}

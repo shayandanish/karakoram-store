@@ -329,7 +329,7 @@ function OrderCard({ order, onOpenInvoice }) {
               {wa && (
                 <a
                   href={`https://wa.me/${wa}?text=${encodeURIComponent(
-                    `Assalam o Alaikum! I am sharing my Easypaisa payment proof for Order #${shortId} (Rs. ${order.total}).`
+                    `Assalam o Alaikum! I am sharing my Easypaisa payment proof for Order ${displayId} (Rs. ${order.total}).`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"

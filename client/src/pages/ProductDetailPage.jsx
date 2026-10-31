@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useCart } from '../context/CartContext';
 import { fmtPKR, buildProductWhatsAppLink, cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
+import { getVariantDiscount } from '../lib/discountUtils';
 import ProductImage from '../components/ui/ProductImage';
 import { SkeletonDetail } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
@@ -233,9 +234,33 @@ export default function ProductDetailPage() {
             </div>
 
             {/* Price */}
-            <div className="text-3xl font-display font-bold text-apricot-600">
-              {variant ? fmtPKR(variant.price) : 'N/A'}
-            </div>
+            {(() => {
+              const disc = getVariantDiscount(variant);
+              return (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-3xl font-display font-bold text-apricot-600">
+                      {variant ? fmtPKR(disc.hasDiscount ? disc.salePrice : variant.price) : 'N/A'}
+                    </span>
+                    {disc.hasDiscount && (
+                      <>
+                        <span className="text-xl text-mountain-400 line-through">
+                          {fmtPKR(disc.originalPrice)}
+                        </span>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                          🔖 {disc.badge}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  {disc.hasDiscount && (
+                    <p className="text-sm text-emerald-700 font-medium">
+                      You save {fmtPKR(disc.savingsAmount)}!
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Description */}
             <p className="text-mountain-600 text-sm leading-relaxed whitespace-pre-wrap">
@@ -255,22 +280,28 @@ export default function ProductDetailPage() {
                   {product.variants.map((v) => {
                     const outOfStock = v.stock <= 0;
                     const isSelected = variant?.label === v.label;
+                    const vDisc = getVariantDiscount(v);
                     return (
                       <button
                         key={v.label}
                         id={`variant-${v.label.replace(/\s+/g, '-')}`}
                         onClick={() => handleVariantSelect(v)}
                         disabled={outOfStock}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all ${
+                        className={`px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all inline-flex items-center gap-1.5 ${
                           isSelected
-                            ? 'border-apricot-500 bg-apricot-50 text-apricot-700'
+                            ? 'border-apricot-500 bg-apricot-50 text-apricot-700 shadow-2xs'
                             : outOfStock
                             ? 'border-cream-300 bg-cream-100 text-mountain-400 cursor-not-allowed line-through'
                             : 'border-cream-300 text-mountain-700 hover:border-apricot-300 hover:bg-apricot-50'
                         }`}
                       >
-                        {v.label}
-                        {outOfStock && ' (Out)'}
+                        <span>{v.label}</span>
+                        {vDisc.hasDiscount && (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-100/90 px-1.5 py-0.5 rounded-full">
+                            -{vDisc.savingsPct}%
+                          </span>
+                        )}
+                        {outOfStock && <span className="text-xs text-mountain-400">(Out)</span>}
                       </button>
                     );
                   })}

@@ -3,7 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { fmtPKR, normalizePkPhone, formatPhoneDisplay } from '../lib/utils';
+import { fmtPKR } from '../lib/utils';
+import { COUNTRY_CODES, validatePhoneNumber, validateEmail } from '../lib/phoneUtils';
 import api from '../lib/axios';
 import SEO from '../components/ui/SEO';
 
@@ -50,6 +51,7 @@ export default function CheckoutPage() {
   });
 
   const [copiedNumber, setCopiedNumber] = useState(false);
+  const [dialCode, setDialCode] = useState('+92');
 
   const handleCopyNumber = () => {
     navigator.clipboard?.writeText('03495144486');
@@ -72,6 +74,7 @@ export default function CheckoutPage() {
   }
 
   const [errors, setErrors] = useState({});
+  const [emailWarning, setEmailWarning] = useState('');
 
 
   const [submitting, setSubmitting] = useState(false);
@@ -92,15 +95,33 @@ export default function CheckoutPage() {
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setErrors((er) => ({ ...er, [k]: '' }));
+    if (k === 'guestEmail') setEmailWarning('');
   };
 
   const validate = () => {
     const e = {};
+    setEmailWarning(''); // clear any previous warning
+
     if (!form.guestName.trim())    e.guestName = 'Name is required';
-    if (!form.guestPhone.trim())   e.guestPhone = 'Phone is required';
-    else if (!normalizePkPhone(form.guestPhone)) {
-      e.guestPhone = 'Enter a valid mobile number, e.g. 0300 1234567';
+
+    // Phone — required, country-code aware
+    if (!form.guestPhone.trim()) {
+      e.guestPhone = 'Phone number is required';
+    } else {
+      const { valid, error } = validatePhoneNumber(form.guestPhone, dialCode);
+      if (!valid) e.guestPhone = error;
     }
+
+    // Email — optional but validated when provided
+    if (form.guestEmail.trim()) {
+      const { valid, error, warning } = validateEmail(form.guestEmail);
+      if (!valid) {
+        e.guestEmail = error;
+      } else if (warning) {
+        setEmailWarning(warning);
+      }
+    }
+
     if (!form.street.trim())       e.street = 'Street address is required';
     if (!form.city.trim())         e.city = 'City is required';
     if (!form.province)            e.province = 'Province is required';
@@ -115,10 +136,14 @@ export default function CheckoutPage() {
     setSubmitting(true);
     setApiError('');
 
+    // Normalize the phone to E.164 format before sending to server
+    const { normalized: normalizedPhone } = validatePhoneNumber(form.guestPhone, dialCode);
+    const phoneToSend = normalizedPhone || form.guestPhone.trim();
+
     const payload = {
       guestName:  form.guestName.trim(),
       guestEmail: form.guestEmail.trim() || undefined,
-      guestPhone: form.guestPhone.trim(),
+      guestPhone: phoneToSend,
       items: items.map((i) => ({
         product:      i.productId,
         variantLabel: i.variantLabel,
@@ -126,7 +151,7 @@ export default function CheckoutPage() {
       })),
       shippingAddress: {
         name:       form.guestName.trim(),
-        phone:      form.guestPhone.trim(),
+        phone:      phoneToSend,
         street:     form.street.trim(),
         city:       form.city.trim(),
         province:   form.province,
@@ -148,7 +173,7 @@ export default function CheckoutPage() {
           JSON.stringify({
             orderId: data.orderId || data._id,
             mongoId: data._id,
-            phone: data.shippingAddress?.phone || data.guestPhone || form.guestPhone.trim(),
+            phone: data.shippingAddress?.phone || data.guestPhone || phoneToSend,
             placedAt: new Date().toISOString(),
           })
         );
@@ -214,17 +239,50 @@ export default function CheckoutPage() {
                   />
                 </Field>
 
-                <Field id="field-phone" label="Phone Number" required error={errors.guestPhone} hint="Used for courier delivery updates">
-                  <input
-                    id="field-phone"
-                    type="tel"
-                    value={form.guestPhone}
-                    onChange={set('guestPhone')}
-                    placeholder="03XX XXXXXXX"
-                    className={inputClass}
-                    autoComplete="tel"
-                    inputMode="tel"
-                  />
+                <Field
+                  id="field-phone"
+                  label="Phone Number"
+                  required
+                  error={errors.guestPhone}
+                  hint={
+                    dialCode === '+92'
+                      ? 'Pakistani format: 03XX-XXXXXXX · Used for courier delivery updates'
+                      : `Enter subscriber digits without the country code · Courier updates sent here`
+                  }
+                >
+                  <div className="flex gap-2">
+                    {/* Country code selector */}
+                    <select
+                      value={dialCode}
+                      onChange={(e) => {
+                        setDialCode(e.target.value);
+                        setErrors((er) => ({ ...er, guestPhone: '' }));
+                      }}
+                      className="shrink-0 border border-cream-300 rounded-xl px-2 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800"
+                      aria-label="Country code"
+                    >
+                      {COUNTRY_CODES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.flag} {c.code}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Phone number input */}
+                    <input
+                      id="field-phone"
+                      type="tel"
+                      value={form.guestPhone}
+                      onChange={set('guestPhone')}
+                      placeholder={
+                        dialCode === '+92'
+                          ? '03XX XXXXXXX'
+                          : COUNTRY_CODES.find((c) => c.code === dialCode)?.example ?? 'XXXXXXXXX'
+                      }
+                      className={`${inputClass} flex-1`}
+                      autoComplete="tel"
+                      inputMode="tel"
+                    />
+                  </div>
                 </Field>
 
                 <Field id="field-email" label="Email Address (Recommended for confirmation & invoices)" error={errors.guestEmail} hint="We'll send order invoice & delivery notifications here">
@@ -233,10 +291,21 @@ export default function CheckoutPage() {
                     type="email"
                     value={form.guestEmail}
                     onChange={set('guestEmail')}
-                    placeholder="you@example.com"
+                    onBlur={() => {
+                      if (!form.guestEmail.trim()) return;
+                      const { valid, error, warning } = validateEmail(form.guestEmail);
+                      if (!valid) setErrors((er) => ({ ...er, guestEmail: error }));
+                      else setEmailWarning(warning || '');
+                    }}
+                    placeholder="you@gmail.com"
                     className={inputClass}
                     autoComplete="email"
                   />
+                  {emailWarning && !errors.guestEmail && (
+                    <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
+                      <span>⚠️</span> {emailWarning}
+                    </p>
+                  )}
                 </Field>
               </div>
             </section>

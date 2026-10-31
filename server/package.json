@@ -27,6 +27,7 @@
     "mongoose": "^9.10.4",
     "multer": "^2.4.0",
     "nodemailer": "^10.2.1",
+    "resend": "^6.37.0",
     "zod": "^4.6.5"
   },
   "overrides": {

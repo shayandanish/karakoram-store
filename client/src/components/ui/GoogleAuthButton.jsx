@@ -52,19 +52,25 @@ export default function GoogleAuthButton({
     setBusy(true);
 
     try {
-      // Redirect flow: the browser leaves this page. When Google sends the
-      // user back, AuthContext completes the sign-in and the page navigates.
-      await loginWithGoogle();
+      // Popup flow: resolves once Google has been confirmed and the backend
+      // cookie is set. Redirect flow: the browser leaves this page and the
+      // bootstrap effect finishes the sign-in when Google sends the user back.
+      const result = await loginWithGoogle();
 
-      // Safety net — normally the page unloads immediately. If something
-      // (e.g. an extension) blocks the redirect, unwind the loading state.
-      setTimeout(() => {
-        if (startedRef.current) {
-          startedRef.current = false;
-          onError?.('Google sign-in did not open. Please check your connection and try again.');
-          setBusy(false);
-        }
-      }, 10000);
+      if (result?.mode === 'redirect') {
+        // Safety net — normally the page unloads immediately. If something
+        // (e.g. an extension) blocks the redirect, unwind the loading state.
+        setTimeout(() => {
+          if (startedRef.current) {
+            startedRef.current = false;
+            onError?.('Google sign-in did not open. Please check your connection and try again.');
+            setBusy(false);
+          }
+        }, 10000);
+      } else {
+        startedRef.current = false;
+        setBusy(false);
+      }
     } catch (err) {
       startedRef.current = false;
       onError?.(

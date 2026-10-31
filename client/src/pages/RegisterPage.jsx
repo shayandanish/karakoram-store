@@ -9,6 +9,7 @@ import SEO from '../components/ui/SEO';
 import GoogleAuthButton from '../components/ui/GoogleAuthButton';
 import SiteLogoMark from '../components/ui/SiteLogoMark';
 import { useSiteSettings } from '../hooks/useSiteSettings';
+import { validatePhoneNumber, validateEmail } from '../lib/phoneUtils';
 
 const RESEND_SECONDS = 60;
 const PENDING_KEY = 'karakoram_pending_verification';
@@ -86,13 +87,22 @@ export default function RegisterPage() {
       setError('Please enter your full name (at least 2 characters).');
       return false;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      setError('Please enter a valid email address.');
+    const { valid: emailOk, error: emailErr } = validateEmail(form.email.trim(), { strict: true });
+    if (!emailOk) {
+      setError(emailErr);
       return false;
     }
     if (form.password.length < 8) {
       setError('Password must be at least 8 characters long.');
       return false;
+    }
+    // Soft validate optional phone: only check if something was entered
+    if (form.phone.trim()) {
+      const { valid, error: phoneErr } = validatePhoneNumber(form.phone.trim(), '+92');
+      if (!valid) {
+        setError("Phone: " + phoneErr);
+        return false;
+      }
     }
     return true;
   };
@@ -365,6 +375,7 @@ export default function RegisterPage() {
                 autoComplete="tel"
                 className={fieldClass}
               />
+              <p className="text-[11px] text-mountain-400 mt-0.5">Pakistani format: 03XX XXXXXXX · Used for order updates</p>
             </div>
 
             <div>

@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   GoogleAuthProvider,
@@ -42,6 +43,32 @@ const clearAuthToken = () => {
   } catch {
     // localStorage is unavailable
   }
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * POST with a couple of retries for transient failures (dev-server restarts,
+ * flaky networks). Client errors such as 401/403 are never retried.
+ */
+const postWithRetry = async (url, data, attempts = 3) => {
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await api.post(url, data);
+    } catch (err) {
+      lastError = err;
+      const status = err?.response?.status;
+      const isNetworkError = !err?.response;
+      const isServerError = status >= 500;
+
+      if (!isNetworkError && !isServerError) throw err;
+      if (attempt < attempts) await sleep(600 * attempt);
+    }
+  }
+
+  throw lastError;
 };
 
 const requireFirebaseAuth = () => {
@@ -91,7 +118,7 @@ export function AuthProvider({ children }) {
     }
 
     const idToken = await firebaseUser.getIdToken(true);
-    const res = await api.post('/auth/firebase-login', { idToken });
+    const res = await postWithRetry('/auth/firebase-login', { idToken });
     saveAuthToken(res.data?.token || idToken);
 
     setUser(res.data);
@@ -173,6 +200,20 @@ export function AuthProvider({ children }) {
       // Non-fatal — the name is also sent to the backend on completion
     }
 
+    // Record the sign-up right away (status "unverified") so the admin panel
+    // sees new customers immediately. Failure here is non-fatal: the account
+    // is created/confirmed by completeRegistration once the email is verified.
+    try {
+      const idToken = await credential.user.getIdToken();
+      await postWithRetry('/auth/firebase-register', {
+        idToken,
+        name: trimmedName,
+        phone: phone?.trim() || undefined,
+      }, 2);
+    } catch {
+      // Retried automatically when the user clicks "I have verified"
+    }
+
     let verificationSent = true;
     let verificationError = '';
 
@@ -234,7 +275,7 @@ export function AuthProvider({ children }) {
     }
 
     const idToken = await firebaseUser.getIdToken(true);
-    const res = await api.post('/auth/firebase-register', {
+    const res = await postWithRetry('/auth/firebase-register', {
       idToken,
       name: (name || firebaseUser.displayName || '').trim(),
       phone: phone?.trim() || undefined,
@@ -259,7 +300,7 @@ export function AuthProvider({ children }) {
     }
 
     const idToken = await credential.user.getIdToken(true);
-    const res = await api.post('/auth/firebase-login', { idToken });
+    const res = await postWithRetry('/auth/firebase-login', { idToken });
     saveAuthToken(res.data?.token || idToken);
 
     setUser(res.data);
@@ -268,17 +309,37 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Google sign-in / sign-up. Redirects the whole page instead of opening
-   * a popup, so browsers with popup blockers cannot leave the button stuck
-   * on "Connecting to Google...". The redirect result is completed by the
-   * bootstrap effect above when the user returns.
+   * Google sign-in / sign-up.
+   *
+   * A popup is tried first because the full-page redirect silently loses the
+   * result when the browser blocks storage between localhost and the
+   * firebaseapp.com auth domain (third-party storage partitioning), which left
+   * new Google customers with a Firebase session but no MongoDB account.
+   * If the popup cannot open at all, fall back to the redirect flow that the
+   * bootstrap effect above completes.
    */
   const loginWithGoogle = async () => {
     const auth = requireFirebaseAuth();
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
-    await signInWithRedirect(auth, provider);
+    try {
+      const credential = await signInWithPopup(auth, provider);
+      await completeFirebaseSignIn(credential.user);
+      return { mode: 'popup' };
+    } catch (err) {
+      const canRedirect = [
+        'auth/popup-blocked',
+        'auth/operation-not-supported-in-this-environment',
+        'auth/web-storage-unsupported',
+        'auth/cancelled-popup-request',
+      ].includes(err?.code);
+
+      if (!canRedirect) throw err;
+
+      await signInWithRedirect(auth, provider);
+      return { mode: 'redirect' };
+    }
   };
 
   /** Send a Firebase password-reset email. */
