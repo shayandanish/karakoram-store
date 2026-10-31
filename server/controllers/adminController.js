@@ -446,16 +446,16 @@ export const adminUpdateOrder = async (req, res, next) => {
 
     await order.save();
 
-    // Customer Notification Trigger
+    // Customer Notification Trigger (awaited so serverless / Vercel sends before terminating)
     if (data.notifyCustomer) {
-      if (statusChanged) {
-        dispatchOrderNotifications(order, order.orderStatus).catch((err) => {
-          console.error(`[Admin notification error on ${order.orderStatus}]:`, err);
-        });
-      } else if (shipmentChanged && order.orderStatus === 'shipped') {
-        dispatchOrderNotifications(order, 'shipment_updated').catch((err) => {
-          console.error('[Admin notification error on shipment_updated]:', err);
-        });
+      try {
+        if (statusChanged) {
+          await dispatchOrderNotifications(order, order.orderStatus);
+        } else if (shipmentChanged && order.orderStatus === 'shipped') {
+          await dispatchOrderNotifications(order, 'shipment_updated');
+        }
+      } catch (err) {
+        console.error(`[Admin notification error on ${order.orderStatus}]:`, err);
       }
     }
 

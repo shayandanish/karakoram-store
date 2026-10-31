@@ -186,10 +186,12 @@ export const createOrder = async (req, res, next) => {
       throw new Error('Could not complete order. Please try again.');
     }
 
-    // Trigger asynchronous notifications (Email + WhatsApp) without blocking response
-    dispatchOrderNotifications(createdOrder, 'order_placed').catch((notifyErr) => {
-      console.error('[Notification dispatch error on order_placed]', notifyErr);
-    });
+    // Dispatch order confirmation email (awaited to ensure delivery in serverless/Vercel environments)
+    try {
+      await dispatchOrderNotifications(createdOrder, 'order_placed');
+    } catch (notifyErr) {
+      console.error('[Notification dispatch error on order_placed]:', notifyErr);
+    }
 
     res.status(201).json(createdOrder);
   } catch (err) {

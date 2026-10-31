@@ -9,34 +9,44 @@ let cachedTransporter = null;
  * Falls back to an Ethereal test account or JSON stream transport in development.
  */
 export const getTransporter = async () => {
-  if (cachedTransporter) return cachedTransporter;
-
   const host = process.env.SMTP_HOST || process.env.EMAIL_HOST;
-  const port = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 587;
+  const port = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT) || 465;
   const user = (process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
   const pass = (process.env.SMTP_PASS || process.env.EMAIL_PASS || '').replace(/\s+/g, '');
   const service = process.env.EMAIL_SERVICE;
 
   // Real SMTP / Service configuration
-  if (service || (host && user && pass)) {
-    const isGmail = host?.includes('gmail') || service?.toLowerCase() === 'gmail';
-    cachedTransporter = nodemailer.createTransport(
+  if ((user && pass) || service || (host && user && pass)) {
+    const isGmail = service?.toLowerCase() === 'gmail' || host?.includes('gmail') || user.includes('@gmail.com');
+    return nodemailer.createTransport(
       isGmail
         ? {
             service: 'gmail',
             auth: { user, pass },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
           }
         : {
-            host,
+            host: host || 'smtp.gmail.com',
             port,
             secure: port === 465 || process.env.SMTP_SECURE === 'true',
             auth: { user, pass },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
           }
     );
-    return cachedTransporter;
+  }
+
+  if (process.env.VERCEL) {
+    console.error(
+      '[Nodemailer] CRITICAL: SMTP credentials (SMTP_USER & SMTP_PASS) are missing in Vercel environment variables! Emails cannot be sent without them.'
+    );
   }
 
   // Development / Test fallback: create Ethereal test account so local testing works out of the box
+  if (cachedTransporter) return cachedTransporter;
   try {
     const testAccount = await nodemailer.createTestAccount();
     console.log(`[Nodemailer] Using Ethereal test account: ${testAccount.user}`);
