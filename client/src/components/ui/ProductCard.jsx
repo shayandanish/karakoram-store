@@ -1,7 +1,7 @@
 // ── Product Card ──────────────────────────────────────────────
 import { Link } from 'react-router-dom';
 import { fmtPKR, cloudinaryImage, cloudinarySrcSet, isCloudinaryUrl } from '../../lib/utils';
-import { getBestVariantDiscount } from '../../lib/discountUtils';
+import { getVariantDiscount, getBestVariantDiscount } from '../../lib/discountUtils';
 import ProductImage from './ProductImage';
 
 export default function ProductCard({ product }) {
