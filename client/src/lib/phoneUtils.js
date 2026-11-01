@@ -46,6 +46,10 @@ export const validatePhoneNumber = (rawPhone, dialCode = '+92') => {
     if (stripped.startsWith('03') && stripped.length === 11) {
       return { valid: true, normalized: `+92${stripped.slice(1)}`, error: null };
     }
+    // 00923XXXXXXXXX — international access prefix (00 + country code)
+    if (stripped.startsWith('0092') && stripped.length === 14) {
+      return { valid: true, normalized: `+92${stripped.slice(4)}`, error: null };
+    }
     // 923XXXXXXXXX — user already typed the full number with country code digits
     if (stripped.startsWith('923') && stripped.length === 12) {
       return { valid: true, normalized: `+${stripped}`, error: null };

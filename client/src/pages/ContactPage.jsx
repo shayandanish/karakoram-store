@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getCleanWhatsAppNumber } from '../lib/utils';
+import { validatePhoneNumber, COUNTRY_CODES } from '../lib/phoneUtils';
 import SEO from '../components/ui/SEO';
 
 
@@ -14,10 +15,29 @@ export default function ContactPage() {
     message: '',
   });
   const [sent, setSent] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  const [dialCode, setDialCode] = useState('+92');
+
+  const selectedCountry = COUNTRY_CODES.find((c) => c.code === dialCode) ?? COUNTRY_CODES[0];
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.message.trim()) return;
+    setPhoneError('');
+
+    if (!form.name.trim()) return;
+
+    // Phone — validate according to selected country code
+    if (!form.phone.trim()) {
+      setPhoneError('Phone number is required');
+      return;
+    }
+    const { valid, error } = validatePhoneNumber(form.phone.trim(), dialCode);
+    if (!valid) {
+      setPhoneError(error);
+      return;
+    }
+
+    if (!form.message.trim()) return;
 
     if (wa) {
       const msg =
@@ -165,14 +185,42 @@ export default function ContactPage() {
                 <label htmlFor="contact-phone" className="block text-xs font-semibold uppercase tracking-wider text-mountain-700 mb-1">
                   Phone / WhatsApp Number
                 </label>
-                <input
-                  id="contact-phone"
-                  type="tel"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="+92 3XX XXXXXXX"
-                  className="w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 placeholder-mountain-300"
-                />
+                <div className="flex gap-2">
+                  {/* Country code selector */}
+                  <select
+                    id="contact-dial-code"
+                    value={dialCode}
+                    onChange={(e) => {
+                      setDialCode(e.target.value);
+                      setPhoneError('');
+                    }}
+                    className="shrink-0 border border-cream-300 rounded-xl px-2 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800"
+                    aria-label="Country code"
+                  >
+                    {COUNTRY_CODES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.flag} {c.code} {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Phone number input */}
+                  <input
+                    id="contact-phone"
+                    type="tel"
+                    value={form.phone}
+                    onChange={(e) => {
+                      setForm({ ...form, phone: e.target.value });
+                      setPhoneError('');
+                    }}
+                    placeholder={selectedCountry.example}
+                    className="w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 placeholder-mountain-300"
+                    autoComplete="tel"
+                    inputMode="tel"
+                  />
+                </div>
+                {phoneError && (
+                  <p className="text-xs text-red-500 mt-0.5">{phoneError}</p>
+                )}
               </div>
             </div>
 
