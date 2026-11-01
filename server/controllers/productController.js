@@ -24,6 +24,7 @@ export const getProducts = async (req, res, next) => {
       minPrice,
       maxPrice,
       inStock,
+      sale,
       sort = '-createdAt',
       page = 1,
       limit = 12,
@@ -57,6 +58,36 @@ export const getProducts = async (req, res, next) => {
     // In-stock filter
     if (inStock === 'true') {
       filter['variants.stock'] = { $gt: 0 };
+    }
+
+    // Sale filter (at least one variant with an active discount)
+    if (sale === 'true') {
+      filter.$expr = {
+        $or: [
+          // Any variant has discountPercent > 0
+          { $gt: [{ $max: '$variants.discountPercent' }, 0] },
+          // Any variant has compareAtPrice > price
+          {
+            $gt: [
+              {
+                $max: {
+                  $map: {
+                    input: '$variants',
+                    as: 'v',
+                    in: {
+                      $subtract: [
+                        { $ifNull: ['$$v.compareAtPrice', 0] },
+                        { $ifNull: ['$$v.price', 0] },
+                      ],
+                    },
+                  },
+                },
+              },
+              0,
+            ],
+          },
+        ],
+      };
     }
 
     const skip = (Number(page) - 1) * Number(limit);

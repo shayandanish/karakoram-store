@@ -145,6 +145,18 @@ function FilterPanel({ categories, filters, onFilter, onReset }) {
         />
         <span className="text-sm text-mountain-700">In Stock Only</span>
       </label>
+
+      {/* On sale */}
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          id="filter-on-sale"
+          type="checkbox"
+          checked={filters.sale}
+          onChange={(e) => onFilter('sale', e.target.checked)}
+          className="accent-apricot-500 w-4 h-4"
+        />
+        <span className="text-sm text-mountain-700">On Sale</span>
+      </label>
     </aside>
   );
 }
@@ -212,6 +224,7 @@ export default function ShopPage() {
     minPrice: searchParams.get('minPrice') || '',
     maxPrice: searchParams.get('maxPrice') || '',
     inStock: searchParams.get('inStock') === 'true',
+    sale: searchParams.get('sale') === 'true',
     sort: searchParams.get('sort') || '-createdAt',
     page: Number(searchParams.get('page') || 1),
   };
@@ -283,6 +296,7 @@ export default function ShopPage() {
   if (filters.minPrice) queryParams.set('minPrice', filters.minPrice);
   if (filters.maxPrice) queryParams.set('maxPrice', filters.maxPrice);
   if (filters.inStock) queryParams.set('inStock', 'true');
+  if (filters.sale) queryParams.set('sale', 'true');
   queryParams.set('sort', filters.sort);
   queryParams.set('page', String(filters.page));
   queryParams.set('limit', '12');
@@ -384,6 +398,20 @@ export default function ShopPage() {
             className="text-mountain-500 hover:text-apricot-600 underline underline-offset-2 transition-colors"
           >
             Clear region
+          </button>
+        </div>
+      )}
+
+      {filters.sale && (
+        <div className="mb-5 flex flex-wrap items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 font-medium text-red-700">
+            🏷️ On Sale
+          </span>
+          <button
+            onClick={() => setFilter('sale', false)}
+            className="text-mountain-500 hover:text-red-600 underline underline-offset-2 transition-colors"
+          >
+            Clear sale
           </button>
         </div>
       )}
