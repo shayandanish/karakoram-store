@@ -1,6 +1,8 @@
 import { sendOrderNotificationEmail } from './mailer.js';
 import { sendWhatsAppNotification } from './whatsapp.js';
 import Order from '../models/Order.js';
+import User from '../models/User.js';
+import SiteSettings from '../models/SiteSettings.js';
 
 /**
  * Checks if a notification of the given type and event was already sent recently (within cooldownMs).

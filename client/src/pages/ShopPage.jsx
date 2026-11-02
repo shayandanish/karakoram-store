@@ -324,6 +324,7 @@ export default function ShopPage() {
         description={activeRegion
           ? `Shop authentic products from ${activeRegion.name}, Gilgit-Baltistan — dry fruits, organic oils, herbs, and handmade crafts. Fast shipping across Pakistan.`
           : 'Explore our handpicked collection of Hunza dried fruits, organic walnuts, Chitrali wool caps, and handmade gifts. Fast shipping across Pakistan.'}
+        canonicalUrl="/shop"
       />
 
       {/* Header */}

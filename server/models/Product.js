@@ -41,5 +41,11 @@ const productSchema = new mongoose.Schema(
 // Indexes for performance and text search (slug is already indexed via unique:true)
 productSchema.index({ category: 1 });
 productSchema.index({ name: 'text', description: 'text' });
+productSchema.index({ isActive: 1 });
+productSchema.index({ createdAt: -1 });
+productSchema.index({ ratingAverage: -1 });
+productSchema.index({ origin: 1 });
+productSchema.index({ isFeatured: 1 });
+productSchema.index({ isSeasonal: 1 });
 
 export default mongoose.model('Product', productSchema);

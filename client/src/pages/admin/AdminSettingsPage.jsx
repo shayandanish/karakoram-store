@@ -11,15 +11,28 @@ import {
   useSiteSettings,
 } from '../../hooks/useSiteSettings';
 
-const DEFAULT_ALT = 'Karakoram Store';
+const createStoreForm = (settings) => ({
+  storeName: settings.storeName,
+  storeTagline: settings.storeTagline,
+  storeDescription: settings.storeDescription,
+  shippingFee: String(settings.shippingFee),
+  paymentMethods: settings.paymentMethods.map((method) => ({ ...method })),
+  whatsappNumber: settings.whatsappNumber,
+  contactPhone: settings.contactPhone,
+  contactEmail: settings.contactEmail,
+});
 
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { logo, isLoading } = useSiteSettings();
+  const { logo, settings, isLoading, isError, error, refetch } = useSiteSettings();
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [storeForm, setStoreForm] = useState(null);
+  const formValues = storeForm || createStoreForm(settings);
+  const hasUnsavedSettings = Boolean(storeForm);
 
   const publishLogo = async (nextLogo) => {
     const { data } = await api.put('/admin/settings', { logo: nextLogo });
@@ -46,7 +59,7 @@ export default function AdminSettingsPage() {
       await publishLogo({
         url: data.url,
         publicId: data.publicId,
-        alt: logo.alt || DEFAULT_ALT,
+        alt: logo.alt || settings.storeName,
       });
 
       toast.success('Logo updated successfully.');
@@ -67,7 +80,7 @@ export default function AdminSettingsPage() {
     setRemoving(true);
     try {
       const { data } = await api.put('/admin/settings', {
-        logo: { url: '', publicId: '', alt: DEFAULT_ALT },
+        logo: { url: '', publicId: '', alt: settings.storeName },
       });
       queryClient.setQueryData(SITE_SETTINGS_QUERY_KEY, data);
       toast.success('Logo removed. The default K mark is active again.');
@@ -78,18 +91,98 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const handleSettingsSubmit = async (event) => {
+    event.preventDefault();
+    if (!formValues.storeName.trim()) {
+      toast.error('Store name is required.');
+      return;
+    }
+    const shippingFee = Number(formValues.shippingFee);
+    if (
+      formValues.shippingFee.trim() === '' ||
+      !Number.isFinite(shippingFee) ||
+      shippingFee < 0 ||
+      shippingFee > 100000
+    ) {
+      toast.error('Shipping fee must be between Rs. 0 and Rs. 100,000.');
+      return;
+    }
+
+    setSavingSettings(true);
+    try {
+      const { data } = await api.put('/admin/settings', {
+        ...formValues,
+        shippingFee,
+      });
+      queryClient.setQueryData(SITE_SETTINGS_QUERY_KEY, data);
+      setStoreForm(null);
+      toast.success('Store settings updated.');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not save store settings.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const updateStoreField = (field) => (event) => {
+    setStoreForm((current) => ({
+      ...(current || createStoreForm(settings)),
+      [field]: event.target.value,
+    }));
+  };
+
+  const updatePaymentMethod = (id, field) => (event) => {
+    const value = field === 'enabled' ? event.target.checked : event.target.value;
+    setStoreForm((current) => {
+      const next = current || createStoreForm(settings);
+      return {
+        ...next,
+        paymentMethods: next.paymentMethods.map((method) =>
+          method.id === id ? { ...method, [field]: value } : method
+        ),
+      };
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <SEO title="Logo & Branding — Admin" />
+      <SEO title="Store Settings — Admin" />
 
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold font-display text-mountain-900 tracking-tight">
-          Logo &amp; Branding
+          Store Settings
         </h1>
         <p className="text-sm text-stone-500 mt-1">
-          Upload a logo to replace the default K mark across the storefront and admin panel.
+          Manage public store details, delivery pricing, payment instructions, and branding.
         </p>
+        <nav aria-label="Settings sections" className="mt-4 flex flex-wrap gap-2">
+          <a href="#store-details" className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-apricot-300">
+            Store details
+          </a>
+          <a href="#checkout-payments" className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-apricot-300">
+            Checkout payments
+          </a>
+          {hasUnsavedSettings && (
+            <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800" role="status">
+              Unsaved changes
+            </span>
+          )}
+          {!hasUnsavedSettings && !isLoading && !isError && (
+            <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700" role="status">
+              Settings up to date
+            </span>
+          )}
+        </nav>
       </div>
+
+      {isError && (
+        <div className="flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+          <span>Could not load store settings: {error?.response?.data?.message || error?.message}</span>
+          <button type="button" onClick={() => refetch()} className="shrink-0 text-xs font-semibold underline">
+            Try again
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_1fr] gap-6">
         {/* Main upload card */}
@@ -127,7 +220,9 @@ export default function AdminSettingsPage() {
                   quality: 'auto:good',
                   format: 'auto',
                 })}
-                alt={logo.alt || 'Karakoram Store logo'}
+                alt={logo.alt || settings.storeName}
+                width={384}
+                height={192}
                 loading="lazy"
                 decoding="async"
                 className="max-h-44 max-w-full object-contain drop-shadow-sm"
@@ -156,7 +251,7 @@ export default function AdminSettingsPage() {
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              disabled={uploading || removing}
+              disabled={isLoading || isError || uploading || removing}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-apricot-500 hover:bg-apricot-400 text-white text-sm font-semibold rounded-2xl shadow-sm transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {uploading ? (
@@ -178,7 +273,7 @@ export default function AdminSettingsPage() {
               <button
                 type="button"
                 onClick={handleRemove}
-                disabled={uploading || removing}
+                disabled={isLoading || isError || uploading || removing}
                 className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white hover:bg-rose-50 text-rose-600 text-sm font-semibold rounded-2xl border border-rose-200 transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {removing ? (
@@ -219,10 +314,10 @@ export default function AdminSettingsPage() {
               />
               <div className="min-w-0">
                 <div className="font-display font-bold text-lg text-cream-50 leading-tight">
-                  Karakoram Store
+                  {formValues.storeName}
                 </div>
                 <div className="text-[10px] text-mountain-400 font-medium tracking-widest uppercase">
-                  Authentic · Gilgit-Baltistan
+                  {formValues.storeTagline}
                 </div>
               </div>
             </div>
@@ -233,9 +328,9 @@ export default function AdminSettingsPage() {
                 maxWidthClass="max-w-[12rem]"
               />
               <div className="min-w-0">
-                <div className="font-display font-bold text-mountain-900 text-sm">Karakoram</div>
+                <div className="font-display font-bold text-mountain-900 text-sm">{formValues.storeName}</div>
                 <div className="text-apricot-600 text-[10px] font-semibold tracking-widest uppercase">
-                  Store
+                {formValues.storeTagline}
                 </div>
               </div>
             </div>
@@ -256,6 +351,142 @@ export default function AdminSettingsPage() {
           </section>
         </aside>
       </div>
+
+      <form
+        onSubmit={handleSettingsSubmit}
+        id="store-details"
+        className="bg-white rounded-3xl border border-stone-200 shadow-xs p-6 sm:p-8"
+      >
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-display font-bold text-xl text-mountain-900">Store details</h2>
+            <p className="text-sm text-stone-500 mt-1">
+              These values appear in checkout, order confirmations, and public contact details.
+            </p>
+          </div>
+          <button
+            type="submit"
+            disabled={savingSettings || isLoading || isError}
+            className="mt-4 sm:mt-0 inline-flex justify-center rounded-xl bg-apricot-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-apricot-600 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {savingSettings ? 'Saving…' : 'Save Store Settings'}
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-5 sm:grid-cols-2">
+          {[
+            { name: 'storeName', label: 'Store name', maxLength: 120 },
+            { name: 'storeTagline', label: 'Brand tagline', maxLength: 160 },
+            { name: 'shippingFee', label: 'Flat shipping fee (PKR)', type: 'number', min: '0', max: '100000', step: '1' },
+            { name: 'whatsappNumber', label: 'WhatsApp number', inputMode: 'tel' },
+            { name: 'contactPhone', label: 'Public contact phone', inputMode: 'tel' },
+            { name: 'contactEmail', label: 'Public contact email', type: 'email' },
+          ].map(({ name, label, ...inputProps }) => (
+            <label key={name} className="block text-sm font-medium text-stone-700">
+              {label}
+              <input
+                {...inputProps}
+                value={formValues[name]}
+                onChange={updateStoreField(name)}
+                disabled={isLoading || isError || savingSettings}
+                className="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-900 outline-none transition focus:border-apricot-400 focus:bg-white focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+              />
+            </label>
+          ))}
+          <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
+            Store description
+            <textarea
+              value={formValues.storeDescription}
+              onChange={updateStoreField('storeDescription')}
+              maxLength={500}
+              rows={3}
+              disabled={isLoading || isError || savingSettings}
+              className="mt-1.5 w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-900 outline-none transition focus:border-apricot-400 focus:bg-white focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+            />
+          </label>
+        </div>
+
+        <div className="mt-8 border-t border-stone-100 pt-6">
+          <h3 id="checkout-payments" className="font-display font-bold text-lg text-mountain-900">Checkout payment methods</h3>
+          <p className="mt-1 text-sm text-stone-500">
+            Enable the methods customers may choose at checkout. Manual methods must include an account number or payment instructions.
+          </p>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {formValues.paymentMethods.map((method) => (
+              <section key={method.id} className="rounded-2xl border border-stone-200 p-4 sm:p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <label className="flex min-w-0 items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={method.enabled}
+                      onChange={updatePaymentMethod(method.id, 'enabled')}
+                      disabled={isLoading || isError || savingSettings}
+                      className="h-4 w-4 rounded border-stone-300 text-apricot-600 focus:ring-apricot-400"
+                    />
+                    <span className="font-semibold text-stone-900">{method.name}</span>
+                  </label>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
+                    method.enabled
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-stone-100 text-stone-500'
+                  }`}>
+                    {method.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+
+                <label className="mt-4 block text-xs font-medium text-stone-600">
+                  Customer-facing name
+                  <input
+                    value={method.name}
+                    onChange={updatePaymentMethod(method.id, 'name')}
+                    maxLength={60}
+                    disabled={isLoading || isError || savingSettings}
+                    className="mt-1.5 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-apricot-400 focus:outline-none focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+                  />
+                </label>
+
+                {method.id !== 'cod' && (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block text-xs font-medium text-stone-600">
+                      Account name
+                      <input
+                        value={method.accountName}
+                        onChange={updatePaymentMethod(method.id, 'accountName')}
+                        maxLength={120}
+                        disabled={isLoading || isError || savingSettings}
+                        className="mt-1.5 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-apricot-400 focus:outline-none focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+                      />
+                    </label>
+                    <label className="block text-xs font-medium text-stone-600">
+                      Account number / IBAN
+                      <input
+                        value={method.accountNumber}
+                        onChange={updatePaymentMethod(method.id, 'accountNumber')}
+                        maxLength={120}
+                        disabled={isLoading || isError || savingSettings}
+                        className="mt-1.5 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-apricot-400 focus:outline-none focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <label className="mt-3 block text-xs font-medium text-stone-600">
+                  {method.id === 'cod' ? 'Delivery instructions' : 'Payment instructions'}
+                  <textarea
+                    value={method.instructions}
+                    onChange={updatePaymentMethod(method.id, 'instructions')}
+                    maxLength={2000}
+                    rows={3}
+                    disabled={isLoading || isError || savingSettings}
+                    className="mt-1.5 w-full resize-y rounded-lg border border-stone-200 px-3 py-2 text-sm text-stone-900 focus:border-apricot-400 focus:outline-none focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+                  />
+                </label>
+              </section>
+            ))}
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

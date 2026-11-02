@@ -780,7 +780,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
                   className="p-3 bg-white border border-stone-200 rounded-xl shadow-2xs space-y-2 relative group"
                 >
                   <div className="w-full h-36 bg-stone-100 rounded-lg overflow-hidden border border-stone-100 relative">
-                    <img src={img.url} alt={img.alt || name} className="w-full h-full object-cover" />
+                    <img src={img.url} alt={img.alt || name} width={200} height={144} className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => removeImage(i)}

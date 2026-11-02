@@ -163,6 +163,8 @@ export default function RegionsCarousel() {
                       })}
                       sizes="(min-width: 1280px) 1280px, 100vw"
                       alt={r.name}
+                      width={1280}
+                      height={853}
                       className="absolute inset-0 w-full h-full object-cover"
                       loading="lazy"
                       fetchPriority={isActive ? 'auto' : 'low'}
@@ -301,6 +303,8 @@ export default function RegionsCarousel() {
                         format: 'auto',
                       })}
                       alt={r.name}
+                      width={160}
+                      height={112}
                       className="w-full h-full object-cover"
                       loading="lazy"
                       fetchPriority="low"

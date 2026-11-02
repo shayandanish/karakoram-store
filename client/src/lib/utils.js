@@ -18,18 +18,18 @@ export const fmtDate = (date) =>
 // ── WhatsApp order link builder ───────────────────────────────
 const DEFAULT_WHATSAPP_NUMBER = '923495144486';
 
-export const getCleanWhatsAppNumber = () => {
-  const raw = import.meta.env.VITE_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER;
+export const getCleanWhatsAppNumber = (value) => {
+  const raw = value || import.meta.env.VITE_WHATSAPP_NUMBER || DEFAULT_WHATSAPP_NUMBER;
   return raw.replace(/\D/g, '');
 };
 
-export const buildWhatsAppLink = (items, total) => {
-  const number = getCleanWhatsAppNumber();
+export const buildWhatsAppLink = (items, total, whatsappNumber, storeName) => {
+  const number = getCleanWhatsAppNumber(whatsappNumber);
   const lines = items.map(
     (i) => `• ${i.productName} (${i.variantLabel}) × ${i.quantity} = ${fmtPKR(i.price * i.quantity)}`
   );
   const msg =
-    `*Order from Karakoram Store*\n\n` +
+    `*Order from ${storeName}*\n\n` +
     lines.join('\n') +
     `\n\n*Subtotal:* ${fmtPKR(total)}\n\nPlease confirm my order.`;
   return number
@@ -37,11 +37,17 @@ export const buildWhatsAppLink = (items, total) => {
     : `https://wa.me/?text=${encodeURIComponent(msg)}`;
 };
 
-export const buildProductWhatsAppLink = (product, variant, quantity = 1) => {
-  const number = getCleanWhatsAppNumber();
+export const buildProductWhatsAppLink = (
+  product,
+  variant,
+  quantity = 1,
+  whatsappNumber,
+  storeName
+) => {
+  const number = getCleanWhatsAppNumber(whatsappNumber);
   const total = (variant?.price || 0) * quantity;
   const msg =
-    `*Inquiry from Karakoram Store*\n\n` +
+    `*Inquiry from ${storeName}*\n\n` +
     `• Product: *${product?.name || ''}*\n` +
     `• Variant: ${variant?.label || ''}\n` +
     `• Quantity: ${quantity}\n` +
@@ -148,4 +154,3 @@ export const cloudinarySrcSet = (url, widths, options = {}) => {
     })
     .join(', ');
 };
-

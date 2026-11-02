@@ -3,11 +3,15 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import api from '../lib/axios';
 import { fmtPKR, fmtDate, getCleanWhatsAppNumber } from '../lib/utils';
+import { validatePhoneNumber } from '../lib/phoneUtils';
 import SEO from '../components/ui/SEO';
 import OrderTimeline, { STATUS_MAP } from '../components/ui/OrderTimeline';
 import CourierInfoBlock from '../components/ui/CourierInfoBlock';
+import { useSiteSettings } from '../hooks/useSiteSettings';
+import { getOrderPaymentDetails } from '../lib/paymentMethods';
 
 export default function TrackOrderPage() {
+  const { settings } = useSiteSettings();
   const [searchParams] = useSearchParams();
   const [orderId, setOrderId] = useState(searchParams.get('orderId') || '');
   const [phoneOrEmail, setPhoneOrEmail] = useState(searchParams.get('phone') || searchParams.get('email') || '');
@@ -27,7 +31,8 @@ export default function TrackOrderPage() {
   const [fullImageModal, setFullImageModal] = useState(false);
   const fileInputRef = useRef(null);
 
-  const wa = getCleanWhatsAppNumber();
+  const wa = getCleanWhatsAppNumber(settings.whatsappNumber);
+  const paymentDetails = getOrderPaymentDetails(order, settings);
 
   const handleCopyId = () => {
     if (!order) return;
@@ -159,6 +164,15 @@ export default function TrackOrderPage() {
       return;
     }
 
+    // If the contact looks like a phone number (no @), validate it
+    if (!phoneOrEmail.includes('@')) {
+      const { valid, error } = validatePhoneNumber(phoneOrEmail.trim(), '+92');
+      if (!valid) {
+        setError(error);
+        return;
+      }
+    }
+
     setLoading(true);
     setError('');
     setOrder(null);
@@ -191,7 +205,7 @@ export default function TrackOrderPage() {
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <SEO
         title="Track Your Order - Live Delivery Progress"
-        description="Track the status of your Karakoram Store order in real-time. View courier details, CN tracking, and delivery timelines."
+        description={`Track your ${settings.storeName} order in real-time. View courier details, CN tracking, and delivery timelines.`}
       />
 
       {/* Back to Shop Navigation Button */}
@@ -333,7 +347,8 @@ export default function TrackOrderPage() {
               </div>
             </div>
 
-            {/* ── Easypaisa Payment Verification & Screenshot Upload Section ── */}
+            {/* ── Manual Payment Verification & Screenshot Upload Section ── */}
+            {paymentDetails.requiresPrepayment && (
             <div className="bg-white rounded-3xl border-2 border-apricot-200/90 p-5 sm:p-7 shadow-xs space-y-4">
               {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-cream-200">
@@ -343,10 +358,10 @@ export default function TrackOrderPage() {
                   </span>
                   <div>
                     <h3 className="font-display font-bold text-mountain-900 text-sm sm:text-base">
-                      Easypaisa Payment Proof & Screenshot
+                      {paymentDetails.name} Payment Proof & Screenshot
                     </h3>
                     <p className="text-mountain-500 text-xs">
-                      Verify your transfer by uploading your transaction screenshot for quick admin confirmation.
+                      Upload your {paymentDetails.name} transaction screenshot for quick admin confirmation.
                     </p>
                   </div>
                 </div>
@@ -442,6 +457,8 @@ export default function TrackOrderPage() {
                         <img
                           src={order.paymentScreenshot}
                           alt="Payment Proof"
+                          width={200}
+                          height={128}
                           className="w-full h-32 object-cover object-top group-hover:scale-105 transition"
                         />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1">
@@ -475,20 +492,20 @@ export default function TrackOrderPage() {
               ) : (
                 /* Case 3: Need to Upload Screenshot (or replacing) */
                 <form onSubmit={handleUploadPaymentProof} className="space-y-4">
-                  {/* Easypaisa Transfer Details Box */}
+                  {/* Payment transfer details */}
                   <div className="p-4 rounded-2xl bg-cream-50/90 border border-cream-200 grid sm:grid-cols-3 gap-3 text-xs">
                     <div>
                       <span className="text-mountain-400 font-bold uppercase tracking-wider block text-[10px]">
                         Account Title
                       </span>
-                      <strong className="text-mountain-900 text-sm">Shayan Danish</strong>
+                      <strong className="text-mountain-900 text-sm">{paymentDetails.accountName || paymentDetails.name}</strong>
                     </div>
 
                     <div>
                       <span className="text-mountain-400 font-bold uppercase tracking-wider block text-[10px]">
-                        Easypaisa Account Number
+                        Account Number / IBAN
                       </span>
-                      <strong className="text-mountain-900 text-sm font-mono">03495144486</strong>
+                      <strong className="text-mountain-900 text-sm font-mono">{paymentDetails.accountNumber || paymentDetails.instructions}</strong>
                     </div>
 
                     <div>
@@ -526,6 +543,8 @@ export default function TrackOrderPage() {
                           <img
                             src={screenshotPreview}
                             alt="Screenshot preview"
+                            width={176}
+                            height={176}
                             className="max-h-44 rounded-xl border border-cream-300 shadow-xs object-contain"
                           />
                           <p className="text-xs font-bold text-emerald-800">
@@ -542,7 +561,7 @@ export default function TrackOrderPage() {
                             Click to select payment screenshot
                           </p>
                           <p className="text-[11px] text-mountain-500">
-                            Take a screenshot of your successful Easypaisa transfer screen and attach it here (max 5MB)
+                            Take a screenshot of your successful payment and attach it here (max 5MB)
                           </p>
                         </div>
                       )}
@@ -601,6 +620,7 @@ export default function TrackOrderPage() {
                 </form>
               )}
             </div>
+            )}
 
             {/* Courier Shipment Details Block (if assigned) */}
             {order.shipment && (order.shipment.courierName || order.shipment.trackingId) && (
@@ -662,7 +682,7 @@ export default function TrackOrderPage() {
                     💳 Payment Overview
                   </span>
                   <p className="font-bold text-mountain-900 capitalize">
-                    {order.paymentMethod === 'easypaisa' ? 'Easypaisa Mobile Transfer' : order.paymentMethod}
+                    {paymentDetails.name}
                   </p>
                   <p className="text-mountain-600 mt-1">
                     Status:{' '}
@@ -764,6 +784,8 @@ export default function TrackOrderPage() {
               <img
                 src={order.paymentScreenshot}
                 alt="Payment Proof Full"
+                width={800}
+                height={600}
                 className="max-h-[70vh] object-contain rounded-xl shadow-xs"
               />
             </div>

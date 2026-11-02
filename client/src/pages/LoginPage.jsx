@@ -12,6 +12,24 @@ import { useSiteSettings } from '../hooks/useSiteSettings';
 
 const RESEND_SECONDS = 60;
 
+const getLoginDestination = (authenticatedUser, redirectParam) => {
+  const defaultDestination =
+    authenticatedUser?.role === 'admin' ? '/admin' : '/my-orders';
+  const redirectPath =
+    typeof redirectParam === 'string' ? redirectParam : redirectParam?.pathname;
+
+  if (
+    !redirectPath?.startsWith('/') ||
+    redirectPath.startsWith('//') ||
+    (authenticatedUser?.role !== 'admin' &&
+      (redirectPath === '/admin' || redirectPath.startsWith('/admin/')))
+  ) {
+    return defaultDestination;
+  }
+
+  return redirectParam;
+};
+
 export default function LoginPage() {
   const {
     login,
@@ -24,7 +42,7 @@ export default function LoginPage() {
   } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { logo } = useSiteSettings();
+  const { logo, settings } = useSiteSettings();
   const hasCustomLogo = Boolean(logo?.url);
 
   const [email, setEmail] = useState('');
@@ -60,8 +78,7 @@ export default function LoginPage() {
   // sign-in and sets `user`; this effect takes over navigation.
   useEffect(() => {
     if (!user) return;
-    const destination = redirectParam || (user.role === 'admin' ? '/admin' : '/my-orders');
-    navigate(destination, { replace: true });
+    navigate(getLoginDestination(user, redirectParam), { replace: true });
   }, [user, navigate, redirectParam]);
 
   const displayError = error || googleRedirectError;
@@ -83,8 +100,7 @@ export default function LoginPage() {
 
     try {
       const loggedUser = await login(email.trim(), password);
-      const destination = redirectParam || (loggedUser?.role === 'admin' ? '/admin' : '/my-orders');
-      navigate(destination, { replace: true });
+      navigate(getLoginDestination(loggedUser, redirectParam), { replace: true });
     } catch (err) {
       // Seeded admins may not have a Firebase account yet. Fall back to the
       // backend's admin-only password login when Firebase rejects the login.
@@ -95,9 +111,7 @@ export default function LoginPage() {
       ) {
         try {
           const adminUser = await adminLogin(email.trim(), password);
-          const destination =
-            redirectParam || (adminUser?.role === 'admin' ? '/admin' : '/my-orders');
-          navigate(destination, { replace: true });
+          navigate(getLoginDestination(adminUser, redirectParam), { replace: true });
           return;
         } catch {
           // Fall through and show the original Firebase error
@@ -173,7 +187,7 @@ export default function LoginPage() {
     <div className="max-w-md mx-auto px-4 sm:px-6 py-16">
       <SEO
         title="Sign In"
-        description="Sign in to your Karakoram Store account to manage your orders, shipping details, and Himalayan treasures."
+        description={`Sign in to your ${settings.storeName} account to manage your orders and shipping details.`}
       />
 
       {/* Back to Store Navigation Button */}

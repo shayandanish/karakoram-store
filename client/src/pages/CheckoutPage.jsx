@@ -7,8 +7,7 @@ import { fmtPKR } from '../lib/utils';
 import { COUNTRY_CODES, validatePhoneNumber, validateEmail } from '../lib/phoneUtils';
 import api from '../lib/axios';
 import SEO from '../components/ui/SEO';
-
-const SHIPPING = 200;
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 const PROVINCES = [
   'Punjab', 'Sindh', 'Khyber Pakhtunkhwa', 'Balochistan',
@@ -31,11 +30,43 @@ function Field({ id, label, required, children, error, hint }) {
 const inputClass =
   'w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white placeholder-mountain-300 text-mountain-800';
 
+const PAYMENT_CARD_STYLES = {
+  easypaisa: {
+    card: 'border-stone-300 from-white to-stone-50',
+    icon: 'bg-white border border-stone-200',
+    badge: 'bg-stone-100 text-stone-700',
+    directBadge: 'text-stone-700 bg-white border-stone-200',
+    account: 'border-stone-200',
+    verified: 'bg-stone-100 text-stone-700',
+    number: 'text-stone-900',
+    copy: 'bg-stone-800 hover:bg-stone-900 hover:shadow-stone-900/20',
+    steps: 'bg-stone-50 border-stone-200',
+    stepIcon: 'bg-stone-700',
+    stepTitle: 'text-stone-900',
+  },
+  jazzcash: {
+    card: 'border-stone-300 from-white to-stone-50',
+    icon: 'bg-white border border-stone-200',
+    badge: 'bg-stone-100 text-stone-700',
+    directBadge: 'text-stone-700 bg-white border-stone-200',
+    account: 'border-stone-200',
+    verified: 'bg-stone-100 text-stone-700',
+    number: 'text-stone-900',
+    copy: 'bg-stone-800 hover:bg-stone-900 hover:shadow-stone-900/20',
+    steps: 'bg-stone-50 border-stone-200',
+    stepIcon: 'bg-stone-700',
+    stepTitle: 'text-stone-900',
+  },
+};
+
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
+  const { settings } = useSiteSettings();
   const navigate = useNavigate();
-  const total = subtotal + SHIPPING;
+  const shippingFee = settings.shippingFee;
+  const total = subtotal + shippingFee;
+  const enabledPaymentMethods = settings.paymentMethods.filter((method) => method.enabled);
 
   const [form, setForm] = useState({
     guestName: user?.name || '',
@@ -52,9 +83,16 @@ export default function CheckoutPage() {
 
   const [copiedNumber, setCopiedNumber] = useState(false);
   const [dialCode, setDialCode] = useState('+92');
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState('easypaisa');
+  const selectedPaymentMethod =
+    enabledPaymentMethods.find((method) => method.id === selectedPaymentMethodId) ||
+    enabledPaymentMethods[0];
+  const paymentCardStyles = PAYMENT_CARD_STYLES[selectedPaymentMethod?.id];
+  const isMobileWallet = Boolean(paymentCardStyles);
 
   const handleCopyNumber = () => {
-    navigator.clipboard?.writeText('03495144486');
+    if (!selectedPaymentMethod?.accountNumber) return;
+    navigator.clipboard?.writeText(selectedPaymentMethod.accountNumber);
     setCopiedNumber(true);
     setTimeout(() => setCopiedNumber(false), 2000);
   };
@@ -130,6 +168,10 @@ export default function CheckoutPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!selectedPaymentMethod) {
+      setApiError('No payment methods are currently available. Please contact the store.');
+      return;
+    }
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
@@ -158,8 +200,11 @@ export default function CheckoutPage() {
         postalCode: form.postalCode.trim() || undefined,
         country:    'Pakistan',
       },
-      paymentMethod: 'easypaisa',
-      transactionId: form.transactionId?.trim() || undefined,
+      paymentMethod: selectedPaymentMethod?.id,
+      transactionId:
+        selectedPaymentMethod?.id !== 'cod'
+          ? form.transactionId?.trim() || undefined
+          : undefined,
       couponCode: form.couponCode.trim() || undefined,
       notes: form.notes.trim() || undefined,
     };
@@ -195,8 +240,8 @@ export default function CheckoutPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <SEO
-        title="Checkout – Easypaisa Payment"
-        description="Secure checkout with Easypaisa. Transfer directly to 03495144486 (Shayan Danish). Order authentic handcrafted goods directly from Hunza."
+        title="Checkout"
+        description={`Choose a payment option and place your order with ${settings.storeName}.`}
       />
 
       {/* Back to Cart Navigation Button */}
@@ -213,7 +258,10 @@ export default function CheckoutPage() {
         </Link>
       </div>
 
-      <h1 className="font-display font-bold text-3xl text-mountain-900 mb-8">Checkout</h1>
+      <div className="mb-8">
+        <h1 className="font-display font-bold text-3xl text-mountain-900">Checkout</h1>
+        <p className="mt-1 text-sm text-mountain-500">{settings.storeTagline}</p>
+      </div>
 
 
       <form id="checkout-form" onSubmit={handleSubmit} noValidate>
@@ -412,37 +460,88 @@ export default function CheckoutPage() {
                 Payment Method
               </h2>
 
-              <div className="border-2 border-emerald-500/80 bg-gradient-to-br from-emerald-50/50 via-white to-stone-50/40 rounded-2xl p-5 sm:p-6 shadow-sm space-y-5">
+              {enabledPaymentMethods.length === 0 ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  No payment methods are currently available. Please contact the store.
+                </p>
+              ) : (
+                <>
+                  <fieldset className="mb-5 grid gap-3 sm:grid-cols-2">
+                    <legend className="sr-only">Choose a payment method</legend>
+                    {enabledPaymentMethods.map((method) => (
+                      <label
+                        key={method.id}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-4 transition ${
+                          selectedPaymentMethod?.id === method.id
+                            ? 'border-apricot-400 bg-apricot-50/50'
+                            : 'border-cream-200 hover:border-apricot-200'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value={method.id}
+                          checked={selectedPaymentMethod?.id === method.id}
+                          onChange={() => {
+                            setSelectedPaymentMethodId(method.id);
+                            setCopiedNumber(false);
+                          }}
+                          className="mt-1 accent-apricot-500"
+                        />
+                        <span>
+                          <span className="block font-semibold text-mountain-900">{method.name}</span>
+                          <span className="mt-0.5 block text-xs text-mountain-500">
+                            {method.id === 'cod' ? 'Pay when your order arrives' : 'Manual payment'}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                </>
+              )}
+
+              {isMobileWallet && selectedPaymentMethod.accountNumber && (
+              <div className={`border-2 bg-gradient-to-br via-white rounded-2xl p-5 sm:p-6 shadow-sm space-y-5 ${paymentCardStyles.card}`}>
                 {/* Header Badge */}
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shadow-emerald-600/30">
-                      📱
-                    </div>
+                    {selectedPaymentMethod.id === 'jazzcash' ? (
+                      <div className={`w-14 h-12 rounded-xl flex items-center justify-center p-1 shadow-sm ${paymentCardStyles.icon}`}>
+                        <img src="/jazzcash-logo.svg" alt="JazzCash" className="h-full w-full object-contain" />
+                      </div>
+                    ) : selectedPaymentMethod.id === 'easypaisa' ? (
+                      <div className={`w-24 h-12 rounded-xl flex items-center justify-center p-2 shadow-sm ${paymentCardStyles.icon}`}>
+                        <img src="/easypaisa-logo.png" alt="Easypaisa" className="h-full w-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className={`w-10 h-10 rounded-xl text-white flex items-center justify-center font-bold text-lg shadow-sm ${paymentCardStyles.icon}`}>
+                        📱
+                      </div>
+                    )}
                     <div>
                       <h3 className="font-display font-bold text-base text-stone-900 flex items-center gap-2">
-                        Easypaisa Payment
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 tracking-wide uppercase">
+                        {selectedPaymentMethod.name} Payment
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${paymentCardStyles.badge}`}>
                           Active
                         </span>
                       </h3>
                       <p className="text-xs text-stone-500">Fast & secure mobile wallet transfer</p>
                     </div>
                   </div>
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg">
+                  <span className={`text-xs font-semibold border px-2.5 py-1 rounded-lg ${paymentCardStyles.directBadge}`}>
                     Direct Transfer
                   </span>
                 </div>
 
                 {/* Account Credentials Box */}
-                <div className="bg-white rounded-xl p-4 sm:p-5 border border-emerald-200 shadow-xs space-y-3.5">
+                <div className={`bg-white rounded-xl p-4 sm:p-5 border shadow-xs space-y-3.5 ${paymentCardStyles.account}`}>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-stone-100">
                     <div>
                       <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Account Title</span>
                       <p className="text-base sm:text-lg font-bold text-stone-900 flex items-center gap-2">
-                        Shayan Danish
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
-                          <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                        {selectedPaymentMethod.accountName || selectedPaymentMethod.name}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${paymentCardStyles.verified}`}>
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                           Verified
@@ -457,14 +556,14 @@ export default function CheckoutPage() {
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
                     <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Easypaisa Mobile Number</span>
-                      <p className="text-xl sm:text-2xl font-mono font-bold text-emerald-950 tracking-wider">03495144486</p>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Account Number / IBAN</span>
+                      <p className={`text-xl sm:text-2xl font-mono font-bold tracking-wider ${paymentCardStyles.number}`}>{selectedPaymentMethod.accountNumber}</p>
                     </div>
                     <button
                       type="button"
                       onClick={handleCopyNumber}
-                      id="copy-easypaisa-btn"
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white transition-all shadow-sm hover:shadow-emerald-600/20"
+                      id="copy-payment-account-btn"
+                      className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold active:scale-95 text-white transition-all shadow-sm ${paymentCardStyles.copy}`}
                     >
                       {copiedNumber ? (
                         <>
@@ -486,24 +585,29 @@ export default function CheckoutPage() {
                 </div>
 
                 {/* Quick Steps */}
-                <div className="bg-emerald-50/80 border border-emerald-100 rounded-xl p-3.5 text-xs text-stone-700 space-y-2">
-                  <p className="font-bold text-emerald-950 flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center text-[10px]">✓</span>
+                <div className={`border rounded-xl p-3.5 text-xs text-stone-700 space-y-2 ${paymentCardStyles.steps}`}>
+                  <p className={`font-bold flex items-center gap-1.5 ${paymentCardStyles.stepTitle}`}>
+                    <span className={`w-4 h-4 rounded-full text-white inline-flex items-center justify-center text-[10px] ${paymentCardStyles.stepIcon}`}>✓</span>
                     Quick Payment Steps:
                   </p>
                   <ol className="list-decimal list-inside space-y-1 text-stone-600 pl-1 leading-relaxed">
-                    <li>Open <strong>Easypaisa App</strong> or dial <strong>*786#</strong> on your phone.</li>
-                    <li>Send <strong>{fmtPKR(total)}</strong> to <strong>03495144486</strong> (Title: <strong>Shayan Danish</strong>).</li>
-                    <li>Enter the 11-digit <strong>TRX ID</strong> or sender number below (or share screenshot on WhatsApp after ordering).</li>
+                    <li>Use <strong>{selectedPaymentMethod.name}</strong> to send the exact payable amount.</li>
+                    <li>Transfer <strong>{fmtPKR(total)}</strong> to <strong>{selectedPaymentMethod.accountNumber}</strong> (Title: <strong>{selectedPaymentMethod.accountName || selectedPaymentMethod.name}</strong>).</li>
+                    <li>Enter your transaction reference below or upload a payment screenshot after placing your order.</li>
                   </ol>
+                  {selectedPaymentMethod.instructions && (
+                    <p className="border-t border-current/10 pt-2 text-stone-600">
+                      {selectedPaymentMethod.instructions}
+                    </p>
+                  )}
                 </div>
 
                 {/* Optional TRX ID Input */}
                 <div className="pt-1">
                   <Field
                     id="field-transaction-id"
-                    label="Easypaisa TRX ID / Sender Number (Optional)"
-                    hint="Enter your 11-digit transaction ID or the mobile number used to pay."
+                    label={`${selectedPaymentMethod.name} transaction reference (Optional)`}
+                    hint="Enter the transaction reference from your payment provider."
                   >
                     <input
                       id="field-transaction-id"
@@ -516,6 +620,68 @@ export default function CheckoutPage() {
                   </Field>
                 </div>
               </div>
+              )}
+
+              {selectedPaymentMethod && (!isMobileWallet || !selectedPaymentMethod.accountNumber) && (
+                <div className="rounded-2xl border border-cream-200 bg-cream-50/70 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-display font-bold text-mountain-900">
+                        {selectedPaymentMethod.name}
+                      </h3>
+                      <p className="mt-1 text-xs text-mountain-600">
+                        {selectedPaymentMethod.instructions}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-apricot-600">{fmtPKR(total)}</span>
+                  </div>
+                  {selectedPaymentMethod.id !== 'cod' && (
+                    <>
+                      {(selectedPaymentMethod.accountName || selectedPaymentMethod.accountNumber) && (
+                        <div className="mt-4 rounded-xl border border-cream-200 bg-white p-4">
+                          {selectedPaymentMethod.accountName && (
+                            <p className="text-sm text-mountain-700">
+                              <span className="text-xs text-mountain-400">Account name</span>
+                              <span className="block font-semibold">{selectedPaymentMethod.accountName}</span>
+                            </p>
+                          )}
+                          {selectedPaymentMethod.accountNumber && (
+                            <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+                              <p className="text-sm text-mountain-700">
+                                <span className="text-xs text-mountain-400">Account number / IBAN</span>
+                                <span className="block font-mono font-bold">{selectedPaymentMethod.accountNumber}</span>
+                              </p>
+                              <button
+                                type="button"
+                                onClick={handleCopyNumber}
+                                className="rounded-lg bg-mountain-900 px-3 py-2 text-xs font-semibold text-white hover:bg-mountain-800"
+                              >
+                                {copiedNumber ? 'Copied' : 'Copy account'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div className="mt-4">
+                        <Field
+                          id="field-transaction-id"
+                          label="Transaction ID / reference (optional)"
+                          hint="You can upload payment proof after placing the order."
+                        >
+                          <input
+                            id="field-transaction-id"
+                            type="text"
+                            value={form.transactionId}
+                            onChange={set('transactionId')}
+                            placeholder="Enter your transaction reference"
+                            className={inputClass}
+                          />
+                        </Field>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </section>
           </div>
 
@@ -543,7 +709,7 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex justify-between text-mountain-600">
                   <span>Shipping</span>
-                  <span>{fmtPKR(SHIPPING)}</span>
+                  <span>{fmtPKR(shippingFee)}</span>
                 </div>
                 <div className="border-t border-cream-200 pt-2 flex justify-between">
                   <span className="font-bold text-mountain-900">Total</span>

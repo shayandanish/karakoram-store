@@ -10,6 +10,8 @@ import Review from '../models/Review.js';
 import cloudinary from '../config/cloudinary.js';
 import { deleteFirebaseUser, getFirebaseAuth } from '../utils/firebaseAdmin.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
+import { delCache, delCacheByPrefix } from '../utils/cache.js';
+import { getRevenueStartDate } from '../utils/dashboardStats.js';
 
 /* ─────────────────────────────────────────────
    PRODUCTS
@@ -57,10 +59,23 @@ const productSchema = z.object({
 
 export const adminGetProducts = async (req, res, next) => {
   try {
-    const { category, search, page = 1, limit = 20, active } = req.query;
+    const { category, search, page = 1, limit = 20, active, stock } = req.query;
     const filter = {};
     if (category) filter.category = category;
     if (active !== undefined) filter.isActive = active === 'true';
+    if (stock) {
+      if (!['low', 'out', 'in'].includes(stock)) {
+        res.status(400);
+        throw new Error('Invalid stock filter');
+      }
+      if (filter.isActive === undefined) filter.isActive = true;
+      if (stock === 'low') filter.variants = { $elemMatch: { stock: { $lt: 10 } } };
+      if (stock === 'out') {
+        filter['variants.0'] = { $exists: true };
+        filter.variants = { $not: { $elemMatch: { stock: { $gt: 0 } } } };
+      }
+      if (stock === 'in') filter.variants = { $elemMatch: { stock: { $gt: 0 } } };
+    }
     if (search && search.trim()) {
       filter.$text = { $search: search.trim() };
     }
@@ -94,6 +109,10 @@ export const adminCreateProduct = async (req, res, next) => {
   try {
     const data = productSchema.parse(req.body);
     const product = await Product.create(data);
+
+    // Invalidate product list caches
+    await delCacheByPrefix('products:list:').catch(() => {});
+
     res.status(201).json(product);
   } catch (err) { next(err); }
 };
@@ -103,6 +122,11 @@ export const adminUpdateProduct = async (req, res, next) => {
     const data = productSchema.partial().parse(req.body);
     const product = await Product.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
     if (!product) { res.status(404); throw new Error('Product not found'); }
+
+    // Invalidate product list caches + detail cache for this product
+    await delCacheByPrefix('products:list:').catch(() => {});
+    await delCache(`products:detail:${req.params.id}`).catch(() => {});
+
     res.json(product);
   } catch (err) { next(err); }
 };
@@ -121,7 +145,110 @@ export const adminDeleteProduct = async (req, res, next) => {
     if (product.video?.publicId) await cloudinary.uploader.destroy(product.video.publicId, { resource_type: 'video' });
 
     await product.deleteOne();
+
+    // Invalidate product list caches + detail cache for this product
+    await delCacheByPrefix('products:list:').catch(() => {});
+    await delCache(`products:detail:${req.params.id}`).catch(() => {});
+
     res.json({ message: 'Product deleted' });
+  } catch (err) { next(err); }
+};
+
+/* ─────────────────────────────────────────────
+   BULK PRODUCT ACTIONS
+   POST /api/admin/products/bulk-update
+   Body: { action, productIds: [], field?, value? }
+   Supported actions:
+     - activate / deactivate (set isActive)
+     - set-price (set variants[].price for all variants)
+     - set-stock (set variants[].stock for all variants)
+     - adjust-stock (add/subtract from variants[].stock)
+───────────────────────────────────────────── */
+
+const bulkUpdateSchema = z.object({
+  action: z.enum(['activate', 'deactivate', 'set-price', 'set-stock', 'adjust-stock']),
+  productIds: z.array(z.string().length(24, 'Invalid product id')).min(1),
+  field: z.string().optional(), // variant label to target; if omitted, applies to all variants
+  value: z.union([z.number(), z.boolean()]),
+});
+
+export const adminBulkUpdateProducts = async (req, res, next) => {
+  try {
+    const { action, productIds, field, value } = bulkUpdateSchema.parse(req.body);
+
+    const updateOps = [];
+    const errors = [];
+
+    for (const productId of productIds) {
+      const product = await Product.findById(productId);
+      if (!product) {
+        errors.push({ productId, error: 'Product not found' });
+        continue;
+      }
+
+      try {
+        switch (action) {
+          case 'activate':
+            product.isActive = true;
+            break;
+          case 'deactivate':
+            product.isActive = false;
+            break;
+          case 'set-price': {
+            const newPrice = Number(value);
+            if (!newPrice || newPrice <= 0) {
+              errors.push({ productId, error: 'Price must be a positive number' });
+              continue;
+            }
+            product.variants.forEach((v) => {
+              if (!field || v.label === field) v.price = newPrice;
+            });
+            break;
+          }
+          case 'set-stock': {
+            const newStock = Number(value);
+            if (!Number.isInteger(newStock) || newStock < 0) {
+              errors.push({ productId, error: 'Stock must be a non-negative integer' });
+              continue;
+            }
+            product.variants.forEach((v) => {
+              if (!field || v.label === field) v.stock = newStock;
+            });
+            break;
+          }
+          case 'adjust-stock': {
+            const delta = Number(value);
+            if (!Number.isInteger(delta)) {
+              errors.push({ productId, error: 'Adjustment must be an integer' });
+              continue;
+            }
+            product.variants.forEach((v) => {
+              if (!field || v.label === field) {
+                v.stock = Math.max(0, v.stock + delta);
+              }
+            });
+            break;
+          }
+        }
+
+        await product.save();
+        updateOps.push({ productId, success: true });
+      } catch (saveErr) {
+        errors.push({ productId, error: saveErr.message });
+      }
+    }
+
+    // Invalidate product caches after bulk update
+    await delCacheByPrefix('products:list:');
+    for (const pid of productIds) {
+      await delCache(`products:detail:${pid}`);
+    }
+
+    res.json({
+      message: `Bulk ${action} completed`,
+      updated: updateOps.length,
+      errors,
+    });
   } catch (err) { next(err); }
 };
 
@@ -222,8 +349,40 @@ const couponSchema = z.object({
 
 export const adminGetCoupons = async (req, res, next) => {
   try {
-    const coupons = await Coupon.find().sort('-createdAt');
-    res.json(coupons);
+    const [coupons, redemptionStats] = await Promise.all([
+      Coupon.find().sort('-createdAt').lean(),
+      Order.aggregate([
+        { $match: { couponCode: { $type: 'string', $ne: '' } } },
+        {
+          $group: {
+            _id: { $toUpper: '$couponCode' },
+            redemptionCount: { $sum: 1 },
+            paidOrderCount: {
+              $sum: { $cond: [{ $eq: ['$paymentStatus', 'paid'] }, 1, 0] },
+            },
+            discountTotal: {
+              $sum: {
+                $cond: [{ $eq: ['$paymentStatus', 'paid'] }, '$discount', 0],
+              },
+            },
+            orderTotal: {
+              $sum: {
+                $cond: [{ $eq: ['$paymentStatus', 'paid'] }, '$total', 0],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+    const statsByCode = new Map(redemptionStats.map((stats) => [stats._id, stats]));
+    const couponsWithStats = coupons.map((coupon) => ({
+      ...coupon,
+      redemptionCount: statsByCode.get(coupon.code.toUpperCase())?.redemptionCount || 0,
+      paidOrderCount: statsByCode.get(coupon.code.toUpperCase())?.paidOrderCount || 0,
+      discountTotal: statsByCode.get(coupon.code.toUpperCase())?.discountTotal || 0,
+      orderTotal: statsByCode.get(coupon.code.toUpperCase())?.orderTotal || 0,
+    }));
+    res.json(couponsWithStats);
   } catch (err) { next(err); }
 };
 
@@ -262,6 +421,7 @@ export const adminGetOrders = async (req, res, next) => {
       status,
       payment,
       paymentStatus,
+      paymentMethod,
       search,
       page = 1,
       limit = 20,
@@ -283,30 +443,67 @@ export const adminGetOrders = async (req, res, next) => {
       filter.paymentStatus = activePayment;
     }
 
+    if (paymentMethod && paymentMethod !== 'all') {
+      const allowedMethods = ['easypaisa', 'jazzcash', 'bank_transfer', 'COD', 'other'];
+      if (!allowedMethods.includes(paymentMethod)) {
+        res.status(400);
+        throw new Error('Invalid payment method filter');
+      }
+      filter.paymentMethod = paymentMethod;
+    }
+
     // Date range filter
     if (startDate || endDate) {
       filter.createdAt = {};
-      if (startDate) filter.createdAt.$gte = new Date(startDate);
+      if (startDate) {
+        const start = new Date(startDate);
+        if (Number.isNaN(start.getTime())) {
+          res.status(400);
+          throw new Error('Invalid start date');
+        }
+        filter.createdAt.$gte = start;
+      }
       if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
+        const end = new Date(`${endDate}T00:00:00.000Z`);
+        if (Number.isNaN(end.getTime())) {
+          res.status(400);
+          throw new Error('Invalid end date');
+        }
+        end.setUTCDate(end.getUTCDate() + 1);
+        end.setUTCMilliseconds(end.getUTCMilliseconds() - 1);
         filter.createdAt.$lte = end;
+      }
+      if (startDate && endDate && filter.createdAt.$gte > filter.createdAt.$lte) {
+        res.status(400);
+        throw new Error('Start date must not be after end date');
       }
     }
 
     // Comprehensive text search (Order ID, names, phone, email, tracking CN)
     if (search && search.trim()) {
-      const q = search.trim();
+      const q = search.trim().slice(0, 100);
+      const userMatches = await User.find({
+        $or: [
+          { name: { $regex: escapeRegex(q), $options: 'i' } },
+          { email: { $regex: escapeRegex(q), $options: 'i' } },
+          { phone: { $regex: escapeRegex(q), $options: 'i' } },
+        ],
+      }).select('_id').limit(100).lean();
+      const escapedQuery = escapeRegex(q);
       const searchConditions = [
-        { orderId: { $regex: q, $options: 'i' } },
-        { 'shippingAddress.phone': { $regex: q, $options: 'i' } },
-        { 'shippingAddress.name': { $regex: q, $options: 'i' } },
-        { guestPhone: { $regex: q, $options: 'i' } },
-        { guestName: { $regex: q, $options: 'i' } },
-        { guestEmail: { $regex: q, $options: 'i' } },
-        { 'shipment.trackingId': { $regex: q, $options: 'i' } },
-        { 'shipment.courierName': { $regex: q, $options: 'i' } },
+        { orderId: { $regex: escapedQuery, $options: 'i' } },
+        { 'shippingAddress.phone': { $regex: escapedQuery, $options: 'i' } },
+        { 'shippingAddress.name': { $regex: escapedQuery, $options: 'i' } },
+        { guestPhone: { $regex: escapedQuery, $options: 'i' } },
+        { guestName: { $regex: escapedQuery, $options: 'i' } },
+        { guestEmail: { $regex: escapedQuery, $options: 'i' } },
+        { transactionId: { $regex: escapedQuery, $options: 'i' } },
+        { 'shipment.trackingId': { $regex: escapedQuery, $options: 'i' } },
+        { 'shipment.courierName': { $regex: escapedQuery, $options: 'i' } },
       ];
+      if (userMatches.length > 0) {
+        searchConditions.push({ user: { $in: userMatches.map((user) => user._id) } });
+      }
 
       if (mongoose.isValidObjectId(q)) {
         searchConditions.push({ _id: q });
@@ -518,6 +715,22 @@ export const adminDeleteOrder = async (req, res, next) => {
 
 export const adminGetStats = async (req, res, next) => {
   try {
+    const period = req.query.period || 'all';
+    let revenueStartDate;
+    try {
+      revenueStartDate = getRevenueStartDate(period);
+    } catch (error) {
+      res.status(400);
+      throw error;
+    }
+
+    const revenueFilter = { paymentStatus: 'paid' };
+    if (revenueStartDate) revenueFilter.createdAt = { $gte: revenueStartDate };
+    const lowStockFilter = {
+      isActive: true,
+      variants: { $elemMatch: { stock: { $lt: 10 } } },
+    };
+
     const [
       totalOrders,
       totalRevenue,
@@ -529,22 +742,24 @@ export const adminGetStats = async (req, res, next) => {
     ] = await Promise.all([
       Order.countDocuments(),
       Order.aggregate([
-        { $match: { paymentStatus: 'paid' } },
+        { $match: revenueFilter },
         { $group: { _id: null, total: { $sum: '$total' } } },
       ]),
       User.countDocuments({ role: 'customer' }),
       Order.countDocuments({ orderStatus: 'pending' }),
-      Order.find().sort('-createdAt').limit(5).populate('user', 'name email'),
-      Product.find({ 'variants.stock': { $lt: 10 } })
+      Order.find().sort('-createdAt').limit(5).populate('user', 'name email').lean(),
+      Product.find(lowStockFilter)
         .populate('category', 'name slug')
         .select('name slug variants images category isActive')
-        .limit(10),
-      Product.countDocuments({ 'variants.stock': { $lt: 10 } }),
+        .limit(10)
+        .lean(),
+      Product.countDocuments(lowStockFilter),
     ]);
 
     res.json({
       totalOrders,
       totalRevenue: totalRevenue[0]?.total || 0,
+      revenueStartDate,
       totalCustomers,
       pendingOrders,
       recentOrders,
@@ -570,7 +785,7 @@ export const adminGetUsers = async (req, res, next) => {
     const filter = {};
     if (search) {
       const rx = { $regex: escapeRegex(search), $options: 'i' };
-      filter.$or = [{ name: rx }, { email: rx }];
+      filter.$or = [{ name: rx }, { email: rx }, { phone: rx }];
     }
 
     const [users, total] = await Promise.all([
@@ -584,8 +799,52 @@ export const adminGetUsers = async (req, res, next) => {
       User.countDocuments(filter),
     ]);
 
+    const orderStats = users.length > 0
+      ? await Order.aggregate([
+          {
+            $match: {
+              $or: [
+                { user: { $in: users.map((user) => user._id) } },
+                { guestEmail: { $in: users.map((user) => user.email.toLowerCase()) } },
+              ],
+            },
+          },
+          {
+            $group: {
+              _id: {
+                $cond: [
+                  { $ifNull: ['$user', false] },
+                  { $toString: '$user' },
+                  { $toLower: { $ifNull: ['$guestEmail', ''] } },
+                ],
+              },
+              orderCount: { $sum: 1 },
+              paidTotal: {
+                $sum: {
+                  $cond: [{ $eq: ['$paymentStatus', 'paid'] }, '$total', 0],
+                },
+              },
+              lastOrderAt: { $max: '$createdAt' },
+            },
+          },
+        ])
+      : [];
+    const statsByCustomer = new Map(orderStats.map((stats) => [stats._id, stats]));
+    const usersWithOrderStats = users.map((user) => {
+      const byId = statsByCustomer.get(String(user._id));
+      const byEmail = statsByCustomer.get(user.email.toLowerCase());
+      return {
+        ...user,
+        orderCount: (byId?.orderCount || 0) + (byEmail?.orderCount || 0),
+        paidTotal: (byId?.paidTotal || 0) + (byEmail?.paidTotal || 0),
+        lastOrderAt: [byId?.lastOrderAt, byEmail?.lastOrderAt]
+          .filter(Boolean)
+          .sort((a, b) => b - a)[0] || null,
+      };
+    });
+
     res.json({
-      users,
+      users: usersWithOrderStats,
       page,
       pages: Math.max(1, Math.ceil(total / limit)),
       total,

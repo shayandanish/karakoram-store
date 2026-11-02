@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import SEO from '../../components/ui/SEO';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 
 export default function AdminNotAuthorized() {
   const { user, logout } = useAuth();
+  const { settings } = useSiteSettings();
 
   return (
     <div className="min-h-screen bg-stone-50 flex flex-col justify-center items-center px-4 py-12">
@@ -17,7 +19,7 @@ export default function AdminNotAuthorized() {
 
         <h1 className="text-2xl font-bold text-mountain-900 mb-2 font-display">Access Denied</h1>
         <p className="text-sm text-stone-600 mb-6 leading-relaxed">
-          The <span className="font-semibold text-mountain-800">Karakoram Admin Dashboard</span> is restricted to administrators.
+          The <span className="font-semibold text-mountain-800">{settings.storeName} Admin Dashboard</span> is restricted to administrators.
           {user?.email && (
             <span className="block mt-2 text-xs bg-stone-100 py-1.5 px-3 rounded-lg text-stone-700">
               Logged in as: <strong className="font-medium text-stone-900">{user.email}</strong> (Role: {user.role || 'customer'})

@@ -5,11 +5,14 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
 import { fmtPKR, fmtDate, getCleanWhatsAppNumber } from '../lib/utils';
+import { validatePhoneNumber } from '../lib/phoneUtils';
 import ProductImage from '../components/ui/ProductImage';
 import ErrorState from '../components/ui/ErrorState';
 import SEO from '../components/ui/SEO';
 import OrderTimeline, { STATUS_MAP } from '../components/ui/OrderTimeline';
 import CourierInfoBlock from '../components/ui/CourierInfoBlock';
+import { useSiteSettings } from '../hooks/useSiteSettings';
+import { getOrderPaymentDetails } from '../lib/paymentMethods';
 
 const STATUS_CONFIG = {
   pending: {
@@ -78,9 +81,10 @@ const STATUS_CONFIG = {
 };
 
 // ── Printable Invoice Receipt Modal ──────────────────────────────
-function InvoiceModal({ order, onClose }) {
+function InvoiceModal({ order, onClose, settings }) {
   if (!order) return null;
   const displayId = order.orderId || (order._id ? `#${order._id.slice(-8).toUpperCase()}` : '');
+  const paymentDetails = getOrderPaymentDetails(order, settings);
 
   return (
     <div
@@ -101,7 +105,7 @@ function InvoiceModal({ order, onClose }) {
         <div className="border-b border-cream-200 pb-5 mb-5 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-1.5 mb-1">
-              <span className="font-display font-bold text-mountain-900 text-lg">Karakoram</span>
+              <span className="font-display font-bold text-mountain-900 text-lg">{settings.storeName}</span>
               <span className="text-apricot-600 text-xs font-semibold tracking-widest uppercase">Store</span>
             </div>
             <p className="text-xs text-mountain-500">Official Purchase Receipt</p>
@@ -127,7 +131,7 @@ function InvoiceModal({ order, onClose }) {
           <div>
             <p className="text-mountain-400 font-semibold uppercase tracking-wider mb-1">Payment Method</p>
             <p className="font-bold text-mountain-900">
-              {order.paymentMethod === 'easypaisa' ? 'Easypaisa Transfer' : order.paymentMethod}
+              {paymentDetails.name}
             </p>
             <p className="text-mountain-600 capitalize">Payment Status: {order.paymentStatus || 'Pending'}</p>
             {order.transactionId && (
@@ -198,13 +202,13 @@ function InvoiceModal({ order, onClose }) {
 }
 
 // ── Interactive Single Order Card ────────────────────────────────
-function OrderCard({ order, onOpenInvoice }) {
+function OrderCard({ order, onOpenInvoice, settings }) {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState(false);
-  const wa = getCleanWhatsAppNumber();
+  const wa = getCleanWhatsAppNumber(settings.whatsappNumber);
   const displayId = order.orderId || (order._id ? `#${order._id.slice(-8).toUpperCase()}` : '');
   const statusInfo = STATUS_CONFIG[order.orderStatus?.toLowerCase()] || STATUS_CONFIG.pending;
-  const isEasypaisa = order.paymentMethod === 'easypaisa' || !order.paymentMethod || order.paymentMethod === 'COD';
+  const paymentDetails = getOrderPaymentDetails(order, settings);
   const isPaymentPending = order.paymentStatus === 'pending';
 
   const handleCopyId = () => {
@@ -214,14 +218,15 @@ function OrderCard({ order, onOpenInvoice }) {
   };
 
   const handleCopyAccount = () => {
-    navigator.clipboard?.writeText('03495144486');
+    if (!paymentDetails.accountNumber) return;
+    navigator.clipboard?.writeText(paymentDetails.accountNumber);
     setCopiedAccount(true);
     setTimeout(() => setCopiedAccount(false), 2000);
   };
 
   const phoneParam = order.shippingAddress?.phone || order.guestPhone || '';
   const waMessage = encodeURIComponent(
-    `Assalam o Alaikum! Inquiring about Order ${displayId} for ${fmtPKR(order.total)} at Karakoram Store.`
+    `Assalam o Alaikum! Inquiring about Order ${displayId} for ${fmtPKR(order.total)} at ${settings.storeName}.`
   );
 
   return (
@@ -271,7 +276,7 @@ function OrderCard({ order, onOpenInvoice }) {
                 : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
             }`}
           >
-            {isEasypaisa ? 'Easypaisa' : order.paymentMethod}
+            {paymentDetails.name}
             <span className="ml-1 text-[10px] font-normal uppercase opacity-75">
               • {order.paymentStatus || 'pending'}
             </span>
@@ -294,22 +299,24 @@ function OrderCard({ order, onOpenInvoice }) {
         </div>
       )}
 
-      {/* Easypaisa Payment Verification Helper (if pending) */}
-      {isPaymentPending && isEasypaisa && (
+      {/* Manual Payment Verification Helper (if pending) */}
+      {isPaymentPending && paymentDetails.requiresPrepayment && (
         <div className="m-6 p-4 bg-gradient-to-r from-emerald-50 via-cream-50 to-amber-50 rounded-2xl border border-emerald-200/80 shadow-2xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-emerald-700 font-bold text-xs flex items-center gap-1">
-                  <span>📱</span> Easypaisa Payment Pending
+                  <span>📱</span> {paymentDetails.name} Payment Pending
                 </span>
                 <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
                   Action Needed
                 </span>
               </div>
               <p className="text-xs text-mountain-600">
-                Please transfer <strong className="text-apricot-600">{fmtPKR(order.total)}</strong> to{' '}
-                <strong className="text-stone-900">03495144486</strong> (Title: <strong>Shayan Danish</strong>)
+                Please transfer <strong className="text-apricot-600">{fmtPKR(order.total)}</strong> using{' '}
+                <strong className="text-stone-900">{paymentDetails.name}</strong>
+                {paymentDetails.accountNumber && <> to <strong className="text-stone-900">{paymentDetails.accountNumber}</strong></>}
+                {paymentDetails.accountName && <> (Title: <strong>{paymentDetails.accountName}</strong>)</>}
               </p>
               {order.transactionId && (
                 <p className="text-[11px] text-mountain-500 font-mono">
@@ -319,17 +326,19 @@ function OrderCard({ order, onOpenInvoice }) {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleCopyAccount}
-                className="px-3 py-1.5 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-xs font-semibold rounded-xl transition"
-              >
-                {copiedAccount ? '✓ Copied Number' : 'Copy 03495144486'}
-              </button>
+              {paymentDetails.accountNumber && (
+                <button
+                  type="button"
+                  onClick={handleCopyAccount}
+                  className="px-3 py-1.5 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 text-xs font-semibold rounded-xl transition"
+                >
+                  {copiedAccount ? '✓ Copied Number' : `Copy ${paymentDetails.accountNumber}`}
+                </button>
+              )}
               {wa && (
                 <a
                   href={`https://wa.me/${wa}?text=${encodeURIComponent(
-                    `Assalam o Alaikum! I am sharing my Easypaisa payment proof for Order ${displayId} (Rs. ${order.total}).`
+                    `Assalam o Alaikum! I am sharing my ${paymentDetails.name} payment proof for Order ${displayId} (Rs. ${order.total}).`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -383,7 +392,9 @@ function OrderCard({ order, onOpenInvoice }) {
           <p className="text-xs text-mountain-500 mt-0.5">
             Total:{' '}
             <span className="font-display font-bold text-base text-apricot-600">{fmtPKR(order.total)}</span>
-            <span className="text-[11px] text-mountain-400 ml-1">(incl. flat Rs. 200 delivery)</span>
+            <span className="text-[11px] text-mountain-400 ml-1">
+              (incl. {fmtPKR(order.shippingCost ?? settings.shippingFee)} delivery)
+            </span>
           </p>
         </div>
 
@@ -423,6 +434,7 @@ function OrderCard({ order, onOpenInvoice }) {
 // ── Main Page Component ──────────────────────────────────────────
 export default function MyOrdersPage() {
   const { user, loading: authLoading } = useAuth();
+  const { settings } = useSiteSettings();
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState(null);
@@ -473,8 +485,17 @@ export default function MyOrdersPage() {
 
   const handleGuestSubmit = (e) => {
     e.preventDefault();
-    if (!guestOrderId.trim() || !guestPhone.trim()) {
-      setGuestError('Please enter both Order ID and Phone number.');
+    if (!guestOrderId.trim()) {
+      setGuestError('Please enter your Order ID.');
+      return;
+    }
+    if (!guestPhone.trim()) {
+      setGuestError('Phone number is required.');
+      return;
+    }
+    const { valid, error } = validatePhoneNumber(guestPhone.trim(), '+92');
+    if (!valid) {
+      setGuestError(error);
       return;
     }
     lookupGuestOrder(guestOrderId, guestPhone);
@@ -531,13 +552,13 @@ export default function MyOrdersPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
       <SEO
-        title="Client Orders Dashboard – Karakoram Store"
-        description="View all your past and live Karakoram Store orders, Easypaisa payment verification, and delivery tracking."
+        title="Client Orders Dashboard"
+        description={`View your ${settings.storeName} orders, payment details, and delivery tracking.`}
       />
 
       {/* Invoice Modal */}
       {selectedInvoiceOrder && (
-        <InvoiceModal order={selectedInvoiceOrder} onClose={() => setSelectedInvoiceOrder(null)} />
+        <InvoiceModal order={selectedInvoiceOrder} settings={settings} onClose={() => setSelectedInvoiceOrder(null)} />
       )}
 
       {/* Back to Shop Navigation Button */}
@@ -576,7 +597,7 @@ export default function MyOrdersPage() {
               <p className="text-mountain-300 text-xs sm:text-sm mt-0.5">
                 {user
                   ? `Welcome, ${user.name} (${user.email})`
-                  : 'Look up live status, Easypaisa receipt verification, and shipment details'}
+                  : 'Look up live status, payment verification, and shipment details'}
               </p>
             </div>
           </div>
@@ -742,7 +763,7 @@ export default function MyOrdersPage() {
                   ✓ Verified Match
                 </span>
               </div>
-              <OrderCard order={guestOrder} onOpenInvoice={setSelectedInvoiceOrder} />
+              <OrderCard order={guestOrder} onOpenInvoice={setSelectedInvoiceOrder} settings={settings} />
             </div>
           )}
         </div>
@@ -821,7 +842,7 @@ export default function MyOrdersPage() {
           {filteredOrders.length > 0 && (
             <div className="space-y-6">
               {filteredOrders.map((ord) => (
-                <OrderCard key={ord._id} order={ord} onOpenInvoice={setSelectedInvoiceOrder} />
+                <OrderCard key={ord._id} order={ord} onOpenInvoice={setSelectedInvoiceOrder} settings={settings} />
               ))}
             </div>
           )}
@@ -858,7 +879,7 @@ export default function MyOrdersPage() {
                 No Orders Placed Yet
               </h2>
               <p className="text-mountain-500 text-xs sm:text-sm max-w-sm mx-auto mb-6 leading-relaxed">
-                You haven't placed any orders with this account yet. When you order, your live tracking, Easypaisa receipts, and delivery timeline will appear here automatically!
+                You haven't placed any orders with this account yet. When you order, your live tracking, payment receipts, and delivery timeline will appear here automatically!
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link
@@ -884,7 +905,7 @@ export default function MyOrdersPage() {
               <div>
                 <p className="font-bold text-mountain-900">How Order Tracking Works</p>
                 <p className="text-mountain-500 text-[11px]">
-                  Orders are dispatched within 24 hours of Easypaisa payment verification and take 3–5 days across Pakistan.
+                  Orders are dispatched after payment verification when required and take 3–5 days across Pakistan.
                 </p>
               </div>
             </div>

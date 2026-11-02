@@ -273,7 +273,7 @@ export default function AdminCategoriesPage() {
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-xl bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center">
                             {c.image?.url ? (
-                              <img src={c.image.url} alt={c.name} className="w-full h-full object-cover" />
+                              <img src={c.image.url} alt={c.name} width={40} height={40} className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-base">{c.icon || '📦'}</span>
                             )}
@@ -328,7 +328,7 @@ export default function AdminCategoriesPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center">
                       {c.image?.url ? (
-                        <img src={c.image.url} alt={c.name} className="w-full h-full object-cover" />
+                        <img src={c.image.url} alt={c.name} width={48} height={48} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-lg">{c.icon || '📦'}</span>
                       )}
@@ -474,7 +474,7 @@ export default function AdminCategoriesPage() {
                 <div className="flex items-center gap-3">
                   {image?.url ? (
                     <div className="w-16 h-16 rounded-xl border border-stone-200 overflow-hidden relative group">
-                      <img src={image.url} alt={name} className="w-full h-full object-cover" />
+                      <img src={image.url} alt={name} width={64} height={64} className="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick={() => setImage(null)}

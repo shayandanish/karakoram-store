@@ -25,6 +25,7 @@ export async function sendPendingPaymentReminders() {
     // 5. Has not exceeded maximum reminder threshold
     const pendingOrders = await Order.find({
       paymentStatus: 'pending',
+      paymentMethod: { $ne: 'COD' },
       orderStatus: { $nin: ['cancelled', 'delivered', 'returned'] },
       createdAt: { $lte: twentyFourHoursAgo },
       $or: [

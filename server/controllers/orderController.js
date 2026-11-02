@@ -3,7 +3,9 @@ import { z } from 'zod';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Coupon from '../models/Coupon.js';
+import SiteSettings from '../models/SiteSettings.js';
 import User from '../models/User.js';
+import { getEnabledPaymentMethod } from '../utils/paymentMethods.js';
 import { generateOrderId } from '../utils/orderIdGenerator.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
 import {
@@ -108,7 +110,7 @@ const createOrderSchema = z.object({
 
   items: z.array(orderItemInputSchema).min(1),
   shippingAddress: addressSchema,
-  paymentMethod: z.enum(['easypaisa', 'COD', 'bank_transfer']).default('easypaisa'),
+  paymentMethod: z.enum(['easypaisa', 'cod', 'COD', 'bank_transfer', 'jazzcash', 'other']).default('easypaisa'),
   transactionId: z.string().optional(),
   couponCode: z.string().optional(),
   notes: z.string().optional(),
@@ -118,13 +120,22 @@ const createOrderSchema = z.object({
   whatsappPhone: z.string().optional(),
 });
 
-/** Flat shipping rate in PKR */
-const SHIPPING_COST = 200;
-
 // POST /api/orders
 export const createOrder = async (req, res, next) => {
   try {
     const data = createOrderSchema.parse(req.body);
+    const siteSettings = await SiteSettings.getSingleton();
+    const paymentMethod = getEnabledPaymentMethod(
+      siteSettings,
+      data.paymentMethod || 'easypaisa'
+    );
+    if (!paymentMethod) {
+      res.status(400);
+      throw new Error('The selected payment method is unavailable. Please choose another method.');
+    }
+    const shippingCost = Number.isFinite(siteSettings.shippingFee)
+      ? siteSettings.shippingFee
+      : 200;
 
     // Guest orders require contact details
     if (!req.user && (!data.guestName || !data.guestPhone)) {
@@ -205,7 +216,7 @@ export const createOrder = async (req, res, next) => {
           }
         }
 
-        const total = Math.max(0, subtotal + SHIPPING_COST - discount);
+        const total = Math.max(0, subtotal + shippingCost - discount);
 
         // Link order to logged-in user or find matching registered user by email
         let userId = req.user?._id || null;
@@ -239,7 +250,13 @@ export const createOrder = async (req, res, next) => {
               guestPhone: data.guestPhone,
               items: orderItems,
               shippingAddress: data.shippingAddress,
-              paymentMethod: data.paymentMethod || 'easypaisa',
+              paymentMethod: paymentMethod.id === 'cod' ? 'COD' : paymentMethod.id,
+              paymentDetails: {
+                name: paymentMethod.name,
+                accountName: paymentMethod.accountName,
+                accountNumber: paymentMethod.accountNumber,
+                instructions: paymentMethod.instructions,
+              },
               transactionId: data.transactionId || '',
               orderStatus: 'pending',
               statusHistory: initialHistory,
@@ -248,7 +265,7 @@ export const createOrder = async (req, res, next) => {
               whatsappConsent: data.whatsappConsent !== false,
               whatsappPhone: data.whatsappPhone || data.shippingAddress.phone || data.guestPhone || '',
               subtotal,
-              shippingCost: SHIPPING_COST,
+              shippingCost,
               discount,
               total,
             },
@@ -362,6 +379,7 @@ export const trackOrder = async (req, res, next) => {
       status: order.orderStatus,
       paymentStatus: order.paymentStatus,
       paymentMethod: order.paymentMethod,
+      paymentDetails: order.paymentDetails,
       transactionId: order.transactionId || '',
       paymentScreenshot: order.paymentScreenshot || '',
       paymentScreenshotUploadedAt: order.paymentScreenshotUploadedAt || null,
@@ -457,6 +475,11 @@ export const uploadPaymentScreenshot = async (req, res, next) => {
         res.status(403);
         throw new Error('Verification failed. Please provide the contact phone number or email matching this order.');
       }
+    }
+
+    if (String(order.paymentMethod).toLowerCase() === 'cod') {
+      res.status(400);
+      throw new Error('Payment proof is not required for cash on delivery orders.');
     }
 
     // Upload to Cloudinary or fallback to local disk

@@ -1,5 +1,6 @@
 import Product from '../models/Product.js';
 import { setPublicCache } from '../utils/cache.js';
+import { getCache, setCache } from '../utils/cache.js';
 
 const REGION_PATTERNS = {
   hunza: 'Hunza',
@@ -13,6 +14,19 @@ const REGION_PATTERNS = {
 };
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Cache TTLs (seconds)
+const PRODUCT_LIST_TTL = 60;      // product listings change infrequently
+const PRODUCT_DETAIL_TTL = 300;   // product detail pages are stable
+
+// Build a stable cache key from query params
+const makeListCacheKey = (q) => {
+  const {
+    search, category, region, minPrice, maxPrice, inStock, sale,
+    sort, page, limit,
+  } = q;
+  return `products:list:${search}|${category}|${region}|${minPrice}|${maxPrice}|${inStock}|${sale}|${sort}|${page}|${limit}`;
+};
 
 // GET /api/products
 export const getProducts = async (req, res, next) => {
@@ -30,6 +44,16 @@ export const getProducts = async (req, res, next) => {
       limit = 12,
     } = req.query;
 
+    const cacheKey = makeListCacheKey(req.query);
+
+    // 1. Check cache first (low latency path)
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+      setPublicCache(res, PRODUCT_LIST_TTL, 120);
+      return res.json(cached);
+    }
+
     const filter = { isActive: true };
 
     // Full-text search
@@ -37,7 +61,6 @@ export const getProducts = async (req, res, next) => {
 
     // Category filter (accepts slug or ObjectId)
     if (category) {
-      // Try to match by ObjectId first, then by slug via lookup
       filter.category = category;
     }
 
@@ -102,13 +125,19 @@ export const getProducts = async (req, res, next) => {
       Product.countDocuments(filter),
     ]);
 
-    setPublicCache(res, 30, 120);
-    res.json({
+    const result = {
       products,
       page: Number(page),
       pages: Math.ceil(total / Number(limit)),
       total,
-    });
+    };
+
+    // 2. Write to cache for next request (fire-and-forget, don't await)
+    setCache(cacheKey, result, PRODUCT_LIST_TTL).catch(() => {});
+
+    res.set('X-Cache', 'MISS');
+    setPublicCache(res, PRODUCT_LIST_TTL, 120);
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -117,7 +146,18 @@ export const getProducts = async (req, res, next) => {
 // GET /api/products/:slug
 export const getProductBySlug = async (req, res, next) => {
   try {
-    const product = await Product.findOne({ slug: req.params.slug, isActive: true })
+    const slug = req.params.slug;
+    const cacheKey = `products:detail:${slug}`;
+
+    // 1. Check cache first
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+      setPublicCache(res, PRODUCT_DETAIL_TTL, 600);
+      return res.json(cached);
+    }
+
+    const product = await Product.findOne({ slug, isActive: true })
       .populate('category', 'name slug')
       .populate('artisan', 'name village story photo');
 
@@ -126,7 +166,11 @@ export const getProductBySlug = async (req, res, next) => {
       throw new Error('Product not found');
     }
 
-    setPublicCache(res, 30, 120);
+    // 2. Write to cache (fire-and-forget)
+    setCache(cacheKey, product.toObject ? product.toObject() : product, PRODUCT_DETAIL_TTL).catch(() => {});
+
+    res.set('X-Cache', 'MISS');
+    setPublicCache(res, PRODUCT_DETAIL_TTL, 600);
     res.json(product);
   } catch (err) {
     next(err);

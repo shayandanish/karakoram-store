@@ -58,6 +58,8 @@ export default function ProductCard({ product }) {
           <img
             src={blurSrc}
             alt=""
+            width={640}
+            height={800}
             aria-hidden="true"
             loading="lazy"
             fetchPriority="low"

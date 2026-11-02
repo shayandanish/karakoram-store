@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import SEO from '../components/ui/SEO';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 export default function NotFoundPage() {
+  const { settings } = useSiteSettings();
   return (
     <div className="max-w-md mx-auto px-4 py-24 text-center">
       <SEO
         title="404 – Page Not Found"
-        description="The page you are looking for does not exist in Karakoram Store. Return home or browse our authentic collection."
+        description={`The page you are looking for does not exist in ${settings.storeName}. Return home or browse our authentic collection.`}
       />
 
       <div className="w-20 h-20 mx-auto mb-6 bg-apricot-100 rounded-3xl flex items-center justify-center text-4xl shadow-inner">

@@ -30,7 +30,7 @@ export default function Navbar() {
   const searchInputRef = useRef(null);
   const { totalItems } = useCart();
   const { user, logout } = useAuth();
-  const { logo } = useSiteSettings();
+  const { logo, settings } = useSiteSettings();
   const hasCustomLogo = Boolean(logo?.url);
   const location = useLocation();
   const navigate = useNavigate();
@@ -139,7 +139,7 @@ export default function Navbar() {
             to="/"
             id="nav-logo"
             className="flex items-center gap-2 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:rounded-xl p-1"
-            aria-label="Karakoram Store Home"
+            aria-label={`${settings.storeName} Home`}
           >
             <SiteLogoMark
               size={hasCustomLogo ? '4xl' : 'md'}
@@ -148,8 +148,8 @@ export default function Navbar() {
               priority
             />
             <div className="flex flex-col leading-none">
-              <span className="font-display font-bold text-mountain-900 text-base">Karakoram</span>
-              <span className="text-apricot-600 text-xs font-semibold tracking-widest uppercase">Store</span>
+              <span className="font-display font-bold text-mountain-900 text-base">{settings.storeName}</span>
+              <span className="text-apricot-600 text-xs font-semibold tracking-widest uppercase">{settings.storeTagline}</span>
             </div>
           </Link>
 

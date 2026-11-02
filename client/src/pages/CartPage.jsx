@@ -5,8 +5,7 @@ import { fmtPKR, buildWhatsAppLink } from '../lib/utils';
 import { getVariantDiscount } from '../lib/discountUtils';
 import ProductImage from '../components/ui/ProductImage';
 import SEO from '../components/ui/SEO';
-
-const SHIPPING = 200;
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 function CartItem({ item }) {
   const { updateQty, removeFromCart } = useCart();
@@ -88,18 +87,20 @@ function CartItem({ item }) {
 
 export default function CartPage() {
   const { items, clearCart, subtotal } = useCart();
-  const total = subtotal + SHIPPING;
+  const { settings } = useSiteSettings();
+  const shippingFee = settings.shippingFee;
+  const total = subtotal + shippingFee;
 
-  const waLink = buildWhatsAppLink(items, subtotal);
+  const waLink = buildWhatsAppLink(items, subtotal, settings.whatsappNumber, settings.storeName);
 
   if (items.length === 0) {
     return (
       <div className="max-w-lg mx-auto px-4 py-24 text-center">
-        <SEO title="Shopping Cart" description="Your shopping cart at Karakoram Store." />
+        <SEO title="Shopping Cart" description={`Your shopping cart at ${settings.storeName}.`} canonicalUrl="/cart" />
         <p className="text-6xl mb-4">🛒</p>
         <h1 className="font-display font-bold text-2xl text-mountain-900 mb-2">Your cart is empty</h1>
         <p className="text-mountain-500 text-sm mb-8">
-          Add some authentic Karakoram products to get started.
+          {settings.storeDescription}
         </p>
         <Link
           to="/shop"
@@ -116,7 +117,8 @@ export default function CartPage() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <SEO
         title={`Cart (${items.length} ${items.length === 1 ? 'item' : 'items'})`}
-        description="Review your items and proceed to checkout at Karakoram Store."
+        description={`Review your items and proceed to checkout at ${settings.storeName}.`}
+        canonicalUrl="/cart"
       />
 
       {/* Back to Shop Navigation Button */}
@@ -162,7 +164,7 @@ export default function CartPage() {
             </div>
             <div className="flex justify-between text-mountain-700">
               <span>Shipping</span>
-              <span className="font-medium">{fmtPKR(SHIPPING)}</span>
+              <span className="font-medium">{fmtPKR(shippingFee)}</span>
             </div>
             <div className="border-t border-cream-200 pt-3 flex justify-between">
               <span className="font-bold text-mountain-900 text-base">Total</span>

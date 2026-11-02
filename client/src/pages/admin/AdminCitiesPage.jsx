@@ -111,6 +111,8 @@ function CityRow({ city, onEdit, onDelete, onToggleActive, toggling }) {
           <img
             src={city.image.url}
             alt={city.name}
+            width={96}
+            height={72}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
@@ -535,6 +537,8 @@ function CityFormModal({ city, onClose, onSaved }) {
                 <img
                   src={imgPreview}
                   alt="Preview"
+                  width={200}
+                  height={150}
                   className="w-full h-full object-cover"
                   onError={() => {
                     toast.error('Could not load image from URL');

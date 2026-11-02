@@ -47,7 +47,7 @@ export default function RegisterPage() {
     clearGoogleRedirectError,
   } = useAuth();
   const navigate = useNavigate();
-  const { logo } = useSiteSettings();
+  const { logo, settings } = useSiteSettings();
   const hasCustomLogo = Boolean(logo?.url);
 
   const [restored] = useState(restorePending);
@@ -245,7 +245,7 @@ export default function RegisterPage() {
     <div className="max-w-md mx-auto px-4 sm:px-6 py-16">
       <SEO
         title={step === 'verify' ? 'Verify Your Email' : 'Create Account'}
-        description="Join Karakoram Store. Create an account to easily track your orders and enjoy handcrafted gifts from Gilgit-Baltistan."
+        description={`Join ${settings.storeName}. Create an account to track your orders and enjoy handcrafted gifts from Gilgit-Baltistan.`}
       />
 
       {/* Back to Store Navigation Button */}
@@ -277,7 +277,7 @@ export default function RegisterPage() {
           <p className="text-xs text-mountain-500">
             {step === 'verify'
               ? 'One last step to activate your account'
-              : 'Join the Karakoram family for seamless order management'}
+              : `Join the ${settings.storeName} family for seamless order management`}
           </p>
         </div>
 

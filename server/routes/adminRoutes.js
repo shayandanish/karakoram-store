@@ -5,6 +5,7 @@ import { uploadImage, deleteImage } from '../controllers/uploadController.js';
 import {
   adminGetProducts, adminGetProductById,
   adminCreateProduct, adminUpdateProduct, adminDeleteProduct,
+  adminBulkUpdateProducts,
   adminCreateCategory, adminUpdateCategory, adminDeleteCategory,
   adminGetArtisans, adminCreateArtisan, adminUpdateArtisan, adminDeleteArtisan,
   adminGetCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon,
@@ -34,6 +35,7 @@ router.get('/products/:id', adminGetProductById);
 router.post('/products', adminCreateProduct);
 router.put('/products/:id', adminUpdateProduct);
 router.delete('/products/:id', adminDeleteProduct);
+router.post('/products/bulk-update', adminBulkUpdateProducts);
 
 // Categories
 router.post('/categories', adminCreateCategory);

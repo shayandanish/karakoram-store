@@ -1,52 +1,167 @@
 // ── Product Detail Page ───────────────────────────────────────
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { fmtPKR, buildProductWhatsAppLink, cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
 import { getVariantDiscount } from '../lib/discountUtils';
 import ProductImage from '../components/ui/ProductImage';
 import { SkeletonDetail } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
 import SEO from '../components/ui/SEO';
+import StructuredData, {
+  buildOrganizationLD,
+  buildBreadcrumbLD,
+  buildProductLD,
+  buildWebsiteLD,
+} from '../components/ui/StructuredData';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
-function StarRating({ avg, count }) {
+const STAR_PATH =
+  'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z';
 
-  const full = Math.round(avg);
+function Stars({ value = 0, size = 'w-4 h-4' }) {
+  const full = Math.round(value);
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex gap-0.5" aria-label={`Rating: ${avg} out of 5`}>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <svg
-            key={i}
-            className={`w-4 h-4 ${i < full ? 'text-apricot-400' : 'text-cream-300'}`}
-            fill="currentColor"
-            viewBox="0 0 20 20"
-            aria-hidden="true"
-          >
-            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-          </svg>
-        ))}
-      </div>
-      <span className="text-sm text-mountain-500">{avg > 0 ? `${avg.toFixed(1)} (${count})` : 'No ratings yet'}</span>
+    <div className="flex gap-0.5" aria-hidden="true">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <svg
+          key={i}
+          className={`${size} ${i < full ? 'text-apricot-400' : 'text-cream-300'}`}
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path d={STAR_PATH} />
+        </svg>
+      ))}
     </div>
   );
+}
+
+function StarRating({ avg, count }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div aria-label={`Rating: ${avg} out of 5`}>
+        <Stars value={avg} />
+      </div>
+      <span className="text-sm text-mountain-500">
+        {avg > 0 ? `${avg.toFixed(1)} (${count})` : 'No ratings yet'}
+      </span>
+    </div>
+  );
+}
+
+function InteractiveStars({ value, onChange }) {
+  return (
+    <div className="flex gap-1" role="radiogroup" aria-label="Your rating">
+      {Array.from({ length: 5 }).map((_, i) => {
+        const rating = i + 1;
+        const selected = rating <= value;
+        return (
+          <button
+            key={rating}
+            type="button"
+            role="radio"
+            aria-checked={value === rating}
+            aria-label={`${rating} star${rating === 1 ? '' : 's'}`}
+            onClick={() => onChange(rating)}
+            className={`p-0.5 transition-colors ${
+              selected ? 'text-apricot-500' : 'text-cream-300 hover:text-apricot-300'
+            }`}
+          >
+            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d={STAR_PATH} />
+            </svg>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatReviewDate(value) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return '';
+  }
 }
 
 export default function ProductDetailPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { addToCart, items } = useCart();
+  const { user } = useAuth();
+  const { settings, contactPhone, whatsappNumber } = useSiteSettings();
   const [selectedVariantLabel, setSelectedVariantLabel] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewError, setReviewError] = useState('');
 
   const { data: product, isLoading, error, refetch } = useQuery({
     queryKey: ['product', slug],
     queryFn: () => api.get(`/products/${slug}`).then((r) => r.data),
   });
+
+  const {
+    data: reviewsData,
+    isLoading: reviewsLoading,
+  } = useQuery({
+    queryKey: ['reviews', slug],
+    queryFn: () => api.get(`/products/${slug}/reviews`).then((r) => r.data),
+    enabled: Boolean(slug),
+  });
+
+  const reviews = reviewsData?.reviews || [];
+  const hasUserReviewed =
+    Boolean(user) &&
+    reviews.some((r) => String(r.user?._id || r.user) === String(user._id));
+
+  const reviewMutation = useMutation({
+    mutationFn: (payload) => api.post(`/products/${slug}/reviews`, payload).then((r) => r.data),
+    onSuccess: (data) => {
+      setReviewRating(0);
+      setReviewComment('');
+      setReviewError('');
+      queryClient.invalidateQueries({ queryKey: ['reviews', slug] });
+      queryClient.setQueryData(['product', slug], (prev) =>
+        prev
+          ? {
+              ...prev,
+              ratingAverage: data.ratingAverage ?? prev.ratingAverage,
+              ratingCount: data.ratingCount ?? prev.ratingCount,
+            }
+          : prev
+      );
+    },
+    onError: (err) => {
+      setReviewError(err.response?.data?.message || err.message || 'Could not submit review');
+    },
+  });
+
+  const handleSubmitReview = (e) => {
+    e.preventDefault();
+    setReviewError('');
+    if (!reviewRating) {
+      setReviewError('Please select a star rating');
+      return;
+    }
+    reviewMutation.mutate({
+      rating: reviewRating,
+      comment: reviewComment.trim(),
+    });
+  };
 
   // Derive the selected size from the loaded product. Prefer the first size
   // that is actually in stock so the Add to Cart button is usable immediately.
@@ -75,7 +190,7 @@ export default function ProductDetailPage() {
     (i) => i.productId === product?._id && i.variantLabel === variant?.label
   );
 
-  const waLink = buildProductWhatsAppLink(product, variant, quantity);
+  const waLink = buildProductWhatsAppLink(product, variant, quantity, whatsappNumber, settings.storeName);
 
   const activeImage = product?.images?.[activeImg];
   const mainImageUrl = activeImage?.url || '';
@@ -111,10 +226,23 @@ export default function ProductDetailPage() {
           }) || '/favicon.svg'
         }
         type="product"
+        canonicalUrl={`/products/${slug}`}
         productData={{
           price: variant?.price || 0,
           availability: variant && variant.stock > 0 ? 'instock' : 'outofstock',
         }}
+      />
+      <StructuredData
+        data={[
+          buildOrganizationLD(contactPhone, settings.storeName),
+          buildWebsiteLD(settings.storeName),
+          buildBreadcrumbLD([
+            { name: 'Home', url: '/' },
+            { name: 'Shop', url: '/shop' },
+            { name: product?.name || 'Product', url: `/products/${slug}` },
+          ]),
+          buildProductLD(product, variant, settings.storeName),
+        ]}
       />
 
       {/* Back to Shop Navigation Button */}

@@ -11,6 +11,31 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  build: {
+    // Code splitting: separate vendor libraries from application code
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const moduleId = id.replaceAll('\\', '/');
+          if (/\/node_modules\/(react|react-dom|react-router-dom)\//.test(moduleId)) {
+            return 'react';
+          }
+          if (moduleId.includes('/node_modules/@tanstack/react-query/')) {
+            return 'tanstack';
+          }
+          if (moduleId.includes('/node_modules/axios/')) {
+            return 'axios';
+          }
+        },
+      },
+    },
+    // Enable source maps for production debugging
+    sourcemap: true,
+    // Compress CSS and JS
+    minify: 'esbuild',
+    // Report chunk sizes > 500kb
+    chunkSizeWarningLimit: 500,
+  },
   plugins: [
     react(),
     tailwindcss(),

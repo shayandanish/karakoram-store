@@ -1,10 +1,11 @@
 // ── Admin Users Page ──────────────────────────────────────────
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import api from '../../lib/axios';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
-import { fmtDate } from '../../lib/utils';
+import { fmtDate, fmtPKR } from '../../lib/utils';
 import SEO from '../../components/ui/SEO';
 import ResponsiveTable from '../../components/ResponsiveTable';
 
@@ -212,7 +213,7 @@ export default function AdminUsersPage() {
           type="search"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search by name or email…"
+          placeholder="Search by name, email, or phone…"
           aria-label="Search users"
           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-apricot-400"
         />
@@ -302,11 +303,31 @@ export default function AdminUsersPage() {
           <span className="text-sm text-stone-600 whitespace-nowrap">{fmtDate(row.createdAt)}</span>
         ),
       },
+      {
+        header: 'Orders',
+        accessor: 'orderCount',
+        render: (row) => (
+          <div className="text-xs text-stone-600 whitespace-nowrap">
+            <span className="font-semibold text-stone-900">{row.orderCount || 0}</span>
+            <span className="block text-[11px] text-stone-500">{fmtPKR(row.paidTotal || 0)} paid</span>
+            <span className="block text-[11px] text-stone-400">
+              {row.lastOrderAt ? `Last: ${fmtDate(row.lastOrderAt)}` : 'No orders'}
+            </span>
+          </div>
+        ),
+      },
     ]}
     rows={users}
     rowKey="_id"
     actions={(row) => (
       <>
+        <Link
+          to={`/admin/orders?search=${encodeURIComponent(row.email)}`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-100 transition"
+          title={`View orders for ${row.email}`}
+        >
+          View orders
+        </Link>
         {row.role !== 'admin' && !row.isVerified && row.status !== 'verified' && (
           <button
             type="button"

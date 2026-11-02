@@ -243,7 +243,7 @@ export default function AdminArtisansPage() {
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 rounded-full bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center">
                             {a.photo?.url ? (
-                              <img src={a.photo.url} alt={a.name} className="w-full h-full object-cover" />
+                              <img src={a.photo.url} alt={a.name} width={48} height={48} className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-sm font-bold text-mountain-500">
                                 {a.name.slice(0, 2).toUpperCase()}
@@ -402,7 +402,7 @@ export default function AdminArtisansPage() {
                 <div className="flex items-center gap-4">
                   {photo?.url ? (
                     <div className="w-16 h-16 rounded-full border border-stone-200 overflow-hidden relative group shrink-0">
-                      <img src={photo.url} alt={name} className="w-full h-full object-cover" />
+                      <img src={photo.url} alt={name} width={64} height={64} className="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick={() => setPhoto(null)}

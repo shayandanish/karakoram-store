@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../lib/axios';
@@ -5,6 +6,7 @@ import { fmtPKR, fmtDate } from '../../lib/utils';
 import SEO from '../../components/ui/SEO';
 
 export default function AdminDashboardPage() {
+  const [revenuePeriod, setRevenuePeriod] = useState('all');
   const {
     data: stats,
     isLoading,
@@ -13,12 +15,17 @@ export default function AdminDashboardPage() {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ['admin-stats'],
+    queryKey: ['admin-stats', revenuePeriod],
     queryFn: async () => {
-      const res = await api.get('/admin/stats');
+      const res = await api.get('/admin/stats', { params: { period: revenuePeriod } });
       return res.data;
     },
   });
+  const revenueOrderParams = new URLSearchParams({ payment: 'paid' });
+  if (stats?.revenueStartDate) {
+    revenueOrderParams.set('startDate', stats.revenueStartDate.slice(0, 10));
+  }
+  const revenueOrdersUrl = `/admin/orders?${revenueOrderParams.toString()}`;
 
   return (
     <div className="space-y-8">
@@ -35,26 +42,40 @@ export default function AdminDashboardPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="inline-flex items-center gap-2 self-start sm:self-auto px-4 py-2 bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 rounded-xl text-xs font-semibold shadow-xs transition active:scale-95 disabled:opacity-50"
-        >
-          <svg
-            className={`w-4 h-4 text-stone-500 ${isFetching ? 'animate-spin' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
+            Revenue period
+            <select
+              value={revenuePeriod}
+              onChange={(event) => setRevenuePeriod(event.target.value)}
+              className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-700 shadow-xs focus:outline-none focus:ring-2 focus:ring-apricot-400"
+            >
+              <option value="all">All time</option>
+              <option value="30d">Last 30 days</option>
+              <option value="7d">Last 7 days</option>
+            </select>
+          </label>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex items-center gap-2 self-start sm:self-auto px-4 py-2 bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 rounded-xl text-xs font-semibold shadow-xs transition active:scale-95 disabled:opacity-50"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          <span>{isFetching ? 'Refreshing...' : 'Refresh Data'}</span>
-        </button>
+            <svg
+              className={`w-4 h-4 text-stone-500 ${isFetching ? 'animate-spin' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <span>{isFetching ? 'Refreshing...' : 'Refresh Data'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Error state */}
@@ -70,13 +91,15 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      {!isError && (
+        <>
       {/* ── Metric Cards ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Total Revenue */}
-        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden">
+        <Link to={revenueOrdersUrl} className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-emerald-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-              Total Revenue
+              Paid Revenue
             </span>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -91,12 +114,14 @@ export default function AdminDashboardPage() {
               {fmtPKR(stats?.totalRevenue || 0)}
             </div>
           )}
-          <p className="text-xs text-stone-500 mt-1">Paid orders to date</p>
+          <p className="text-xs text-stone-500 mt-1">
+            {revenuePeriod === 'all' ? 'All time' : `Last ${revenuePeriod === '7d' ? '7' : '30'} days`}
+          </p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
-        </div>
+        </Link>
 
         {/* Total Orders */}
-        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden">
+        <Link to="/admin/orders" className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-sky-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
               Total Orders
@@ -116,10 +141,10 @@ export default function AdminDashboardPage() {
           )}
           <p className="text-xs text-stone-500 mt-1">Across all order statuses</p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-400 to-sky-500" />
-        </div>
+        </Link>
 
         {/* Pending Orders */}
-        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden">
+        <Link to="/admin/orders?status=pending" className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-amber-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
               Pending Orders
@@ -146,13 +171,13 @@ export default function AdminDashboardPage() {
           )}
           <p className="text-xs text-stone-500 mt-1">Awaiting fulfillment</p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
-        </div>
+        </Link>
 
         {/* Low-Stock Products */}
-        <div className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden">
+        <Link to="/admin/products?stock=low" className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-rose-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-              Low-Stock Items
+              Low-Stock Products
             </span>
             <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -174,9 +199,9 @@ export default function AdminDashboardPage() {
               )}
             </div>
           )}
-          <p className="text-xs text-stone-500 mt-1">Variants below threshold</p>
+          <p className="text-xs text-stone-500 mt-1">Active products with a variant below 10</p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-400 to-rose-500" />
-        </div>
+        </Link>
       </div>
 
       {/* ── Two Column: Low-Stock Products + Recent Orders ───────── */}
@@ -344,7 +369,7 @@ export default function AdminDashboardPage() {
               <p className="text-xs text-stone-500">Items with stock under 10 units</p>
             </div>
             <Link
-              to="/admin/products"
+              to="/admin/products?stock=low"
               className="text-xs font-semibold text-apricot-600 hover:text-apricot-700 transition"
             >
               All Items
@@ -414,6 +439,8 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+          </>
+      )}
     </div>
   );
 }

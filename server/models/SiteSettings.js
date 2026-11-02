@@ -1,5 +1,21 @@
 import mongoose from 'mongoose';
 
+const paymentMethodSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      enum: ['easypaisa', 'jazzcash', 'bank_transfer', 'cod', 'other'],
+      required: true,
+    },
+    name: { type: String, required: true, trim: true, maxlength: 60 },
+    enabled: { type: Boolean, default: false },
+    accountName: { type: String, default: '', trim: true, maxlength: 120 },
+    accountNumber: { type: String, default: '', trim: true, maxlength: 120 },
+    instructions: { type: String, default: '', trim: true, maxlength: 2000 },
+  },
+  { _id: false }
+);
+
 const siteSettingsSchema = new mongoose.Schema(
   {
     // Singleton key. There should only ever be one document.
@@ -13,6 +29,79 @@ const siteSettingsSchema = new mongoose.Schema(
       url: { type: String, default: '', trim: true },
       publicId: { type: String, default: '', trim: true },
       alt: { type: String, default: 'Karakoram Store', trim: true },
+    },
+    storeName: {
+      type: String,
+      default: 'Karakoram Store',
+      trim: true,
+      maxlength: 120,
+    },
+    storeTagline: {
+      type: String,
+      default: 'Authentic · Gilgit-Baltistan · Pakistan',
+      trim: true,
+      maxlength: 160,
+    },
+    storeDescription: {
+      type: String,
+      default: 'Handcrafted goods and artisan products from Gilgit-Baltistan, Pakistan.',
+      trim: true,
+      maxlength: 500,
+    },
+    shippingFee: {
+      type: Number,
+      default: 200,
+      min: 0,
+    },
+    easypaisaAccountName: {
+      type: String,
+      default: 'Shayan Danish',
+      trim: true,
+    },
+    easypaisaAccountNumber: {
+      type: String,
+      default: '03495144486',
+      trim: true,
+    },
+    enableEasypaisa: {
+      type: Boolean,
+      default: true,
+    },
+    paymentMethods: {
+      type: [paymentMethodSchema],
+      default: undefined,
+    },
+    bankTransferDetails: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    whatsappNumber: {
+      type: String,
+      default: '923495144486',
+      trim: true,
+    },
+    contactPhone: {
+      type: String,
+      default: '+923495144486',
+      trim: true,
+    },
+    contactEmail: {
+      type: String,
+      default: 'hello@karakoramstore.com',
+      trim: true,
+    },
+    enableCustomerWhatsApp: {
+      type: Boolean,
+      default: false,
+    },
+    enableCod: {
+      type: Boolean,
+      default: true,
+    },
+    enableBankTransfer: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

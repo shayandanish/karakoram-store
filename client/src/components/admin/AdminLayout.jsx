@@ -3,6 +3,7 @@ import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import SiteLogoMark from '../ui/SiteLogoMark';
 import PageLoading from '../ui/PageLoading';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 
 const NAV_ITEMS = [
   {
@@ -81,7 +82,7 @@ const NAV_ITEMS = [
   },
   {
     to: '/admin/settings',
-    label: 'Logo & Branding',
+    label: 'Store Settings',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -91,6 +92,7 @@ const NAV_ITEMS = [
 ];
 
 export default function AdminLayout() {
+  const { settings } = useSiteSettings();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -126,7 +128,7 @@ export default function AdminLayout() {
           <div className="flex items-center gap-2">
             <SiteLogoMark size="sm" maxWidthClass="max-w-[4rem]" shadowClass="shadow-xs" />
             <span className="font-display font-bold text-base tracking-wide text-cream-50">
-              Karakoram Admin
+              {settings.storeName} Admin
             </span>
           </div>
         </div>
@@ -158,7 +160,7 @@ export default function AdminLayout() {
               <div className="flex items-center gap-2.5">
                 <SiteLogoMark size="sm" maxWidthClass="max-w-[5rem]" shadowClass="shadow-xs" />
                 <div className="min-w-0">
-                  <h2 className="font-display font-semibold text-sm text-cream-50 truncate">Karakoram Admin</h2>
+                  <h2 className="font-display font-semibold text-sm text-cream-50 truncate">{settings.storeName} Admin</h2>
                   <p className="text-[11px] text-mountain-300">Management Console</p>
                 </div>
               </div>
@@ -233,7 +235,7 @@ export default function AdminLayout() {
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="font-display font-bold text-base tracking-wide text-white truncate">
-                  Karakoram
+                  {settings.storeName}
                 </span>
                 <span className="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded-sm bg-apricot-500/20 text-apricot-300 border border-apricot-500/30">
                   Admin

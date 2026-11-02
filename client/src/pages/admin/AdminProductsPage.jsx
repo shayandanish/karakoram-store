@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../lib/axios';
 import { fmtPKR, cloudinaryImage } from '../../lib/utils';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../components/ui/SEO';
 
 export default function AdminProductsPage() {
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [stockFilter, setStockFilter] = useState(searchParams.get('stock') || '');
+  const [activeFilter, setActiveFilter] = useState(searchParams.get('active') || '');
   const [page, setPage] = useState(1);
   const [deleteModalProduct, setDeleteModalProduct] = useState(null);
 
@@ -32,11 +35,13 @@ export default function AdminProductsPage() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['admin-products', search, categoryFilter, page],
+    queryKey: ['admin-products', search, categoryFilter, stockFilter, activeFilter, page],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search.trim()) params.append('search', search.trim());
       if (categoryFilter) params.append('category', categoryFilter);
+      if (stockFilter) params.append('stock', stockFilter);
+      if (activeFilter) params.append('active', activeFilter);
       params.append('page', page);
       params.append('limit', 15);
 
@@ -134,11 +139,46 @@ export default function AdminProductsPage() {
           </select>
         </div>
 
-        {(search || categoryFilter) && (
+        <div className="w-full md:w-52">
+          <select
+            value={stockFilter}
+            onChange={(e) => {
+              setStockFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter products by stock"
+            className="w-full py-2 px-3 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden transition"
+          >
+            <option value="">All stock levels</option>
+            <option value="low">Low stock (under 10)</option>
+            <option value="out">Out of stock</option>
+            <option value="in">In stock</option>
+          </select>
+        </div>
+
+        <div className="w-full md:w-40">
+          <select
+            value={activeFilter}
+            onChange={(e) => {
+              setActiveFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter products by visibility"
+            className="w-full py-2 px-3 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden transition"
+          >
+            <option value="">All visibility</option>
+            <option value="true">Active</option>
+            <option value="false">Draft</option>
+          </select>
+        </div>
+
+        {(search || categoryFilter || stockFilter || activeFilter) && (
           <button
             onClick={() => {
               setSearch('');
               setCategoryFilter('');
+              setStockFilter('');
+              setActiveFilter('');
               setPage(1);
             }}
             className="px-3 py-2 text-xs font-semibold text-stone-600 hover:text-stone-900 bg-stone-100 hover:bg-stone-200 rounded-xl transition"
@@ -178,7 +218,7 @@ export default function AdminProductsPage() {
             </svg>
             <p className="text-base font-semibold text-stone-700 font-display">No products found</p>
             <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto">
-              {search || categoryFilter
+              {search || categoryFilter || stockFilter || activeFilter
                 ? 'Try adjusting your search criteria or clearing filters.'
                 : 'Get started by creating your first product in the catalog.'}
             </p>
@@ -235,6 +275,8 @@ export default function AdminProductsPage() {
                                 <img
                                   src={thumb}
                                   alt={p.name}
+                                  width={48}
+                                  height={48}
                                   loading="lazy"
                                   decoding="async"
                                   className="w-full h-full object-cover"
@@ -338,6 +380,7 @@ export default function AdminProductsPage() {
                     ? fmtPKR(minPrice)
                     : `${fmtPKR(minPrice)} – ${fmtPKR(maxPrice)}`;
                 const totalStock = (p.variants || []).reduce((acc, v) => acc + (v.stock || 0), 0);
+                const hasLowStock = (p.variants || []).some((variant) => variant.stock < 10);
                 const thumb = p.images?.[0]?.url
                   ? cloudinaryImage(p.images[0].url, {
                       width: 112,
@@ -357,6 +400,8 @@ export default function AdminProductsPage() {
                           <img
                             src={thumb}
                             alt={p.name}
+                            width={56}
+                            height={56}
                             loading="lazy"
                             decoding="async"
                             className="w-full h-full object-cover"
@@ -381,7 +426,15 @@ export default function AdminProductsPage() {
                             {p.isActive ? 'Active' : 'Draft'}
                           </span>
                         </div>
-                        <p className="text-xs text-stone-500 mt-0.5">{p.category?.name || 'General'}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-stone-500">{p.category?.name || 'General'}</span>
+                          {p.isFeatured && (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">Featured</span>
+                          )}
+                          {p.isSeasonal && (
+                            <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-800">Seasonal</span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -394,7 +447,7 @@ export default function AdminProductsPage() {
                         <span className="text-stone-500 block text-[11px]">Stock:</span>
                         <span
                           className={`font-semibold ${
-                            totalStock === 0 ? 'text-rose-600' : totalStock < 10 ? 'text-amber-600' : 'text-emerald-700'
+                            totalStock === 0 ? 'text-rose-600' : hasLowStock ? 'text-amber-600' : 'text-emerald-700'
                           }`}
                         >
                           {totalStock} units ({p.variants?.length || 0} vars)

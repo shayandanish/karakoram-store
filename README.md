@@ -1,102 +1,85 @@
 # Karakoram Store
 
-A responsive MERN stack e-commerce web app for selling authentic products from Hunza, Gilgit-Baltistan, Pakistan.
+A Pakistan-focused artisan storefront for products from Hunza and Gilgit-Baltistan. The app includes a React storefront, an Express API, MongoDB persistence, Firebase-backed authentication, manual Easypaisa checkout, order tracking, and an admin workspace.
 
-## Project Structure
+## Repository
 
-This is a monorepo containing both the frontend and backend applications:
+- `client/` — React 19, Vite, Tailwind CSS, Vitest, and Playwright.
+- `server/` — Express 5 API, Mongoose models, Vitest tests, and optional Redis caching.
 
-- `/client` - React (Vite) frontend application with Tailwind CSS.
-- `/server` - Node.js (Express) backend application.
+## Requirements
 
-## Prerequisites
+- Node.js 24 (the CI runtime; Vite 8 requires a recent Node 20+ release).
+- MongoDB for local API and storefront use.
+- Optional: Firebase, Cloudinary, Resend/SMTP, and Redis. See `server/.env.example` for configuration.
 
-- Node.js (v18 or higher)
-- MongoDB (local or Atlas)
+## Local development
 
-## Setup Instructions
+1. Configure the API:
 
-### Backend Setup
-
-1. Navigate to the server directory:
-   ```bash
+   ```sh
    cd server
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Create a `.env` file based on `.env.example`:
-   ```bash
+   npm ci
    cp .env.example .env
    ```
-4. Update the `.env` file with your MongoDB URI, JWT secret, Cloudinary credentials, etc.
-5. Start the server (development mode):
-   ```bash
-   npm run dev
-   ```
-   The backend will start on `http://localhost:5000`.
 
-### Frontend Setup
+   Set `MONGODB_URI`, a strong `JWT_SECRET`, and any integrations you plan to use. Start the API with `npm run dev` (port 5000).
 
-1. Navigate to the client directory:
-   ```bash
+2. Configure and start the storefront in a second terminal:
+
+   ```sh
    cd client
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the Vite development server:
-   ```bash
+   npm ci
+   cp .env.example .env
    npm run dev
    ```
-   The frontend will start on `http://localhost:5173`.
 
-## Deploying to Vercel
+   Vite serves the app at `http://localhost:5173`. Set `VITE_API_URL` only when the API is not at `http://localhost:5000/api`.
 
-Deploy the frontend and backend as **two Vercel projects** from this repository. This is the recommended setup for a Vite + Express app.
+3. Optional seed scripts are available in `server/`: `npm run seed` and `npm run seed:admin`. Set the corresponding seed credentials in the local environment first.
 
-### 1. Backend project
+## Shipped storefront and admin capabilities
 
-- Import the repository into Vercel.
-- Set **Root Directory** to `server`.
-- Add the production environment variables from `server/.env.example`:
-  - `NODE_ENV=production`
-  - `MONGODB_URI` — MongoDB Atlas connection string
-  - `JWT_SECRET` and `JWT_EXPIRES_IN`
-  - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
-  - `CLIENT_URL` — the frontend production URL, for example `https://karakoram-store.vercel.app`
-  - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
-  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` for OTP emails
-- Deploy. The API is served from `https://<backend-project>.vercel.app/api`.
-- Vercel functions do not persist local files, so image uploads require Cloudinary in production.
+- Product catalog, categories, regions, product details, local cart, and responsive image delivery.
+- Guest checkout and Firebase/JWT-backed customer accounts.
+- Easypaisa orders with transaction details, payment-proof upload, order tracking, and status notifications.
+- Admin product, category, city, artisan, coupon, order, and store-settings management.
+- Admin overview with paid-revenue periods, pending-order and inventory alerts, customer order summaries, and coupon redemption results.
+- Product ratings/reviews and optional Redis caching.
 
-### 2. Frontend project
+Shipping rates and public payment/contact details are managed in **Admin → Settings**. Customer WhatsApp order notifications are disabled by default.
 
-- Import the same repository into a second Vercel project.
-- Set **Root Directory** to `client`.
-- Add these environment variables:
-  - `VITE_API_URL=https://<backend-project>.vercel.app/api`
-  - `VITE_WHATSAPP_NUMBER`
-  - `VITE_CLOUDINARY_CLOUD_NAME` — optional; the client derives the cloud name from each Cloudinary URL
-  - `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`
-- Deploy.
+## Admin daily workflow
 
-After the frontend URL is known, update the backend project's `CLIENT_URL` to that exact URL and redeploy the backend if it was set to a placeholder.
+1. Start at **Admin → Dashboard** to review paid revenue, orders awaiting action, recent purchases, and active products with low stock. Select a revenue period to inspect all-time, 30-day, or 7-day totals; selecting the metric opens the corresponding paid-order list.
+2. In **Admin → Orders**, search by order ID, customer name/email/phone, transaction reference, courier, or tracking number. Combine order/payment status, payment method, and date filters. Open an order to review proof, update its status, add courier details, or inspect the audit trail.
+3. Use **Admin → Products** stock filters to find low-stock, out-of-stock, and available products. Featured and seasonal flags are visible in the catalog list.
+4. **Admin → Users** shows each account’s order count, paid total, and latest order date; use **View orders** to open that customer’s order list.
+5. **Admin → Coupons** reports redemptions found in orders and the total discount granted. The usage counter remains the coupon’s configured redemption-limit tracker.
+6. In **Admin → Store Settings**, use the section shortcuts to edit store details or checkout payment methods. A failed settings load disables edits so fallback defaults cannot accidentally overwrite saved settings.
 
-### Important notes
+All `/api/admin` routes require a valid authenticated administrator. Keep admin credentials private and use HTTPS in production.
 
-- Use MongoDB Atlas, not a local MongoDB instance, because Vercel cannot reach your computer.
-- `server/uploads/` is intentionally ignored by Git. Configure Cloudinary before using the admin image uploads.
-- Cloudinary images are resized and converted with `f_auto,q_auto` in the browser. The logo is capped at 384×192, product cards request responsive widths, and only the active/next carousel slides are mounted.
-- Cross-site authentication uses `SameSite=None; Secure` cookies, so the frontend and backend must both use HTTPS in production.
-- If you use a custom domain, set `CLIENT_URL` to the custom frontend domain.
+## Checks
 
-## Features Planned
+```sh
+# Run from client/
+npm run lint
+npm run test:run
+npm run build
 
-- Authentication & Authorization
-- Product listings and filtering
-- Shopping Cart & Checkout
-- Order management
-- Cloudinary integration for product images
+# Run from server/
+npm run test:run
+```
+
+Playwright tests need a running API, MongoDB, and suitable test data. CI skips E2E by default; set the repository Actions variable `RUN_E2E` to `true` only after configuring the `E2E_MONGODB_URI` and `E2E_JWT_SECRET` Actions secrets and pre-seeding that test database.
+
+## Deployment
+
+Deploy `client/` and `server/` as separate Vercel projects, with each directory set as its project's root. Configure production values from `server/.env.example` in the API project, including `MONGODB_URI`, `JWT_SECRET`, `CLIENT_URL`, Firebase credentials, and Cloudinary credentials for image uploads. Set `VITE_API_URL` and the public Firebase settings in the client project. Both projects must use HTTPS for cross-origin auth cookies.
+
+The GitHub workflow builds the client on pushes and pull requests. Client deployment from `main` is opt-in: set the Actions variable `DEPLOY_VERCEL` to `true` after configuring the `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets. Deploy the backend Vercel project separately. Vercel's filesystem is ephemeral, so production uploads require Cloudinary.
+
+## Secrets
+
+Never commit `.env` files, production credentials, or database backups. `server/.env.atlas-backup` is intentionally ignored; rotate any credentials that may have been shared or exposed.

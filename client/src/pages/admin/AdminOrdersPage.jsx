@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/axios';
@@ -52,9 +52,10 @@ export default function AdminOrdersPage() {
 
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
-  const [paymentFilter, setPaymentFilter] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState(searchParams.get('payment') || '');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState(searchParams.get('paymentMethod') || '');
+  const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
+  const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
   const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [modalTab, setModalTab] = useState('details'); // 'details' | 'history' | 'notifications'
@@ -70,6 +71,17 @@ export default function AdminOrdersPage() {
   const [statusNote, setStatusNote] = useState('');
   const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [previewProofImage, setPreviewProofImage] = useState(null);
+  const invalidDateRange = Boolean(startDate && endDate && startDate > endDate);
+
+  useEffect(() => {
+    setSearch(searchParams.get('search') || '');
+    setStatusFilter(searchParams.get('status') || '');
+    setPaymentFilter(searchParams.get('payment') || '');
+    setPaymentMethodFilter(searchParams.get('paymentMethod') || '');
+    setStartDate(searchParams.get('startDate') || '');
+    setEndDate(searchParams.get('endDate') || '');
+    setPage(Math.max(1, Number(searchParams.get('page')) || 1));
+  }, [searchParams]);
 
   const openOrderDetails = (order) => {
     setSelectedOrder(order);
@@ -114,11 +126,13 @@ export default function AdminOrdersPage() {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ['admin-orders', statusFilter, paymentFilter, search, startDate, endDate, page],
+    queryKey: ['admin-orders', statusFilter, paymentFilter, paymentMethodFilter, search, startDate, endDate, page],
+    enabled: !invalidDateRange,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter) params.append('status', statusFilter);
       if (paymentFilter) params.append('payment', paymentFilter);
+      if (paymentMethodFilter) params.append('paymentMethod', paymentMethodFilter);
       if (search.trim()) params.append('search', search.trim());
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
@@ -326,7 +340,11 @@ export default function AdminOrdersPage() {
           <input
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            max={endDate || undefined}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700"
             title="Start date"
           />
@@ -334,18 +352,42 @@ export default function AdminOrdersPage() {
           <input
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            min={startDate || undefined}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              setPage(1);
+            }}
             className="px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs text-stone-700"
             title="End date"
           />
 
-          {(search || paymentFilter || startDate || endDate) && (
+          <select
+            value={paymentMethodFilter}
+            onChange={(e) => {
+              setPaymentMethodFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by payment method"
+            className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-stone-700"
+          >
+            <option value="">All Payment Methods</option>
+            <option value="easypaisa">Easypaisa</option>
+            <option value="jazzcash">JazzCash</option>
+            <option value="bank_transfer">Bank transfer</option>
+            <option value="COD">Cash on delivery</option>
+            <option value="other">Other</option>
+          </select>
+
+          {(search || paymentFilter || paymentMethodFilter || startDate || endDate) && (
             <button
               onClick={() => {
                 setSearch('');
                 setPaymentFilter('');
+                setPaymentMethodFilter('');
                 setStartDate('');
                 setEndDate('');
+                setStatusFilter('');
+                setPage(1);
               }}
               className="text-xs text-stone-500 hover:text-stone-800 underline px-2 cursor-pointer"
             >
@@ -353,6 +395,11 @@ export default function AdminOrdersPage() {
             </button>
           )}
         </div>
+        {invalidDateRange && (
+          <p className="w-full text-xs font-medium text-rose-600" role="alert">
+            Start date must be on or before end date.
+          </p>
+        )}
       </div>
 
       {/* Orders Table Container */}
@@ -463,7 +510,12 @@ export default function AdminOrdersPage() {
                             onClick={() => openOrderDetails(o)}
                             className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold rounded-lg text-xs transition cursor-pointer"
                           >
-                            Manage &rarr;
+                            {o.paymentScreenshot && o.paymentStatus === 'pending'
+                              ? 'Review payment'
+                              : ['confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery'].includes(o.orderStatus) && !o.shipment?.trackingId
+                              ? 'Add tracking'
+                              : 'Manage'}
+                            &rarr;
                           </button>
                         </td>
                       </tr>
@@ -506,6 +558,11 @@ export default function AdminOrdersPage() {
                       <div className="text-right">
                         <span className="font-bold text-mountain-900 block font-mono">{fmtPKR(o.total)}</span>
                         <span className="text-[10px] text-stone-400 capitalize">{o.paymentMethod}</span>
+                        <span className={`mt-0.5 block text-[10px] font-semibold capitalize ${
+                          o.paymentStatus === 'paid' ? 'text-emerald-700' : 'text-amber-700'
+                        }`}>
+                          Payment {o.paymentStatus}
+                        </span>
                         {o.paymentScreenshot && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.2 rounded mt-0.5">
                             <span>📷</span> Proof
@@ -520,7 +577,12 @@ export default function AdminOrdersPage() {
                         onClick={() => openOrderDetails(o)}
                         className="px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold rounded-lg transition"
                       >
-                        Manage &rarr;
+                        {o.paymentScreenshot && o.paymentStatus === 'pending'
+                          ? 'Review payment'
+                          : ['confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery'].includes(o.orderStatus) && !o.shipment?.trackingId
+                          ? 'Add tracking'
+                          : 'Manage'}
+                        &rarr;
                       </button>
                     </div>
                   </div>
@@ -717,6 +779,8 @@ export default function AdminOrdersPage() {
                           <img
                             src={selectedOrder.paymentScreenshot}
                             alt="Customer Payment Receipt"
+                            width={150}
+                            height={96}
                             className="w-full h-24 object-cover object-top group-hover:scale-105 transition"
                           />
                           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[10px] font-bold">
@@ -1131,6 +1195,8 @@ export default function AdminOrdersPage() {
               <img
                 src={previewProofImage}
                 alt="Payment Proof Full Resolution"
+                width={800}
+                height={600}
                 className="max-h-[68vh] object-contain rounded-xl shadow-xs"
               />
             </div>

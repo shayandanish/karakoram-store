@@ -236,6 +236,7 @@ export default function AdminCouponsPage() {
                     <th className="py-3 px-4">Discount</th>
                     <th className="py-3 px-4">Min. Spend</th>
                     <th className="py-3 px-4">Usage</th>
+                    <th className="py-3 px-4">Paid Performance</th>
                     <th className="py-3 px-4">Expiry</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-5 text-right">Actions</th>
@@ -264,6 +265,16 @@ export default function AdminCouponsPage() {
 
                         <td className="py-3.5 px-4 text-xs text-stone-600">
                           <span className="font-semibold text-stone-900">{c.usedCount || 0}</span> / {c.usageLimit}
+                          <span className="block text-[10px] text-stone-400">
+                            {c.redemptionCount || 0} orders found
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-xs text-stone-600">
+                          <span className="font-semibold text-stone-900">{fmtPKR(c.orderTotal || 0)} sales</span>
+                          <span className="block text-[10px] text-stone-400">
+                            {c.paidOrderCount || 0} paid · {fmtPKR(c.discountTotal || 0)} discount
+                          </span>
                         </td>
 
                         <td className="py-3.5 px-4 text-xs text-stone-600">
@@ -353,6 +364,12 @@ export default function AdminCouponsPage() {
                         <span className="text-stone-500 block text-[11px]">Redemptions:</span>
                         <span className="font-semibold text-stone-900">
                           {c.usedCount || 0} / {c.usageLimit}
+                        </span>
+                        <span className="block text-[11px] text-stone-500">
+                          {c.redemptionCount || 0} orders · {fmtPKR(c.orderTotal || 0)} paid sales
+                        </span>
+                        <span className="block text-[11px] text-stone-500">
+                          {fmtPKR(c.discountTotal || 0)} discount on paid orders
                         </span>
                       </div>
                     </div>

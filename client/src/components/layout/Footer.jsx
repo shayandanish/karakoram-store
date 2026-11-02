@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/axios';
-import { getCleanWhatsAppNumber } from '../../lib/utils';
+import { fmtPKR, getCleanWhatsAppNumber } from '../../lib/utils';
 import { REGIONS } from '../../lib/regions';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
 import SiteLogoMark from '../ui/SiteLogoMark';
@@ -79,8 +79,8 @@ function NavCol({ title, links }) {
 }
 
 export default function Footer() {
-  const wa = getCleanWhatsAppNumber();
-  const { logo } = useSiteSettings();
+  const { logo, settings } = useSiteSettings();
+  const wa = getCleanWhatsAppNumber(settings.whatsappNumber);
   const hasCustomLogo = Boolean(logo?.url);
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -120,7 +120,7 @@ export default function Footer() {
           {/* Brand column – takes 2/6 on desktop */}
           <div className="sm:col-span-2 lg:col-span-2 space-y-5">
             {/* Logo */}
-            <Link to="/" className="inline-flex items-center gap-3 group" aria-label="Karakoram Store – Home">
+            <Link to="/" className="inline-flex items-center gap-3 group" aria-label={`${settings.storeName} – Home`}>
               <SiteLogoMark
                 size={hasCustomLogo ? '4xl' : '2xl'}
                 maxWidthClass={hasCustomLogo ? 'max-w-[12rem]' : 'max-w-[10rem]'}
@@ -129,18 +129,16 @@ export default function Footer() {
               />
               <div>
                 <div className="font-display font-bold text-xl text-cream-50 leading-tight group-hover:text-apricot-300 transition-colors">
-                  Karakoram Store
+                  {settings.storeName}
                 </div>
                 <div className="text-[11px] text-mountain-400 font-medium tracking-widest uppercase">
-                  Authentic · Gilgit-Baltistan · Pakistan
+                  {settings.storeTagline}
                 </div>
               </div>
             </Link>
 
             <p className="text-mountain-300 text-sm leading-relaxed max-w-sm">
-              The finest handcrafted dry fruits, herbs, oils, and handicrafts — sourced
-              directly from the valleys of Gilgit-Baltistan. Every purchase
-              supports local artisans and families.
+              {settings.storeDescription}
             </p>
 
             {/* Trust badges */}
@@ -162,7 +160,7 @@ export default function Footer() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
                     </svg>
                   ),
-                  title: 'Rs. 200',
+                  title: fmtPKR(settings.shippingFee),
                   sub: 'Flat shipping',
                 },
                 {
@@ -190,7 +188,7 @@ export default function Footer() {
             {/* WhatsApp CTA */}
             {wa && (
               <a
-                href={`https://wa.me/${wa}?text=${encodeURIComponent('Hello! I want to know more about Karakoram Store products.')}`}
+                href={`https://wa.me/${wa}?text=${encodeURIComponent(`Hello! I want to know more about ${settings.storeName} products.`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2.5 px-5 py-2.5 bg-[#25D366] hover:bg-[#1ebe5d] active:scale-95 text-white rounded-full text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-lg"
@@ -221,17 +219,28 @@ export default function Footer() {
             <ul className="space-y-4 text-sm text-mountain-300">
               <li>
                 <a
-                  href="mailto:shayandanish2002@gmail.com"
+                  href={`mailto:${settings.contactEmail}`}
                   className="flex items-start gap-2.5 hover:text-apricot-300 transition-colors group"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" className="w-4 h-4 shrink-0 text-apricot-400 mt-0.5" aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
                   <span className="group-hover:underline underline-offset-2 break-all">
-                    shayandanish2002@gmail.com
+                    {settings.contactEmail}
                   </span>
                 </a>
               </li>
+              {settings.contactPhone && (
+                <li>
+                  <a
+                    href={`tel:${settings.contactPhone}`}
+                    className="flex items-start gap-2.5 hover:text-apricot-300 transition-colors group"
+                  >
+                    <span className="text-apricot-400" aria-hidden="true">☎</span>
+                    <span className="group-hover:underline underline-offset-2">{settings.contactPhone}</span>
+                  </a>
+                </li>
+              )}
               {wa && (
                 <li>
                   <a
@@ -267,8 +276,10 @@ export default function Footer() {
               </p>
               <div className="rounded-xl overflow-hidden border border-mountain-700/60 bg-mountain-800/50 shadow-lg">
                 <iframe
-                  title="Karakoram Store location on map"
+                  title={`${settings.storeName} location on map`}
                   src="https://maps.google.com/maps?q=36.3191588,74.6664695&z=17&output=embed"
+                  width="600"
+                  height="400"
                   className="w-full h-44"
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
@@ -293,13 +304,13 @@ export default function Footer() {
         {/* ── Bottom bar ────────────────────────────────────────── */}
         <div className="pt-7 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-mountain-500 order-2 sm:order-1">
-            © {CURRENT_YEAR} Karakoram Store. All rights reserved.
+            © {CURRENT_YEAR} {settings.storeName}. All rights reserved.
           </p>
 
           <div className="flex items-center gap-2 order-1 sm:order-2">
             <span className="text-xs text-mountain-500">Handcrafted with</span>
             <span className="text-apricot-400" aria-label="love">❤️</span>
-            <span className="text-xs text-mountain-500">from the Karakoram Mountains</span>
+            <span className="text-xs text-mountain-500">from {settings.storeTagline}</span>
           </div>
 
           <button

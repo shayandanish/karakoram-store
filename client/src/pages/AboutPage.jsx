@@ -1,13 +1,16 @@
 // ── About Page ─────────────────────────────────────────────────
 import { Link } from 'react-router-dom';
 import SEO from '../components/ui/SEO';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 export default function AboutPage() {
+  const { settings } = useSiteSettings();
   return (
     <div className="py-12">
       <SEO
-        title="About Us – The Karakoram Heritage"
-        description="Learn the story behind Karakoram Store. Bringing authentic, preservative-free organic dried fruits, honey, and artisan crafts from Hunza Valley to your doorstep."
+        title="About Us"
+        description={`Learn the story behind ${settings.storeName}. ${settings.storeDescription}`}
+        canonicalUrl="/about"
       />
 
       {/* Back to Home Navigation Button */}

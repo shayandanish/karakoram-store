@@ -19,11 +19,11 @@ export default function SiteLogoMark({
   className = '',
   maxWidthClass = 'max-w-[9rem]',
   shadowClass = 'shadow-sm',
-  alt = 'Karakoram Store',
+  alt = '',
   priority = false,
   sizes = '(min-width: 640px) 192px, 96px',
 }) {
-  const { logo } = useSiteSettings();
+  const { logo, settings } = useSiteSettings();
   const [failedUrl, setFailedUrl] = useState('');
   const dimensions = SIZES[size] || SIZES.md;
   const imageUrl = logo?.url || '';
@@ -51,7 +51,9 @@ export default function SiteLogoMark({
           src={optimizedUrl}
           srcSet={logoSrcSet}
           sizes={sizes}
-          alt={logo?.alt || alt}
+          alt={logo?.alt || alt || settings.storeName}
+          width={384}
+          height={192}
           loading={priority ? 'eager' : 'lazy'}
           fetchPriority={priority ? 'high' : 'auto'}
           decoding="async"

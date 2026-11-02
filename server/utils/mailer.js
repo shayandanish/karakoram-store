@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { Resend } from 'resend';
+import SiteSettings from '../models/SiteSettings.js';
+import { resolvePaymentMethods } from './paymentMethods.js';
 
 // Initialize Resend client if API key is provided
 const getResendClient = () => {
@@ -12,6 +14,15 @@ const getResendClient = () => {
 };
 
 let cachedTransporter = null;
+
+const escapeHtml = (value = '') =>
+  String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character]);
 
 /**
  * Creates and returns a Nodemailer transporter.
@@ -90,13 +101,16 @@ export const generateOtp = () => {
  * Sends a 6-digit OTP verification email to the user.
  */
 export const sendOtpEmail = async ({ to, otp, userName = 'Customer' }) => {
+  const settings = await SiteSettings.getSingleton();
+  const storeName = settings.storeName || 'Karakoram Store';
   const from =
     process.env.EMAIL_FROM ||
-    process.env.SMTP_USER ||
-    'Karakoram Store <onboarding@resend.dev>';
+    (process.env.SMTP_USER
+      ? `${storeName} <${process.env.SMTP_USER}>`
+      : `${storeName} <onboarding@resend.dev>`);
 
-  const subject = `Your Verification Code: ${otp} - Karakoram Store`;
-  const text = `Hello ${userName},\n\nYour 6-digit verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you did not request this verification code, please ignore this email.\n\nBest regards,\nKarakoram Store Team`;
+  const subject = `Your Verification Code: ${otp} - ${storeName}`;
+  const text = `Hello ${userName},\n\nYour 6-digit verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nIf you did not request this verification code, please ignore this email.\n\nBest regards,\n${storeName} Team`;
 
   const html = `
 <!DOCTYPE html>
@@ -107,7 +121,7 @@ export const sendOtpEmail = async ({ to, otp, userName = 'Customer' }) => {
 </head>
 <body style="margin: 0; padding: 0; background-color: #f4f6f8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1e293b;">
   <div style="max-width: 500px; margin: 30px auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-    <h2 style="color: #1a2a3a; margin-top: 0;">🏔️ Karakoram Store</h2>
+    <h2 style="color: #1a2a3a; margin-top: 0;">${escapeHtml(storeName)}</h2>
     <p>Hello ${userName},</p>
     <p>Your verification code is:</p>
     <div style="font-size: 32px; font-weight: bold; letter-spacing: 4px; color: #f89535; text-align: center; margin: 20px 0; background: #fff8f0; padding: 12px; border-radius: 8px;">
@@ -311,12 +325,6 @@ function buildItemsHtml(items = []) {
  */
 export async function sendOrderNotificationEmail(order, event, recipient = null) {
   try {
-    const fromAddress = (process.env.SMTP_USER || process.env.EMAIL_USER || 'inamkarim348@gmail.com').trim();
-    const from = {
-      name: 'Karakoram Store',
-      address: fromAddress,
-    };
-
     const targetEmail = recipient?.email || order.guestEmail || order.user?.email;
     const targetName = recipient?.name || order.shippingAddress?.name || order.guestName || 'Valued Customer';
 
@@ -325,8 +333,41 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
       return { success: false, error: 'No recipient email found' };
     }
 
+    const paymentSettings = await SiteSettings.getSingleton();
+    const storeName = paymentSettings.storeName || 'Karakoram Store';
+    const fromAddress = (process.env.SMTP_USER || process.env.EMAIL_USER || 'inamkarim348@gmail.com').trim();
+    const from = {
+      name: storeName,
+      address: fromAddress,
+    };
     const displayOrderId = order.orderId || `#${String(order._id).slice(-8).toUpperCase()}`;
+    const paymentMethodId = String(order.paymentMethod || 'easypaisa').toLowerCase();
+    const configuredPaymentMethod = resolvePaymentMethods(paymentSettings).find(
+      (method) => method.id === paymentMethodId
+    );
+    const hasPaymentSnapshot = Boolean(
+      order.paymentDetails?.name ||
+      order.paymentDetails?.accountName ||
+      order.paymentDetails?.accountNumber ||
+      order.paymentDetails?.instructions
+    );
+    const paymentName =
+      (hasPaymentSnapshot && order.paymentDetails.name) ||
+      configuredPaymentMethod?.name ||
+      paymentMethodId;
+    const paymentAccountName = hasPaymentSnapshot
+      ? order.paymentDetails.accountName || ''
+      : configuredPaymentMethod?.accountName || '';
+    const paymentAccountNumber = hasPaymentSnapshot
+      ? order.paymentDetails.accountNumber || ''
+      : configuredPaymentMethod?.accountNumber || '';
+    const paymentInstructions = hasPaymentSnapshot
+      ? order.paymentDetails.instructions || ''
+      : configuredPaymentMethod?.instructions || '';
+    const contactWhatsApp = paymentSettings.whatsappNumber || '923495144486';
     const meta = getEventMeta(event, displayOrderId);
+    meta.subject = meta.subject.replace(/Karakoram Store/g, storeName);
+    meta.subtitle = meta.subtitle.replace(/Karakoram Store/g, storeName);
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const trackUrl = `${clientUrl}/track-order?orderId=${encodeURIComponent(order.orderId || order._id)}&phone=${encodeURIComponent(order.shippingAddress?.phone || order.guestPhone || '')}`;
 
@@ -353,7 +394,7 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
           <tr>
             <td style="background: linear-gradient(135deg, #1a2a3a 0%, #2c3e50 100%); padding: 36px 32px; text-align: center; color: #ffffff;">
               <div style="font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4px;">
-                🏔️ Karakoram Store
+                ${escapeHtml(storeName)}
               </div>
               <div style="color: #f89535; font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 2.5px;">
                 Handcrafted Goods from Hunza & Gilgit
@@ -481,7 +522,7 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
             </td>
           </tr>
 
-          ${order.paymentStatus !== 'paid' ? `
+          ${order.paymentStatus !== 'paid' && paymentMethodId !== 'cod' ? `
           <!-- Pending Payment Notice -->
           <tr>
             <td style="padding: 0 32px 20px 32px;">
@@ -490,14 +531,15 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
                   ⚠️ Payment Pending — Action Required
                 </div>
                 <p style="margin: 0 0 10px 0; font-size: 13px; line-height: 1.6; color: #78350f;">
-                  Please transfer <strong>${fmtPKR(order.total)}</strong> to our official Easypaisa account to complete your order:
+                  Please transfer <strong>${fmtPKR(order.total)}</strong> using ${paymentName} to complete your order:
                 </p>
                 <div style="background-color: #ffffff; border-radius: 10px; padding: 12px 16px; border: 1px solid #fef3c7; font-size: 13px; color: #1e293b; margin-bottom: 12px;">
-                  <div><strong>Account Title:</strong> Shayan Danish</div>
-                  <div style="margin-top: 4px;"><strong>Easypaisa Mobile:</strong> <span style="font-family: monospace; font-size: 14px; color: #0284c7; font-weight: 700;">0349 5144486</span></div>
+                  ${paymentAccountName ? `<div><strong>Account Title:</strong> ${paymentAccountName}</div>` : ''}
+                  ${paymentAccountNumber ? `<div style="margin-top: 4px;"><strong>Account Number / IBAN:</strong> <span style="font-family: monospace; font-size: 14px; color: #0284c7; font-weight: 700;">${paymentAccountNumber}</span></div>` : ''}
+                  ${paymentInstructions ? `<div style="margin-top: 8px;">${paymentInstructions}</div>` : ''}
                 </div>
                 <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #92400e;">
-                  💬 Reply to this email or send your 11-digit TRX ID / screenshot on WhatsApp at <strong>0349 5144486</strong>.<br>
+                  💬 Reply to this email or submit your transaction reference / screenshot through the order tracking page.<br>
                   📞 <em>Our verification team will also contact you on <strong>${order.shippingAddress?.phone || order.guestPhone}</strong> to confirm your details before dispatching your package.</em>
                 </p>
               </div>
@@ -525,7 +567,7 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
                       💳 Payment Information
                     </div>
                     <div style="font-size: 13px; font-weight: 700; color: #0f172a;">
-                      ${order.paymentMethod === 'easypaisa' ? 'Easypaisa Mobile Account' : order.paymentMethod?.toUpperCase() || 'Easypaisa'}
+                      ${paymentName}
                     </div>
                     <div style="font-size: 12px; color: #475569; margin-top: 4px;">
                       Status: <strong style="text-transform: capitalize; color: ${order.paymentStatus === 'paid' ? '#16a34a' : '#d97706'};">${order.paymentStatus || 'Pending'}</strong>
@@ -544,10 +586,10 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
           <tr>
             <td style="background-color: #f1f5f9; padding: 24px 32px; text-align: center; color: #64748b; font-size: 12px;">
               <p style="margin: 0 0 6px 0;">
-                Have questions or need assistance? Reply directly or message us on WhatsApp: <strong>0349 5144486</strong>
+                Have questions or need assistance? Reply directly or message us on WhatsApp: <strong>${contactWhatsApp}</strong>
               </p>
               <p style="margin: 0; color: #94a3b8;">
-                &copy; ${new Date().getFullYear()} Karakoram Store. Direct from Artisans of Gilgit-Baltistan, Pakistan.
+                &copy; ${new Date().getFullYear()} ${escapeHtml(storeName)}. ${escapeHtml(paymentSettings.storeDescription || '')}
               </p>
             </td>
           </tr>
@@ -560,7 +602,7 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
 </html>`;
 
     const plainText = [
-      `🏔️ Karakoram Store — ${meta.heading}`,
+      `${storeName} — ${meta.heading}`,
       `Order ID: ${displayOrderId}`,
       `Customer: ${targetName}`,
       `Date: ${fmtDate(order.createdAt)}`,
@@ -573,22 +615,23 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
       order.discount ? `Discount: -${fmtPKR(order.discount)}` : '',
       `Total: ${fmtPKR(order.total)}`,
       '',
-      `Payment Method: ${order.paymentMethod?.toUpperCase() || 'EASYPAISA'}`,
+      `Payment Method: ${paymentName}`,
       `Payment Status: ${order.paymentStatus?.toUpperCase() || 'PENDING'}`,
       order.transactionId ? `TRX ID: ${order.transactionId}` : '',
       '',
-      order.paymentStatus !== 'paid' ? [
+      order.paymentStatus !== 'paid' && paymentMethodId !== 'cod' ? [
         'PAYMENT INSTRUCTIONS (PENDING):',
-        'Please send payment via Easypaisa to:',
-        '• Account Title: Shayan Danish',
-        '• Mobile / Easypaisa: 0349 5144486',
-        '• Share TRX ID on WhatsApp: 0349 5144486',
+        `Please send payment via ${paymentName}:`,
+        paymentAccountName ? `• Account Title: ${paymentAccountName}` : '',
+        paymentAccountNumber ? `• Account Number / IBAN: ${paymentAccountNumber}` : '',
+        paymentInstructions,
+        '• Submit the transaction reference or payment screenshot through the order tracking page.',
         `Our team will also contact you at ${order.shippingAddress?.phone || order.guestPhone || ''} for confirmation.`,
         '',
       ].join('\n') : '',
       `Track your order online: ${trackUrl}`,
       '',
-      'Karakoram Store — Direct from Artisans of Gilgit-Baltistan'
+      `${storeName} — ${paymentSettings.storeTagline || ''}`
     ].filter(Boolean).join('\n');
 
     // 1. Send via Resend HTTPS API if RESEND_API_KEY is configured
@@ -596,7 +639,7 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
     if (resend) {
       const resendFrom =
         process.env.EMAIL_FROM ||
-        'Karakoram Store <onboarding@resend.dev>';
+        `${storeName} <onboarding@resend.dev>`;
       const replyTo =
         process.env.REPLY_TO_EMAIL ||
         fromAddress;

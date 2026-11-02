@@ -1,12 +1,14 @@
 // ── Floating WhatsApp Button on all pages ─────────────────────
 import { getCleanWhatsAppNumber } from '../../lib/utils';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 
 export default function FloatingWhatsApp() {
-  const number = getCleanWhatsAppNumber();
+  const { settings } = useSiteSettings();
+  const number = getCleanWhatsAppNumber(settings.whatsappNumber);
   if (!number) return null;
 
   const defaultMsg = encodeURIComponent(
-    'Hello Karakoram Store! I have a question about your products.'
+    `Hello ${settings.storeName}! I have a question about your products.`
   );
   const waUrl = `https://wa.me/${number}?text=${defaultMsg}`;
 
@@ -29,7 +31,7 @@ export default function FloatingWhatsApp() {
         target="_blank"
         rel="noopener noreferrer"
         id="floating-whatsapp-btn"
-        aria-label="Chat with Karakoram Store on WhatsApp"
+        aria-label={`Chat with ${settings.storeName} on WhatsApp`}
         aria-describedby="wa-tooltip"
         className="relative flex items-center justify-center w-14 h-14 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#25D366]/40"
       >

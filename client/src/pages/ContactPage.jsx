@@ -4,10 +4,12 @@ import { Link } from 'react-router-dom';
 import { getCleanWhatsAppNumber } from '../lib/utils';
 import { validatePhoneNumber, COUNTRY_CODES } from '../lib/phoneUtils';
 import SEO from '../components/ui/SEO';
+import { useSiteSettings } from '../hooks/useSiteSettings';
 
 
 export default function ContactPage() {
-  const wa = getCleanWhatsAppNumber();
+  const { settings } = useSiteSettings();
+  const wa = getCleanWhatsAppNumber(settings.whatsappNumber);
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -41,7 +43,7 @@ export default function ContactPage() {
 
     if (wa) {
       const msg =
-        `*Customer Inquiry - Karakoram Store*\n\n` +
+        `*Customer Inquiry - ${settings.storeName}*\n\n` +
         `• Name: ${form.name.trim()}\n` +
         `• Phone: ${form.phone.trim() || 'N/A'}\n` +
         `• Subject: ${form.subject}\n` +
@@ -55,7 +57,8 @@ export default function ContactPage() {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <SEO
         title="Contact Us"
-        description="Get in touch with Karakoram Store. Reach out via WhatsApp or phone for order inquiries, wholesale orders, and customer assistance."
+        description={`Get in touch with ${settings.storeName}. Reach out via WhatsApp or phone for order inquiries, wholesale orders, and customer assistance.`}
+        canonicalUrl="/contact"
       />
 
       {/* Back to Home Navigation Button */}
@@ -110,7 +113,26 @@ export default function ContactPage() {
                 <div>
                   <p className="font-semibold text-mountain-800">Delivery Information</p>
                   <p className="text-mountain-600 text-xs mt-0.5">
-                    Flat Rs. 200 delivery across Pakistan (3–5 business days). Payment via Easypaisa.
+                    Flat {settings.shippingFee} PKR delivery across Pakistan (3–5 business days). Payment via Easypaisa.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="text-xl">☎️</span>
+                <div>
+                  <p className="font-semibold text-mountain-800">Store contact</p>
+                  <p className="text-mountain-600 text-xs mt-0.5">
+                    <a href={`tel:${settings.contactPhone}`} className="hover:text-apricot-600">
+                      {settings.contactPhone}
+                    </a>
+                    {settings.contactEmail && (
+                      <>
+                        {' · '}
+                        <a href={`mailto:${settings.contactEmail}`} className="hover:text-apricot-600">
+                          {settings.contactEmail}
+                        </a>
+                      </>
+                    )}
                   </p>
                 </div>
               </div>

@@ -9,31 +9,13 @@ import ErrorState from '../components/ui/ErrorState';
 import SEO from '../components/ui/SEO';
 import RegionsCarousel from '../components/ui/RegionsCarousel';
 import { useSiteSettings } from '../hooks/useSiteSettings';
-import { cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
+import { cloudinaryImage, cloudinarySrcSet, fmtPKR } from '../lib/utils';
 
 const HERO_STATS = [
   { icon: 'bag', value: '100+', label: 'Curated products' },
   { icon: 'heart', value: '10', label: 'Happy customers' },
   { icon: 'mountain', value: '100%', label: 'Locally sourced' },
   { icon: 'wallet', value: 'Easypaisa', label: 'Instant transfer' },
-];
-
-const PROMISES = [
-  {
-    icon: 'truck',
-    title: 'Nationwide delivery',
-    desc: 'Flat Rs. 200 shipping anywhere in Pakistan.',
-  },
-  {
-    icon: 'wallet',
-    title: 'Easypaisa payment',
-    desc: 'Fast, secure transfer to 0349 5144486 (Shayan Danish).',
-  },
-  {
-    icon: 'mountain',
-    title: 'Straight from source',
-    desc: 'Sourced directly from Gilgit-Baltistan farmers and artisans.',
-  },
 ];
 
 // Shown while the city/region API is loading or if no region images exist.
@@ -317,6 +299,7 @@ function LandingSubnav({ categories }) {
 export default function HomePage() {
   const [activeRegionIndex, setActiveRegionIndex] = useState(0);
   const [regionsPaused, setRegionsPaused] = useState(false);
+  const { settings } = useSiteSettings();
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories'],
@@ -343,6 +326,23 @@ export default function HomePage() {
 
   const categories = categoriesData || [];
   const featured = featuredData?.products || [];
+  const promises = [
+    {
+      icon: 'truck',
+      title: 'Nationwide delivery',
+      desc: `Flat ${fmtPKR(settings.shippingFee)} shipping anywhere in Pakistan.`,
+    },
+    {
+      icon: 'wallet',
+      title: 'Easypaisa payment',
+      desc: `Fast, secure transfer to ${settings.easypaisaAccountNumber} (${settings.easypaisaAccountName}).`,
+    },
+    {
+      icon: 'mountain',
+      title: 'Straight from source',
+      desc: 'Sourced directly from Gilgit-Baltistan farmers and artisans.',
+    },
+  ];
 
   const cityRegions = (citiesData?.cities || []).filter((region) => region.image?.url);
   const heroRegions =
@@ -379,11 +379,12 @@ export default function HomePage() {
       <SEO
         title="Authentic Gifts & Organic Food from Gilgit-Baltistan"
         description="Shop authentic handcrafted goods from Gilgit-Baltistan — Hunza, Skardu, Ghizer, Astore, and beyond. Pure sun-dried apricots, organic honey, Pakol caps, and handmade leather accessories."
+        canonicalUrl="/"
       />
 
       <LandingSubnav categories={categories} />
       <h1 className="sr-only">
-        Karakoram Store — Authentic gifts and organic food from Gilgit-Baltistan
+        {settings.storeName} — {settings.storeTagline}
       </h1>
 
       {/* ── Hero ─────────────────────────────────────────────── */}
@@ -410,7 +411,7 @@ export default function HomePage() {
               <h2 className="mt-5 font-display text-4xl font-bold leading-[1.08] text-mountain-900 sm:text-5xl lg:text-[3.5rem]">
                 Treasures of the{' '}
                 <span className="relative whitespace-nowrap">
-                  <span className="relative z-10 text-apricot-600">Karakoram</span>
+                  <span className="relative z-10 text-apricot-600">{settings.storeName}</span>
                   <span
                     className="absolute inset-x-0 bottom-1 -z-0 h-3 rounded-full bg-apricot-200/80"
                     aria-hidden="true"
@@ -534,6 +535,8 @@ export default function HomePage() {
                         sizes="(min-width: 1024px) 640px, 100vw"
                         alt={isActive ? region.name : ''}
                         aria-hidden={!isActive}
+                        width={1280}
+                        height={960}
                         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out ${
                           isActive ? 'opacity-100' : 'opacity-0'
                         }`}
@@ -739,7 +742,7 @@ export default function HomePage() {
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-apricot-600">
-                The Karakoram promise
+                Our promise
               </p>
               <h2 className="mt-2 font-display text-2xl font-bold text-mountain-900 sm:text-3xl">
                 Shop with confidence
@@ -758,7 +761,7 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3 sm:gap-4">
-            {PROMISES.map((item) => (
+            {promises.map((item) => (
               <div
                 key={item.title}
                 className="group flex items-start gap-4 rounded-2xl border border-cream-200 bg-cream-50 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-apricot-200 hover:shadow-sm"

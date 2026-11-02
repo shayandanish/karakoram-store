@@ -57,7 +57,7 @@ const orderSchema = new mongoose.Schema(
     },
 
     // Optional: null for guest orders
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
 
     // Guest contact (required when user is null)
     guestName: String,
@@ -69,9 +69,15 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ['easypaisa', 'COD', 'bank_transfer'],
+      enum: ['easypaisa', 'COD', 'bank_transfer', 'jazzcash', 'other'],
       default: 'easypaisa',
       required: true,
+    },
+    paymentDetails: {
+      name: { type: String, default: '' },
+      accountName: { type: String, default: '' },
+      accountNumber: { type: String, default: '' },
+      instructions: { type: String, default: '' },
     },
     transactionId: {
       type: String,
@@ -131,7 +137,7 @@ const orderSchema = new mongoose.Schema(
     discount: { type: Number, default: 0 },
     total: { type: Number, required: true },
 
-    couponCode: { type: String, default: '' },
+    couponCode: { type: String, default: '', index: true },
     notes: { type: String, default: '' },
     adminNotes: { type: String, default: '' },
   },

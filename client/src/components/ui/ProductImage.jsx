@@ -12,6 +12,8 @@ export default function ProductImage({
   loading = 'lazy',
   fetchPriority = 'auto',
   decoding = 'async',
+  width = 640,
+  height = 800,
 }) {
   const [hasError, setHasError] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(null);
@@ -27,6 +29,8 @@ export default function ProductImage({
         srcSet={srcSet}
         sizes={sizes}
         alt={alt || 'Product image'}
+        width={width}
+        height={height}
         loading={loading}
         fetchPriority={fetchPriority}
         decoding={decoding}

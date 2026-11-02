@@ -1,21 +1,23 @@
-// ── SEO Component: updates page titles, meta descriptions, and Open Graph tags ──
+// ── SEO Component: updates page titles, meta descriptions, Open Graph,
+// canonical URLs, and Twitter card tags ────────────────────────────────
 import { useEffect } from 'react';
+import { useSiteSettings } from '../../hooks/useSiteSettings';
 
-const DEFAULT_TITLE = 'Karakoram Store – Authentic Gifts from the Himalayas';
-const DEFAULT_DESC =
-  'Shop authentic handcrafted goods from Hunza, Gilgit-Baltistan. Pure dried fruits, organic honey, Pakol caps, and artisan crafts straight from the Karakoram mountains.';
 const DEFAULT_IMAGE = '/favicon.svg';
 
 export default function SEO({
   title,
-  description = DEFAULT_DESC,
+  description,
   image = DEFAULT_IMAGE,
   type = 'website',
   productData = null,
+  canonicalUrl = null,
 }) {
+  const { settings } = useSiteSettings();
   useEffect(() => {
     // 1. Page title
-    const fullTitle = title ? `${title} | Karakoram Store` : DEFAULT_TITLE;
+    const fullTitle = title ? `${title} | ${settings.storeName}` : settings.storeName;
+    const pageDescription = description || settings.storeDescription;
     document.title = fullTitle;
 
     // Helper to create or update meta tag
@@ -30,12 +32,27 @@ export default function SEO({
       el.setAttribute('content', content);
     };
 
-    // 2. Standard Meta
-    setMeta('name', 'description', description);
+    // Helper to create or update link tag (e.g. canonical)
+    const setLink = (rel, href) => {
+      if (!href) return;
+      let el = document.querySelector(`link[rel="${rel}"]`);
+      if (!el) {
+        el = document.createElement('link');
+        el.setAttribute('rel', rel);
+        document.head.appendChild(el);
+      }
+      el.setAttribute('href', href);
+    };
 
-    // 3. Open Graph Tags
+    // 2. Standard Meta
+    setMeta('name', 'description', pageDescription);
+
+    // 3. Canonical URL
+    setLink('canonical', canonicalUrl || window.location.href.split('?')[0]);
+
+    // 4. Open Graph Tags
     setMeta('property', 'og:title', fullTitle);
-    setMeta('property', 'og:description', description);
+    setMeta('property', 'og:description', pageDescription);
     setMeta('property', 'og:type', type);
     setMeta('property', 'og:url', window.location.href);
 
@@ -44,9 +61,9 @@ export default function SEO({
       ? image
       : `${window.location.origin}${image.startsWith('/') ? '' : '/'}${image}`;
     setMeta('property', 'og:image', absoluteImage);
-    setMeta('property', 'og:site_name', 'Karakoram Store');
+    setMeta('property', 'og:site_name', settings.storeName);
 
-    // 4. Product Specific OG Tags
+    // 5. Product Specific OG Tags
     if (type === 'product' && productData) {
       if (productData.price) {
         setMeta('property', 'product:price:amount', String(productData.price));
@@ -57,12 +74,12 @@ export default function SEO({
       }
     }
 
-    // 5. Twitter Card Tags
+    // 6. Twitter Card Tags
     setMeta('name', 'twitter:card', 'summary_large_image');
     setMeta('name', 'twitter:title', fullTitle);
-    setMeta('name', 'twitter:description', description);
+    setMeta('name', 'twitter:description', pageDescription);
     setMeta('name', 'twitter:image', absoluteImage);
-  }, [title, description, image, type, productData]);
+  }, [title, description, image, type, productData, canonicalUrl, settings.storeName, settings.storeDescription]);
 
   return null;
 }
