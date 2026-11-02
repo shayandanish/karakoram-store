@@ -11,6 +11,8 @@ import {
   sendPasswordResetEmail,
   updateProfile,
   signOut,
+  getMultiFactorResolver,
+  TotpMultiFactorGenerator,
 } from 'firebase/auth';
 import api from '../lib/axios';
 import { firebaseAuth } from '../firebase';
@@ -86,10 +88,26 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [googleRedirectError, setGoogleRedirectError] = useState('');
+  const [pendingMfaResolver, setPendingMfaResolver] = useState(null);
   const bootstrapRef = useRef(null);
 
   const clearGoogleRedirectError = useCallback(() => {
     setGoogleRedirectError('');
+  }, []);
+
+  const captureMfaChallenge = useCallback((error) => {
+    if (error?.code !== 'auth/multi-factor-auth-required') return false;
+    const resolver = getMultiFactorResolver(requireFirebaseAuth(), error);
+    if (!resolver.hints.some((hint) => hint.factorId === 'totp')) {
+      const unsupported = new Error(
+        'This administrator account must enroll an authenticator app (TOTP) to access Accounts.'
+      );
+      unsupported.code = 'auth/admin-totp-required';
+      throw unsupported;
+    }
+    setPendingMfaResolver(resolver);
+    setGoogleRedirectError('');
+    return true;
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -144,10 +162,14 @@ export function AuthProvider({ children }) {
               redirectUser = await completeFirebaseSignIn(result.user);
             }
           } catch (err) {
-            redirectError = getAuthErrorMessage(
-              err,
-              'Google sign-in could not be completed. Please try again.'
-            );
+            if (captureMfaChallenge(err)) {
+              redirectError = '';
+            } else {
+              redirectError = getAuthErrorMessage(
+                err,
+                'Google sign-in could not be completed. Please try again.'
+              );
+            }
           }
         }
 
@@ -181,7 +203,7 @@ export function AuthProvider({ children }) {
     return () => {
       isMounted = false;
     };
-  }, [completeFirebaseSignIn]);
+  }, [captureMfaChallenge, completeFirebaseSignIn]);
 
   /**
    * Step 1 of registration: create the Firebase user and send the
@@ -290,7 +312,13 @@ export function AuthProvider({ children }) {
   /** Firebase login. Unverified Firebase users are blocked here. */
   const login = async (email, password) => {
     const auth = requireFirebaseAuth();
-    const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    let credential;
+    try {
+      credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+    } catch (err) {
+      if (captureMfaChallenge(err)) return { requiresMfa: true };
+      throw err;
+    }
     await credential.user.reload();
 
     if (!credential.user.emailVerified) {
@@ -306,6 +334,20 @@ export function AuthProvider({ children }) {
     setUser(res.data);
     clearPendingVerification();
     return res.data;
+  };
+
+  const completeMfaSignIn = async (verificationCode) => {
+    if (!pendingMfaResolver) {
+      throw new Error('The authenticator challenge expired. Please sign in again.');
+    }
+    const hint = pendingMfaResolver.hints.find((factor) => factor.factorId === 'totp');
+    if (!hint) {
+      throw new Error('No authenticator factor is available for this account.');
+    }
+    const assertion = TotpMultiFactorGenerator.assertionForSignIn(hint, verificationCode.trim());
+    const credential = await pendingMfaResolver.resolveSignIn(assertion);
+    setPendingMfaResolver(null);
+    return completeFirebaseSignIn(credential.user);
   };
 
   /**
@@ -328,6 +370,7 @@ export function AuthProvider({ children }) {
       await completeFirebaseSignIn(credential.user);
       return { mode: 'popup' };
     } catch (err) {
+      if (captureMfaChallenge(err)) return { mode: 'mfa' };
       const canRedirect = [
         'auth/popup-blocked',
         'auth/operation-not-supported-in-this-environment',
@@ -379,6 +422,7 @@ export function AuthProvider({ children }) {
   /** Sign out of both Firebase and the backend cookie. */
   const logout = async () => {
     clearAuthToken();
+    setPendingMfaResolver(null);
     if (firebaseAuth) {
       try {
         await signOut(firebaseAuth);
@@ -403,8 +447,10 @@ export function AuthProvider({ children }) {
         loading,
         isAuthenticated: !!user,
         googleRedirectError,
+        mfaRequired: Boolean(pendingMfaResolver),
         clearGoogleRedirectError,
         login,
+        completeMfaSignIn,
         loginWithGoogle,
         adminLogin,
         register,

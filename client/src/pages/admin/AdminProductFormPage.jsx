@@ -90,7 +90,7 @@ function normalizeWeightVariants(variants = []) {
           ? existing.stock
           : stockPerKg !== ''
           ? Math.max(0, Math.round(stockPerKg * multiplier))
-          : '',
+          : 0,
       discountPercent: existing?.discountPercent != null ? existing.discountPercent : '',
       discountLabel:  existing?.discountLabel || '',
     };
@@ -132,7 +132,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
     if (isWeightCategory(initialCategory)) {
       return normalizeWeightVariants(existing || []);
     }
-    return existing || [{ label: 'Standard', price: '', stock: '', discountPercent: '', discountLabel: '' }];
+    return existing || [{ label: 'Standard', price: '', stock: 0, discountPercent: '', discountLabel: '' }];
   });
 
   // Images state: [{ url, publicId, alt }]
@@ -181,7 +181,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
 
   const addVariantRow = () => {
     if (weightCategorySelected) return;
-    setVariants((prev) => [...prev, { label: '', price: '', stock: '', discountPercent: '', discountLabel: '' }]);
+    setVariants((prev) => [...prev, { label: '', price: '', stock: 0, discountPercent: '', discountLabel: '' }]);
   };
 
   const removeVariantRow = (index) => {
@@ -589,22 +589,21 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
 
                 <div className="w-full sm:w-32">
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Stock Count
+                    Stock (Accounts)
                   </label>
                   <input
                     type="number"
                     min="0"
                     step="1"
                     value={v.stock}
-                    onChange={(e) => updateVariantRow(idx, 'stock', e.target.value)}
-                    placeholder="25"
-                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                    readOnly
+                    aria-readonly="true"
+                    placeholder="0"
+                    className="w-full px-3 py-2 text-sm bg-stone-100 border border-stone-200 rounded-lg text-stone-600 cursor-not-allowed"
                   />
-                  {errors[`variant_${idx}_stock`] && (
-                    <span className="text-rose-600 text-[11px] block mt-0.5">
-                      {errors[`variant_${idx}_stock`]}
-                    </span>
-                  )}
+                  <span className="text-stone-500 text-[10px] block mt-0.5">
+                    Manage quantity and purchase cost in Accounts.
+                  </span>
                 </div>
 
                 {/* ── Percentage Discount & Calculated Price ───────── */}

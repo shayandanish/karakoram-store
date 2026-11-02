@@ -38,3 +38,19 @@ export const checkoutLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many checkout attempts. Please wait before trying again.' },
 });
+
+export const accountsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many Accounts requests. Please wait before trying again.' },
+});
+
+export const accountsExportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many report exports. Please wait before trying again.' },
+});

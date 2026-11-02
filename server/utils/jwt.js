@@ -1,8 +1,12 @@
 import jwt from 'jsonwebtoken';
 
 /** Sign a JWT and set it as an httpOnly cookie */
-export const sendTokenCookie = (res, userId) => {
-  const token = jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+export const sendTokenCookie = (res, userId, authContext = {}) => {
+  const token = jwt.sign({
+    id: userId,
+    adminMfaVerified: authContext.adminMfaVerified === true,
+    adminAuthTime: Number.isSafeInteger(authContext.adminAuthTime) ? authContext.adminAuthTime : 0,
+  }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 

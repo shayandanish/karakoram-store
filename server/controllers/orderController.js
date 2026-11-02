@@ -154,7 +154,9 @@ export const createOrder = async (req, res, next) => {
         // Build order items by looking up server-side prices
         const orderItems = [];
         for (const input of data.items) {
-          const product = await Product.findById(input.product).session(session);
+          const product = await Product.findById(input.product)
+            .select('+variants.averageCostMinor')
+            .session(session);
           if (!product || !product.isActive) {
             throw new Error(`Product ${input.product} not found or inactive`);
           }
@@ -187,6 +189,9 @@ export const createOrder = async (req, res, next) => {
             name: product.name,
             variantLabel: input.variantLabel,
             price: effectivePrice, // server-calculated price
+            unitCostMinor: Number.isSafeInteger(variant.averageCostMinor)
+              ? variant.averageCostMinor
+              : null,
             quantity: input.quantity,
             image: product.images?.[0]?.url || '',
           });

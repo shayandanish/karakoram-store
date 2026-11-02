@@ -108,6 +108,10 @@ export const adminGetProductById = async (req, res, next) => {
 export const adminCreateProduct = async (req, res, next) => {
   try {
     const data = productSchema.parse(req.body);
+    if (data.variants.some((variant) => variant.stock !== 0)) {
+      res.status(400);
+      throw new Error('Record initial and received stock from Accounts > Purchases');
+    }
     const product = await Product.create(data);
 
     // Invalidate product list caches
@@ -120,6 +124,28 @@ export const adminCreateProduct = async (req, res, next) => {
 export const adminUpdateProduct = async (req, res, next) => {
   try {
     const data = productSchema.partial().parse(req.body);
+    if (data.variants) {
+      const currentProduct = await Product.findById(req.params.id).select('+variants.averageCostMinor');
+      if (!currentProduct) { res.status(404); throw new Error('Product not found'); }
+      const currentVariants = new Map(currentProduct.variants.map((variant) => [variant.label, variant]));
+      const incomingLabels = new Set(data.variants.map((variant) => variant.label));
+      for (const variant of data.variants) {
+        const existing = currentVariants.get(variant.label);
+        if (existing && variant.stock !== existing.stock) {
+          res.status(400);
+          throw new Error('Update inventory quantities from Accounts > Purchases');
+        }
+        if (!existing && variant.stock !== 0) {
+          res.status(400);
+          throw new Error('New variants must start with zero stock; record inventory from Accounts > Purchases');
+        }
+        if (existing) variant.averageCostMinor = existing.averageCostMinor;
+      }
+      if (currentProduct.variants.some((variant) => variant.stock > 0 && !incomingLabels.has(variant.label))) {
+        res.status(400);
+        throw new Error('A variant with available stock cannot be removed');
+      }
+    }
     const product = await Product.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
     if (!product) { res.status(404); throw new Error('Product not found'); }
 
@@ -161,12 +187,11 @@ export const adminDeleteProduct = async (req, res, next) => {
    Supported actions:
      - activate / deactivate (set isActive)
      - set-price (set variants[].price for all variants)
-     - set-stock (set variants[].stock for all variants)
-     - adjust-stock (add/subtract from variants[].stock)
+     - inventory adjustments are recorded in Accounts
 ───────────────────────────────────────────── */
 
 const bulkUpdateSchema = z.object({
-  action: z.enum(['activate', 'deactivate', 'set-price', 'set-stock', 'adjust-stock']),
+  action: z.enum(['activate', 'deactivate', 'set-price']),
   productIds: z.array(z.string().length(24, 'Invalid product id')).min(1),
   field: z.string().optional(), // variant label to target; if omitted, applies to all variants
   value: z.union([z.number(), z.boolean()]),
@@ -202,30 +227,6 @@ export const adminBulkUpdateProducts = async (req, res, next) => {
             }
             product.variants.forEach((v) => {
               if (!field || v.label === field) v.price = newPrice;
-            });
-            break;
-          }
-          case 'set-stock': {
-            const newStock = Number(value);
-            if (!Number.isInteger(newStock) || newStock < 0) {
-              errors.push({ productId, error: 'Stock must be a non-negative integer' });
-              continue;
-            }
-            product.variants.forEach((v) => {
-              if (!field || v.label === field) v.stock = newStock;
-            });
-            break;
-          }
-          case 'adjust-stock': {
-            const delta = Number(value);
-            if (!Number.isInteger(delta)) {
-              errors.push({ productId, error: 'Adjustment must be an integer' });
-              continue;
-            }
-            product.variants.forEach((v) => {
-              if (!field || v.label === field) {
-                v.stock = Math.max(0, v.stock + delta);
-              }
             });
             break;
           }

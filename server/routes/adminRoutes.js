@@ -17,11 +17,43 @@ import {
   adminGetCities, adminCreateCity, adminUpdateCity, adminDeleteCity,
 } from '../controllers/cityController.js';
 import { adminUpdateSettings } from '../controllers/settingsController.js';
+import {
+  adminGetSuppliers, adminCreateSupplier, adminUpdateSupplier,
+  adminGetPurchases, adminCreatePurchase, adminReversePurchase,
+  adminAddSupplierPayment, adminReverseSupplierPayment,
+  adminGetExpenses, adminCreateExpense, adminReverseExpense,
+  adminGetAccountReport, adminExportAccountReport, adminGetAccountAudit,
+} from '../controllers/accountsController.js';
+import { accountsExportLimiter, accountsLimiter } from '../utils/rateLimiters.js';
+import { requireAccountsMfa, requireTrustedAccountsOrigin } from '../middlewares/accountsSecurity.js';
 
 const router = Router();
 
 // All admin routes require auth + admin role
 router.use(protect, adminOnly);
+
+router.use('/accounts', requireAccountsMfa, requireTrustedAccountsOrigin, accountsLimiter, (req, res, next) => {
+  res.set({
+    'Cache-Control': 'private, no-store, no-cache, max-age=0, must-revalidate',
+    Pragma: 'no-cache',
+  });
+  next();
+});
+
+router.get('/accounts/report.xlsx', accountsExportLimiter, adminExportAccountReport);
+router.get('/accounts/report', adminGetAccountReport);
+router.get('/accounts/audit', adminGetAccountAudit);
+router.get('/accounts/suppliers', adminGetSuppliers);
+router.post('/accounts/suppliers', adminCreateSupplier);
+router.put('/accounts/suppliers/:id', adminUpdateSupplier);
+router.get('/accounts/purchases', adminGetPurchases);
+router.post('/accounts/purchases', adminCreatePurchase);
+router.post('/accounts/purchases/:id/reverse', adminReversePurchase);
+router.post('/accounts/purchases/:id/payments', adminAddSupplierPayment);
+router.post('/accounts/payments/:id/reverse', adminReverseSupplierPayment);
+router.get('/accounts/expenses', adminGetExpenses);
+router.post('/accounts/expenses', adminCreateExpense);
+router.post('/accounts/expenses/:id/reverse', adminReverseExpense);
 
 // Dashboard stats
 router.get('/stats', adminGetStats);

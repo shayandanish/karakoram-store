@@ -45,6 +45,7 @@ A Pakistan-focused artisan storefront for products from Hunza and Gilgit-Baltist
 - Easypaisa orders with transaction details, payment-proof upload, order tracking, and status notifications.
 - Admin product, category, city, artisan, coupon, order, and store-settings management.
 - Admin overview with paid-revenue periods, pending-order and inventory alerts, customer order summaries, and coupon redemption results.
+- Admin-only Accounts workspace for supplier purchases, inventory cost, expenses, audit logs, profit reports, and formula-bearing Excel exports.
 - Product ratings/reviews and optional Redis caching.
 
 Shipping rates and public payment/contact details are managed in **Admin → Settings**. Customer WhatsApp order notifications are disabled by default.
@@ -57,8 +58,11 @@ Shipping rates and public payment/contact details are managed in **Admin → Set
 4. **Admin → Users** shows each account’s order count, paid total, and latest order date; use **View orders** to open that customer’s order list.
 5. **Admin → Coupons** reports redemptions found in orders and the total discount granted. The usage counter remains the coupon’s configured redemption-limit tracker.
 6. In **Admin → Store Settings**, use the section shortcuts to edit store details or checkout payment methods. A failed settings load disables edits so fallback defaults cannot accidentally overwrite saved settings.
+7. In **Admin → Accounts**, add suppliers, record opening stock and purchases, record supplier payments and expenses, and review product profit by day/week/month/custom period. Download a native Excel workbook (`.xlsx`) with summary, transaction, product, purchase, and supplier-payment sheets, including formulas.
 
-All `/api/admin` routes require a valid authenticated administrator. Keep admin credentials private and use HTTPS in production.
+All `/api/admin` routes require a valid authenticated administrator. Accounts endpoints additionally require a recent TOTP MFA sign-in in production, reject untrusted browser origins, are rate-limited, and return no-store responses. In Firebase Console, enable TOTP multi-factor authentication for the project and enroll each administrator with an authenticator app before production use. Accounts enrollment and sign-in challenge are available in the admin UI. Keep admin credentials private and use HTTPS in production.
+
+Accounts stores costs in integer paisa, snapshots weighted-average inventory cost when an order is placed, and prevents product forms/bulk actions from changing stock outside the audited purchase workflow. Purchase, expense, supplier-payment, and reversal records are append-only; supplier/expense corrections should be made through new audited records. A purchase can be reversed only while inventory still matches its post-purchase stock and cost snapshot, and after any later supplier payments have been reversed; purchases paid at creation cannot be reversed. Otherwise, record a corrective stock adjustment. Historical orders without cost snapshots are not assigned estimated costs and are excluded from profit. Refunds, cancelled/returned paid orders, shipping income, and inventory purchases have separate report treatment; paid cancelled/returned orders are flagged for reconciliation. These reports are operational estimates, not formal accounting or tax statements.
 
 ## Checks
 

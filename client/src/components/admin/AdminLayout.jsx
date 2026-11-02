@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import SiteLogoMark from '../ui/SiteLogoMark';
@@ -81,6 +81,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    to: '/admin/accounts',
+    label: 'Accounts',
+    icon: (
+      <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M3 10h18M7 15h2m4 0h2m-11 5h16a2 2 0 002-2V6a2 2 0 00-2-2H4a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/settings',
     label: 'Store Settings',
     icon: (
@@ -95,6 +104,22 @@ export default function AdminLayout() {
   const { settings } = useSiteSettings();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    let robots = document.querySelector('meta[name="robots"]');
+    const created = !robots;
+    if (!robots) {
+      robots = document.createElement('meta');
+      robots.name = 'robots';
+      document.head.appendChild(robots);
+    }
+    const previousContent = robots.content;
+    robots.content = 'noindex,nofollow';
+    return () => {
+      if (created) robots.remove();
+      else robots.content = previousContent;
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {

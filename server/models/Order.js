@@ -6,6 +6,7 @@ const orderItemSchema = new mongoose.Schema({
   name: { type: String, required: true },
   variantLabel: { type: String, required: true },
   price: { type: Number, required: true }, // PKR, server-calculated
+  unitCostMinor: { type: Number, default: null, min: 0, select: false }, // cost snapshot in paisa
   quantity: { type: Number, required: true, min: 1 },
   image: { type: String, default: '' },
 });

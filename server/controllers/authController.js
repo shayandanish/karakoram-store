@@ -189,7 +189,10 @@ export const firebaseRegister = async (req, res, next) => {
       return;
     }
 
-    const token = sendTokenCookie(res, user._id);
+    const token = sendTokenCookie(res, user._id, {
+      adminMfaVerified: Boolean(decoded.firebase?.sign_in_second_factor),
+      adminAuthTime: Number.isSafeInteger(decoded.auth_time) ? decoded.auth_time : 0,
+    });
     res.status(201).json({
       ...publicUser(user),
       token,
@@ -226,7 +229,10 @@ export const firebaseLogin = async (req, res, next) => {
       throw httpError('No account found for this email. Please register first.', 404);
     }
 
-    const token = sendTokenCookie(res, user._id);
+    const token = sendTokenCookie(res, user._id, {
+      adminMfaVerified: Boolean(decoded.firebase?.sign_in_second_factor),
+      adminAuthTime: Number.isSafeInteger(decoded.auth_time) ? decoded.auth_time : 0,
+    });
     res.json({
       ...publicUser(user),
       token,

@@ -4,6 +4,7 @@ const variantSchema = new mongoose.Schema({
   label:          { type: String, required: true },  // e.g. "250g", "500g", "Large"
   price:          { type: Number, required: true },  // PKR - actual checkout price
   stock:          { type: Number, required: true, default: 0 },
+  averageCostMinor: { type: Number, default: null, min: 0, select: false }, // weighted-average cost in paisa
   discountPercent: { type: Number, default: null, min: 0, max: 99 },
   compareAtPrice:  { type: Number, default: null },   // original "was" price; null = no discount
   discountLabel:  { type: String, default: '' },     // optional badge e.g. "Eid Sale"

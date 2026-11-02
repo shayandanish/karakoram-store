@@ -31,6 +31,7 @@ function GoogleIcon() {
 export default function GoogleAuthButton({
   onStart,
   onError,
+  onMfaRequired,
   onLoadingChange,
   disabled = false,
   label = 'Continue with Google',
@@ -57,7 +58,11 @@ export default function GoogleAuthButton({
       // bootstrap effect finishes the sign-in when Google sends the user back.
       const result = await loginWithGoogle();
 
-      if (result?.mode === 'redirect') {
+      if (result?.mode === 'mfa') {
+        startedRef.current = false;
+        onMfaRequired?.();
+        setBusy(false);
+      } else if (result?.mode === 'redirect') {
         // Safety net — normally the page unloads immediately. If something
         // (e.g. an extension) blocks the redirect, unwind the loading state.
         setTimeout(() => {

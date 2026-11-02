@@ -33,6 +33,8 @@ const getLoginDestination = (authenticatedUser, redirectParam) => {
 export default function LoginPage() {
   const {
     login,
+    completeMfaSignIn,
+    mfaRequired,
     adminLogin,
     resendVerificationEmail,
     sendPasswordReset,
@@ -52,6 +54,8 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [needsMfa, setNeedsMfa] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
 
   const [needsVerification, setNeedsVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState('');
@@ -77,6 +81,10 @@ export default function LoginPage() {
   // Google returns through a full-page redirect. AuthContext completes the
   // sign-in and sets `user`; this effect takes over navigation.
   useEffect(() => {
+    if (mfaRequired) setNeedsMfa(true);
+  }, [mfaRequired]);
+
+  useEffect(() => {
     if (!user) return;
     navigate(getLoginDestination(user, redirectParam), { replace: true });
   }, [user, navigate, redirectParam]);
@@ -100,6 +108,10 @@ export default function LoginPage() {
 
     try {
       const loggedUser = await login(email.trim(), password);
+      if (loggedUser?.requiresMfa) {
+        setNeedsMfa(true);
+        return;
+      }
       navigate(getLoginDestination(loggedUser, redirectParam), { replace: true });
     } catch (err) {
       // Seeded admins may not have a Firebase account yet. Fall back to the
@@ -113,8 +125,18 @@ export default function LoginPage() {
           const adminUser = await adminLogin(email.trim(), password);
           navigate(getLoginDestination(adminUser, redirectParam), { replace: true });
           return;
-        } catch {
-          // Fall through and show the original Firebase error
+        } catch (adminLoginError) {
+          if (!adminLoginError.response) {
+            setError('Could not reach the store server. Check that the API is running and CORS allows this site.');
+            return;
+          }
+          if (adminLoginError.response.status !== 401) {
+            setError(
+              adminLoginError.response.data?.message ||
+                'Could not complete administrator sign-in. Please try again.'
+            );
+            return;
+          }
         }
       }
 
@@ -128,6 +150,25 @@ export default function LoginPage() {
       } else {
         setError(getAuthErrorMessage(err, 'Could not sign in. Please try again.'));
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaSubmit = async (event) => {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(mfaCode.trim())) {
+      setError('Enter the current 6-digit code from your authenticator app.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const loggedUser = await completeMfaSignIn(mfaCode);
+      setNeedsMfa(false);
+      navigate(getLoginDestination(loggedUser, redirectParam), { replace: true });
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'Authenticator verification failed. Try the current code again.'));
     } finally {
       setLoading(false);
     }
@@ -266,6 +307,29 @@ export default function LoginPage() {
           </div>
         )}
 
+        {needsMfa ? (
+          <form onSubmit={handleMfaSubmit} className="space-y-4 rounded-xl border border-apricot-200 bg-apricot-50 p-4">
+            <div>
+              <h2 className="text-sm font-bold text-mountain-900">Administrator verification</h2>
+              <p className="mt-1 text-xs text-stone-600">Enter the 6-digit code from your enrolled authenticator app.</p>
+            </div>
+            <input
+              aria-label="Authenticator code"
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              required
+              value={mfaCode}
+              onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full rounded-xl border border-stone-300 bg-white px-4 py-3 text-center font-mono text-lg tracking-[0.35em] focus:outline-none focus:ring-2 focus:ring-apricot-400"
+            />
+            <button type="submit" disabled={loading || mfaCode.length !== 6} className="w-full rounded-xl bg-mountain-900 py-3 text-sm font-bold text-white disabled:opacity-50">
+              {loading ? 'Verifying…' : 'Verify and continue'}
+            </button>
+          </form>
+        ) : (
+        <>
         <GoogleAuthButton
           disabled={loading}
           onStart={() => {
@@ -275,6 +339,7 @@ export default function LoginPage() {
             clearGoogleRedirectError();
           }}
           onError={setError}
+          onMfaRequired={() => setNeedsMfa(true)}
           onLoadingChange={setGoogleLoading}
         />
 
@@ -380,6 +445,8 @@ export default function LoginPage() {
         <p className="mt-3 text-[11px] text-mountain-400 text-center">
           Store admins can also sign in with their existing admin password.
         </p>
+        </>
+        )}
 
         <div className="mt-6 pt-6 border-t border-cream-200 text-center space-y-3">
           <p className="text-xs text-mountain-600">
