@@ -104,88 +104,93 @@ const GB_PRESETS = [
 /* ── City row card ──────────────────────────────────────────── */
 function CityRow({ city, onEdit, onDelete, onToggleActive, toggling }) {
   return (
-    <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-stone-200 shadow-xs hover:shadow-md transition-all group">
-      {/* Thumbnail */}
-      <div className="w-24 h-18 rounded-xl overflow-hidden shrink-0 bg-stone-100 border border-stone-200 relative">
-        {city.image?.url ? (
-          <img
-            src={city.image.url}
-            alt={city.name}
-            width={96}
-            height={72}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.parentElement.classList.add('flex', 'items-center', 'justify-center');
-              e.currentTarget.parentElement.innerText = '🏔️';
-            }}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-2xl">🏔️</div>
-        )}
-        <span
-          className="absolute top-1 left-1 w-2.5 h-2.5 rounded-full border border-white"
-          style={{ backgroundColor: city.accentColor || '#f89535' }}
-          title="Accent color"
-        />
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="font-display font-bold text-mountain-900 text-sm truncate">{city.name}</h3>
-          <span className="text-[11px] font-mono text-stone-400 bg-stone-50 px-1.5 py-0.5 rounded">
-            /{city.slug}
-          </span>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-white rounded-2xl border border-stone-200 shadow-xs hover:shadow-md transition-all group">
+      <div className="flex items-start gap-4 flex-1 min-w-0">
+        {/* Thumbnail */}
+        <div className="w-20 h-16 sm:w-24 sm:h-18 rounded-xl overflow-hidden shrink-0 bg-stone-100 border border-stone-200 relative">
+          {city.image?.url ? (
+            <img
+              src={city.image.url}
+              alt={city.name}
+              width={96}
+              height={72}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.parentElement.classList.add('flex', 'items-center', 'justify-center');
+                e.currentTarget.parentElement.innerText = '🏔️';
+              }}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-2xl">🏔️</div>
+          )}
           <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white"
+            className="absolute top-1 left-1 w-2.5 h-2.5 rounded-full border border-white"
             style={{ backgroundColor: city.accentColor || '#f89535' }}
-          >
-            Order #{city.order ?? 0}
-          </span>
+            title="Accent color"
+          />
         </div>
 
-        {city.tagline && (
-          <p className="text-xs text-apricot-600 font-medium mt-0.5 italic truncate">{city.tagline}</p>
-        )}
-        <p className="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">{city.body}</p>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-display font-bold text-mountain-900 text-sm truncate">{city.name}</h3>
+            <span className="text-[11px] font-mono text-stone-400 bg-stone-50 px-1.5 py-0.5 rounded">
+              /{city.slug}
+            </span>
+            <span
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white"
+              style={{ backgroundColor: city.accentColor || '#f89535' }}
+            >
+              Order #{city.order ?? 0}
+            </span>
+          </div>
+
+          {city.tagline && (
+            <p className="text-xs text-apricot-600 font-medium mt-0.5 italic truncate">{city.tagline}</p>
+          )}
+          <p className="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">{city.body}</p>
+        </div>
       </div>
 
-      {/* Visibility Quick Toggle */}
-      <button
-        onClick={() => onToggleActive(city)}
-        disabled={toggling}
-        title={city.isActive ? 'Visible on homepage — Click to hide' : 'Hidden from homepage — Click to show'}
-        className={`px-3 py-1.5 rounded-xl border text-xs font-semibold shrink-0 transition flex items-center gap-1.5 ${
-          city.isActive
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-            : 'bg-stone-100 border-stone-200 text-stone-500 hover:bg-stone-200'
-        }`}
-      >
-        <span className={`w-2 h-2 rounded-full ${city.isActive ? 'bg-emerald-500' : 'bg-stone-400'}`} />
-        {city.isActive ? 'Active' : 'Hidden'}
-      </button>
+      {/* Controls: Visibility Toggle + Action Buttons */}
+      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t border-stone-100 sm:border-0">
+        {/* Visibility Quick Toggle */}
+        <button
+          onClick={() => onToggleActive(city)}
+          disabled={toggling}
+          title={city.isActive ? 'Visible on homepage — Click to hide' : 'Hidden from homepage — Click to show'}
+          className={`px-3 py-1.5 rounded-xl border text-xs font-semibold shrink-0 transition flex items-center gap-1.5 ${
+            city.isActive
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+              : 'bg-stone-100 border-stone-200 text-stone-500 hover:bg-stone-200'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${city.isActive ? 'bg-emerald-500' : 'bg-stone-400'}`} />
+          {city.isActive ? 'Active' : 'Hidden'}
+        </button>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <button
-          onClick={() => onEdit(city)}
-          className="p-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-600 transition"
-          title="Edit city"
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" aria-hidden="true">
-            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-          </svg>
-        </button>
-        <button
-          onClick={() => onDelete(city)}
-          className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition"
-          title="Delete city"
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" aria-hidden="true">
-            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-          </svg>
-        </button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => onEdit(city)}
+            className="p-2.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-600 transition"
+            title="Edit city"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" aria-hidden="true">
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => onDelete(city)}
+            className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 transition"
+            title="Delete city"
+          >
+            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" aria-hidden="true">
+              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

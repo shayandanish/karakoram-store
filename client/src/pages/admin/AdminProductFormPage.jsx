@@ -539,9 +539,9 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
             {variants.map((v, idx) => (
               <div
                 key={idx}
-                className="p-3.5 bg-stone-50/70 border border-stone-200 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center gap-3"
+                className="p-3.5 bg-stone-50/70 border border-stone-200 rounded-xl flex flex-wrap items-start gap-3"
               >
-                <div className="flex-1">
+                <div className="w-full sm:flex-1 sm:min-w-[180px]">
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
                     {weightCategorySelected
                       ? 'Size'
@@ -703,7 +703,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
                 </div>
 
                 {!weightCategorySelected && (
-                  <div className="sm:self-end">
+                  <div className="self-start sm:self-center pt-2 sm:pt-4">
                     <button
                       type="button"
                       onClick={() => removeVariantRow(idx)}

@@ -41,7 +41,7 @@ function CartItem({ item }) {
       {/* Image */}
       <Link
         to={`/products/${item.productSlug}`}
-        className="shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-cream-200"
+        className="shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-cream-200"
       >
         <ProductImage src={item.image} alt={item.productName} />
       </Link>
@@ -56,7 +56,7 @@ function CartItem({ item }) {
         </Link>
         <p className="text-xs text-mountain-500 mt-0.5">{item.variantLabel}</p>
 
-        <div className="flex items-center justify-between mt-3">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 mt-3">
           {/* Qty stepper */}
           <div className="flex items-center border border-cream-300 rounded-lg overflow-hidden text-sm">
             <button
@@ -217,14 +217,14 @@ export default function CartPage() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Items list */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm p-6">
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm p-4 sm:p-6">
           {items.map((item) => (
             <CartItem key={item.key} item={item} />
           ))}
         </div>
 
         {/* Summary */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 h-fit sticky top-24">
+        <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 h-fit sticky top-24">
           <h2 className="font-display font-semibold text-mountain-900 text-lg mb-5">Order Summary</h2>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between text-mountain-700">

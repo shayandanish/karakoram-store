@@ -650,11 +650,11 @@ export default function AdminOrdersPage() {
             </div>
 
             {/* Modal Subtabs: Details vs Status History vs Notifications */}
-            <div className="flex items-center gap-2 border-b border-stone-200 pb-2">
+            <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto scrollbar-none">
               <button
                 type="button"
                 onClick={() => setModalTab('details')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
                   modalTab === 'details'
                     ? 'bg-mountain-900 text-white'
                     : 'text-stone-600 hover:bg-stone-100'
@@ -665,7 +665,7 @@ export default function AdminOrdersPage() {
               <button
                 type="button"
                 onClick={() => setModalTab('history')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
                   modalTab === 'history'
                     ? 'bg-mountain-900 text-white'
                     : 'text-stone-600 hover:bg-stone-100'
@@ -676,7 +676,7 @@ export default function AdminOrdersPage() {
               <button
                 type="button"
                 onClick={() => setModalTab('notifications')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${
                   modalTab === 'notifications'
                     ? 'bg-mountain-900 text-white'
                     : 'text-stone-600 hover:bg-stone-100'

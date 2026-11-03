@@ -151,7 +151,8 @@ export default function Navbar() {
             />
             <div className="flex flex-col leading-none">
               <span className="font-display font-bold text-mountain-900 text-base">{settings.storeName}</span>
-              <span className="text-apricot-600 text-xs font-semibold tracking-widest uppercase">{settings.storeTagline}</span>
+              <span className="hidden sm:inline text-apricot-600 text-xs font-semibold tracking-widest uppercase">{settings.storeTagline}</span>
+              <span className="sm:hidden text-apricot-600 text-[10px] font-semibold tracking-wider uppercase">Authentic · GB · Pakistan</span>
             </div>
           </Link>
 

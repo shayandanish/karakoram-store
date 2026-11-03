@@ -216,12 +216,12 @@ export default function ContactPage() {
                       setDialCode(e.target.value);
                       setPhoneError('');
                     }}
-                    className="shrink-0 border border-cream-300 rounded-xl px-2 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800"
+                    className="w-24 sm:w-32 shrink-0 border border-cream-300 rounded-xl px-2 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 truncate"
                     aria-label="Country code"
                   >
                     {COUNTRY_CODES.map((c) => (
                       <option key={c.code} value={c.code}>
-                        {c.flag} {c.code} {c.name}
+                        {c.flag} {c.code}
                       </option>
                     ))}
                   </select>
@@ -235,7 +235,7 @@ export default function ContactPage() {
                       setPhoneError('');
                     }}
                     placeholder={selectedCountry.example}
-                    className="w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 placeholder-mountain-300"
+                    className="flex-1 min-w-0 border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 placeholder-mountain-300"
                     autoComplete="tel"
                     inputMode="tel"
                   />

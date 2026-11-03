@@ -484,9 +484,9 @@ export default function ShopPage() {
         </div>
       )}
 
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Filter sidebar – desktop always visible, mobile toggle */}
-        <div className={`lg:block w-56 shrink-0 ${showFilters ? 'block' : 'hidden'}`}>
+        <div className={`lg:block w-full lg:w-56 shrink-0 ${showFilters ? 'block' : 'hidden'}`}>
           <div className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
             <FilterPanel
               categories={cats || []}
