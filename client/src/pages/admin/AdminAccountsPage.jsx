@@ -1,12 +1,8 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { multiFactor, TotpMultiFactorGenerator } from 'firebase/auth';
 import api from '../../lib/axios';
 import { fmtDate, fmtPKR } from '../../lib/utils';
 import { useToast } from '../../context/ToastContext';
-import { useAuth } from '../../context/AuthContext';
-import { firebaseAuth } from '../../firebase';
 import SEO from '../../components/ui/SEO';
 
 const todayInPakistan = () => {
@@ -33,103 +29,6 @@ const labelClass = 'mb-1 block text-xs font-semibold text-stone-600';
 const EMPTY_ARRAY = [];
 
 const moneyInput = (value) => Number(value || 0);
-
-function AdminMfaSetup() {
-  const { logout } = useAuth();
-  const toast = useToast();
-  const [secret, setSecret] = useState(null);
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const firebaseUser = firebaseAuth?.currentUser;
-  const alreadyEnrolled = firebaseUser
-    ? multiFactor(firebaseUser).enrolledFactors.some((factor) => factor.factorId === 'totp')
-    : false;
-
-  const startEnrollment = async () => {
-    if (!firebaseUser) {
-      setError('Sign in to the administrator account using Firebase before enrolling an authenticator. Legacy password-only accounts cannot use Accounts.');
-      return;
-    }
-    if (alreadyEnrolled) {
-      setError('An authenticator is already enrolled. Sign out and sign in again with its current code.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      const session = await multiFactor(firebaseUser).getSession();
-      const generated = await TotpMultiFactorGenerator.generateSecret(session);
-      setSecret(generated);
-    } catch (enrollmentError) {
-      setError(enrollmentError.message || 'Could not start authenticator enrollment. Check Firebase MFA project settings.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const finishEnrollment = async (event) => {
-    event.preventDefault();
-    if (!secret || !/^\d{6}$/.test(code)) return;
-    setBusy(true);
-    setError('');
-    try {
-      const assertion = TotpMultiFactorGenerator.assertionForEnrollment(secret, code);
-      await multiFactor(firebaseUser).enroll(assertion, 'Karakoram Store Admin');
-      setSecret(null);
-      setCode('');
-      toast.success('Authenticator enrolled. Sign out and sign in again to verify it.');
-    } catch (enrollmentError) {
-      setError(enrollmentError.message || 'Authenticator verification failed. Check the code and try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mx-auto max-w-2xl rounded-2xl border border-amber-200 bg-white p-6 shadow-xs">
-      <SEO title="Secure Accounts — Admin" noindex />
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Additional verification required</p>
-      <h1 className="mt-1 text-2xl font-bold text-mountain-900">Secure Accounts with an authenticator</h1>
-      <p className="mt-3 text-sm text-stone-600">
-        Production access requires administrator TOTP multi-factor authentication verified within the last 10 minutes.
-        Enroll an authenticator app below, then sign in again and enter its 6-digit code.
-      </p>
-      {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{error}</p>}
-      {alreadyEnrolled ? (
-        <p className="mt-4 rounded-lg bg-stone-50 p-4 text-sm text-stone-700">
-          This account already has an authenticator enrolled. Use the sign-in flow to verify it; do not enroll a second factor to bypass reauthentication.
-        </p>
-      ) : !secret ? (
-        <button type="button" disabled={busy} onClick={startEnrollment} className="mt-5 rounded-lg bg-mountain-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-          {busy ? 'Preparing…' : 'Set up authenticator'}
-        </button>
-      ) : (
-        <form className="mt-5 space-y-4" onSubmit={finishEnrollment}>
-          <div className="rounded-lg bg-stone-50 p-4">
-            <p className="text-sm font-semibold text-mountain-900">Add this key to your authenticator app</p>
-            <code className="mt-2 block select-all break-all rounded bg-white p-3 text-sm tracking-wider">{secret.secretKey}</code>
-            <p className="mt-2 text-xs text-stone-500">Keep this setup key private. Do not send it to anyone or include it in support messages.</p>
-          </div>
-          <label className="block">
-            <span className={labelClass}>Authenticator code</span>
-            <input className={inputClass} required autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
-          </label>
-          <button type="submit" disabled={busy || code.length !== 6} className="rounded-lg bg-apricot-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-            {busy ? 'Verifying…' : 'Verify and enroll'}
-          </button>
-        </form>
-      )}
-      <div className="mt-6 border-t border-stone-100 pt-4 text-sm">
-        <button type="button" onClick={async () => { await logout(); window.location.assign('/login?redirect=%2Fadmin%2Faccounts'); }} className="font-semibold text-mountain-800 underline">
-          Sign out and return to admin sign in
-        </button>
-        <span className="mx-2 text-stone-400">·</span>
-        <Link to="/admin" className="text-stone-600 underline">Return to dashboard</Link>
-      </div>
-    </div>
-  );
-}
 
 export default function AdminAccountsPage() {
   const queryClient = useQueryClient();
@@ -368,10 +267,6 @@ export default function AdminAccountsPage() {
 
   if (accountsQuery.isLoading || productsQuery.isLoading) {
     return <div className="p-8 text-sm text-stone-500">Loading Accounts…</div>;
-  }
-
-  if (accountsQuery.error?.response?.data?.code === 'ADMIN_MFA_REQUIRED') {
-    return <AdminMfaSetup />;
   }
 
   if (accountsQuery.isError || productsQuery.isError) {

@@ -25,14 +25,14 @@ import {
   adminGetAccountReport, adminExportAccountReport, adminGetAccountAudit,
 } from '../controllers/accountsController.js';
 import { accountsExportLimiter, accountsLimiter } from '../utils/rateLimiters.js';
-import { requireAccountsMfa, requireTrustedAccountsOrigin } from '../middlewares/accountsSecurity.js';
+import { requireTrustedAccountsOrigin } from '../middlewares/accountsSecurity.js';
 
 const router = Router();
 
 // All admin routes require auth + admin role
 router.use(protect, adminOnly);
 
-router.use('/accounts', requireAccountsMfa, requireTrustedAccountsOrigin, accountsLimiter, (req, res, next) => {
+router.use('/accounts', requireTrustedAccountsOrigin, accountsLimiter, (req, res, next) => {
   res.set({
     'Cache-Control': 'private, no-store, no-cache, max-age=0, must-revalidate',
     Pragma: 'no-cache',

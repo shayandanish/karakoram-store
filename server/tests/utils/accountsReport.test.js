@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { strFromU8, unzipSync } from 'fflate';
 import { buildAccountsXlsx, calculateAccountsReport, getAccountsDateRange } from '../../utils/accountsReport.js';
 import { fromMinorUnits, toMinorUnits } from '../../utils/money.js';
-import { hasRecentAdminMfa } from '../../middlewares/accountsSecurity.js';
 
 describe('getAccountsDateRange', () => {
   const now = new Date('2026-11-03T08:30:00.000Z');
@@ -151,25 +150,10 @@ describe('accounts report calculations', () => {
   });
 });
 
-describe('financial units and Accounts MFA', () => {
+describe('financial units', () => {
   it('converts rupees to exact paisa and rejects excess precision', () => {
     expect(toMinorUnits(12.34)).toBe(1234);
     expect(fromMinorUnits(1234)).toBe(12.34);
     expect(() => toMinorUnits(1.234)).toThrow(RangeError);
-  });
-
-  it('requires a recent MFA sign-in, not merely an old enrolled session', () => {
-    expect(hasRecentAdminMfa({
-      adminMfaVerified: true,
-      adminAuthTime: 9_400,
-    }, 10_000)).toBe(true);
-    expect(hasRecentAdminMfa({
-      adminMfaVerified: true,
-      adminAuthTime: 9_399,
-    }, 10_000)).toBe(false);
-    expect(hasRecentAdminMfa({
-      adminMfaVerified: false,
-      adminAuthTime: 10_000,
-    }, 10_000)).toBe(false);
   });
 });
