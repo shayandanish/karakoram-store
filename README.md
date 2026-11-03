@@ -84,6 +84,8 @@ Deploy `client/` and `server/` as separate Vercel projects, with each directory 
 
 The GitHub workflow builds the client on pushes and pull requests. Client deployment from `main` is opt-in: set the Actions variable `DEPLOY_VERCEL` to `true` after configuring the `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets. Deploy the backend Vercel project separately. Vercel's filesystem is ephemeral, so production uploads require Cloudinary.
 
+The backend payment-reminder cron runs daily at 00:00 UTC to comply with Vercel Hobby's once-per-day cron limit. More frequent runs require a Vercel plan that supports them.
+
 ## Secrets
 
 Never commit `.env` files, production credentials, or database backups. `server/.env.atlas-backup` is intentionally ignored; rotate any credentials that may have been shared or exposed.
