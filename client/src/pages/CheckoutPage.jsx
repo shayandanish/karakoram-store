@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { fmtPKR } from '../lib/utils';
 import { COUNTRY_CODES, validatePhoneNumber, validateEmail } from '../lib/phoneUtils';
+import { getDeliveryRate } from '../lib/deliveryRates';
 import api from '../lib/axios';
 import SEO from '../components/ui/SEO';
+import TrustBadges from '../components/ui/TrustBadges';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 
 const PROVINCES = [
@@ -60,13 +62,35 @@ const PAYMENT_CARD_STYLES = {
 };
 
 export default function CheckoutPage() {
-  const { items, subtotal, clearCart } = useCart();
+  const { items, subtotal, clearCart, revalidateCart } = useCart();
   const { user } = useAuth();
   const { settings } = useSiteSettings();
   const navigate = useNavigate();
-  const shippingFee = settings.shippingFee;
-  const total = subtotal + shippingFee;
+  const [cartIsChecking, setCartIsChecking] = useState(true);
+  const [cartNotice, setCartNotice] = useState('');
+  const [cartCheckError, setCartCheckError] = useState('');
+  const [revalidating, setRevalidating] = useState(false);
   const enabledPaymentMethods = settings.paymentMethods.filter((method) => method.enabled);
+
+  useEffect(() => {
+    let active = true;
+    revalidateCart()
+      .then(({ warnings }) => {
+        if (!active) return;
+        setCartCheckError('');
+        if (warnings.length) {
+          setCartNotice('Your cart changed. Review the updated prices and availability before placing the order.');
+        }
+      })
+      .catch(() => {
+        if (active) setCartCheckError('Unable to verify current prices and stock. Please try again.');
+      })
+      .finally(() => {
+        if (active) setCartIsChecking(false);
+      });
+
+    return () => { active = false; };
+  }, [items.length, revalidateCart]);
 
   const [form, setForm] = useState({
     guestName: user?.name || '',
@@ -80,6 +104,9 @@ export default function CheckoutPage() {
     notes: '',
     couponCode: '',
   });
+  const deliveryRate = getDeliveryRate(settings, form.city, form.province);
+  const shippingFee = deliveryRate.shippingFee;
+  const total = subtotal + shippingFee;
 
   const [copiedNumber, setCopiedNumber] = useState(false);
   const [dialCode, setDialCode] = useState('+92');
@@ -168,6 +195,8 @@ export default function CheckoutPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setCartCheckError('');
+    setCartNotice('');
     if (!selectedPaymentMethod) {
       setApiError('No payment methods are currently available. Please contact the store.');
       return;
@@ -177,6 +206,25 @@ export default function CheckoutPage() {
 
     setSubmitting(true);
     setApiError('');
+
+    setRevalidating(true);
+    try {
+      const cartCheck = await revalidateCart();
+      if (!cartCheck.canCheckout) {
+        setCartNotice(
+          cartCheck.warnings.join(' ') ||
+          'Your cart changed. Review the updated prices and availability before placing the order.'
+        );
+        setSubmitting(false);
+        return;
+      }
+    } catch {
+      setCartCheckError('Unable to verify current prices and stock. Please try again.');
+      setSubmitting(false);
+      return;
+    } finally {
+      setRevalidating(false);
+    }
 
     // Normalize the phone to E.164 format before sending to server
     const { normalized: normalizedPhone } = validatePhoneNumber(form.guestPhone, dialCode);
@@ -262,6 +310,43 @@ export default function CheckoutPage() {
         <h1 className="font-display font-bold text-3xl text-mountain-900">Checkout</h1>
         <p className="mt-1 text-sm text-mountain-500">{settings.storeTagline}</p>
       </div>
+
+      {/* Progress indicator */}
+      <ol className="mb-8 flex flex-wrap items-center gap-y-2 text-xs" aria-label="Checkout progress">
+        {[
+          { id: 'cart', label: 'Cart', state: 'done' },
+          { id: 'details', label: 'Details', state: 'current' },
+          { id: 'payment', label: 'Payment', state: 'upcoming' },
+          { id: 'done', label: 'Confirmation', state: 'upcoming' },
+        ].map((step, index, steps) => (
+          <li key={step.id} className="flex items-center gap-2">
+            <span
+              aria-current={step.state === 'current' ? 'step' : undefined}
+              className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${
+                step.state === 'done'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : step.state === 'current'
+                    ? 'bg-apricot-500 text-white shadow-sm'
+                    : 'bg-cream-200 text-mountain-400'
+              }`}
+            >
+              {step.state === 'done' ? '✓' : index + 1}
+            </span>
+            <span
+              className={
+                step.state === 'upcoming'
+                  ? 'font-medium text-mountain-400'
+                  : 'font-semibold text-mountain-800'
+              }
+            >
+              {step.label}
+            </span>
+            {index < steps.length - 1 && (
+              <span className="mx-1 h-px w-5 bg-cream-300 sm:w-9" aria-hidden="true" />
+            )}
+          </li>
+        ))}
+      </ol>
 
 
       <form id="checkout-form" onSubmit={handleSubmit} noValidate>
@@ -708,9 +793,15 @@ export default function CheckoutPage() {
                   <span>{fmtPKR(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-mountain-600">
-                  <span>Shipping</span>
+                  <span>Delivery</span>
                   <span>{fmtPKR(shippingFee)}</span>
                 </div>
+                <p className="text-xs leading-relaxed text-mountain-500" aria-live="polite">
+                  {deliveryRate.zoneName
+                    ? `${deliveryRate.zoneName} delivery · `
+                    : 'Standard delivery · '}
+                  Estimated in {deliveryRate.minDays}–{deliveryRate.maxDays} days after placing your order.
+                </p>
                 <div className="border-t border-cream-200 pt-2 flex justify-between">
                   <span className="font-bold text-mountain-900">Total</span>
                   <span className="font-display font-bold text-apricot-600 text-xl">{fmtPKR(total)}</span>
@@ -722,19 +813,35 @@ export default function CheckoutPage() {
                   {apiError}
                 </div>
               )}
+              {cartNotice && (
+                <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  {cartNotice}
+                </div>
+              )}
+              {cartCheckError && (
+                <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {cartCheckError}
+                </div>
+              )}
 
               <button
                 id="checkout-submit-btn"
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || revalidating || cartIsChecking}
                 className="mt-6 w-full py-4 bg-apricot-500 hover:bg-apricot-600 disabled:bg-apricot-300 text-white font-bold rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-apricot-500/30 disabled:cursor-not-allowed text-sm"
               >
-                {submitting ? 'Placing Order…' : `Place Order — ${fmtPKR(total)}`}
+                {cartIsChecking || revalidating
+                  ? 'Checking cart…'
+                  : submitting
+                    ? 'Placing Order…'
+                    : `Place Order — ${fmtPKR(total)}`}
               </button>
 
               <p className="text-xs text-center text-mountain-400 mt-3">
                 By placing this order you agree to our return & refund policy.
               </p>
+
+              <TrustBadges variant="inline" className="mt-5 border-t border-cream-200 pt-4" />
             </div>
           </div>
         </div>

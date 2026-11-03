@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 import { setPublicCache } from '../utils/cache.js';
 import { getCache, setCache } from '../utils/cache.js';
@@ -71,11 +72,14 @@ export const getProducts = async (req, res, next) => {
       if (pattern) filter.origin = { $regex: pattern, $options: 'i' };
     }
 
-    // Price filter (checks at least one variant in range)
+    // Price filter — compares against each product's cheapest variant so the
+    // range matches the "From Rs …" price shown on product cards.
+    const exprClauses = [];
+
     if (minPrice || maxPrice) {
-      filter['variants.price'] = {};
-      if (minPrice) filter['variants.price'].$gte = Number(minPrice);
-      if (maxPrice) filter['variants.price'].$lte = Number(maxPrice);
+      const cheapestVariantPrice = { $min: '$variants.price' };
+      if (minPrice) exprClauses.push({ $gte: [cheapestVariantPrice, Number(minPrice)] });
+      if (maxPrice) exprClauses.push({ $lte: [cheapestVariantPrice, Number(maxPrice)] });
     }
 
     // In-stock filter
@@ -85,7 +89,7 @@ export const getProducts = async (req, res, next) => {
 
     // Sale filter (at least one variant with an active discount)
     if (sale === 'true') {
-      filter.$expr = {
+      exprClauses.push({
         $or: [
           // Any variant has discountPercent > 0
           { $gt: [{ $max: '$variants.discountPercent' }, 0] },
@@ -110,8 +114,11 @@ export const getProducts = async (req, res, next) => {
             ],
           },
         ],
-      };
+      });
     }
+
+    if (exprClauses.length === 1) filter.$expr = exprClauses[0];
+    else if (exprClauses.length > 1) filter.$expr = { $and: exprClauses };
 
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -133,7 +140,7 @@ export const getProducts = async (req, res, next) => {
     };
 
     // 2. Write to cache for next request (fire-and-forget, don't await)
-    setCache(cacheKey, result, PRODUCT_LIST_TTL).catch(() => {});
+    setCache(cacheKey, result, PRODUCT_LIST_TTL).catch(() => { });
 
     res.set('X-Cache', 'MISS');
     setPublicCache(res, PRODUCT_LIST_TTL, 120);
@@ -157,7 +164,11 @@ export const getProductBySlug = async (req, res, next) => {
       return res.json(cached);
     }
 
-    const product = await Product.findOne({ slug, isActive: true })
+    const query = mongoose.isValidObjectId(slug)
+      ? { $or: [{ _id: slug }, { slug }], isActive: true }
+      : { slug, isActive: true };
+
+    const product = await Product.findOne(query)
       .populate('category', 'name slug')
       .populate('artisan', 'name village story photo');
 
@@ -167,7 +178,7 @@ export const getProductBySlug = async (req, res, next) => {
     }
 
     // 2. Write to cache (fire-and-forget)
-    setCache(cacheKey, product.toObject ? product.toObject() : product, PRODUCT_DETAIL_TTL).catch(() => {});
+    setCache(cacheKey, product.toObject ? product.toObject() : product, PRODUCT_DETAIL_TTL).catch(() => { });
 
     res.set('X-Cache', 'MISS');
     setPublicCache(res, PRODUCT_DETAIL_TTL, 600);

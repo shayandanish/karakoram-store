@@ -8,6 +8,7 @@ import User from '../models/User.js';
 import { getEnabledPaymentMethod } from '../utils/paymentMethods.js';
 import { generateOrderId } from '../utils/orderIdGenerator.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
+import { resolveDeliveryRate } from '../utils/deliveryRates.js';
 import {
   isCloudinaryConfigured,
   streamUploadToCloudinary,
@@ -66,8 +67,22 @@ const checkEmailDomain = (email) => {
   return null;
 };
 
-const addressSchema = z.object({
-  name: z.string().min(2),
+/**
+ * Normalizes phone number for strict comparison.
+ * Extracts the last 10 digits (ignoring leading country code / 0) to ensure
+ * exact match between 03XXXXXXXXX and +923XXXXXXXXX while rejecting loose endsWith matches.
+ */
+export const normalizePhoneForStrictMatch = (phone) => {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length >= 10) {
+    return digits.slice(-10);
+  }
+  return digits;
+};
+
+export const addressSchema = z.object({
+  name: z.string().min(2).max(100),
   phone: z
     .string()
     .min(7, 'Phone number is too short')
@@ -82,22 +97,22 @@ const addressSchema = z.object({
       if (d.length >= 7 && d.length <= 15) return true;
       return false;
     }, 'Please enter a valid phone number (e.g. 0300 1234567 or +971 50 123 4567)'),
-  street: z.string().min(3),
-  city: z.string().min(2),
-  province: z.string().min(2),
-  postalCode: z.string().optional(),
-  country: z.string().default('Pakistan'),
+  street: z.string().min(3).max(200),
+  city: z.string().min(2).max(100),
+  province: z.string().min(2).max(100),
+  postalCode: z.string().max(20).optional(),
+  country: z.string().max(50).default('Pakistan'),
 });
 
-const orderItemInputSchema = z.object({
+export const orderItemInputSchema = z.object({
   product: z.string().length(24, 'Invalid product id'),
-  variantLabel: z.string().min(1),
-  quantity: z.number().int().min(1),
+  variantLabel: z.string().min(1).max(50),
+  quantity: z.number().int().min(1).max(50, 'Quantity cannot exceed 50 per item'),
 });
 
-const createOrderSchema = z.object({
+export const createOrderSchema = z.object({
   // Guest fields (required when not logged in)
-  guestName: z.string().optional(),
+  guestName: z.string().max(100).optional(),
   guestEmail: z
     .string()
     .optional()
@@ -108,16 +123,16 @@ const createOrderSchema = z.object({
     ),
   guestPhone: z.string().min(7, 'Phone number is too short').max(20).optional(),
 
-  items: z.array(orderItemInputSchema).min(1),
+  items: z.array(orderItemInputSchema).min(1).max(30, 'Cannot exceed 30 items per order'),
   shippingAddress: addressSchema,
   paymentMethod: z.enum(['easypaisa', 'cod', 'COD', 'bank_transfer', 'jazzcash', 'other']).default('easypaisa'),
-  transactionId: z.string().optional(),
-  couponCode: z.string().optional(),
-  notes: z.string().optional(),
+  transactionId: z.string().max(100).optional(),
+  couponCode: z.string().max(30).optional(),
+  notes: z.string().max(500).optional(),
 
   // Communication & WhatsApp preferences
   whatsappConsent: z.boolean().optional().default(true),
-  whatsappPhone: z.string().optional(),
+  whatsappPhone: z.string().max(20).optional(),
 });
 
 // POST /api/orders
@@ -133,9 +148,8 @@ export const createOrder = async (req, res, next) => {
       res.status(400);
       throw new Error('The selected payment method is unavailable. Please choose another method.');
     }
-    const shippingCost = Number.isFinite(siteSettings.shippingFee)
-      ? siteSettings.shippingFee
-      : 200;
+    const deliveryRate = resolveDeliveryRate(siteSettings, data.shippingAddress);
+    const { shippingCost } = deliveryRate;
 
     // Guest orders require contact details
     if (!req.user && (!data.guestName || !data.guestPhone)) {
@@ -169,12 +183,24 @@ export const createOrder = async (req, res, next) => {
             throw new Error(`Insufficient stock for ${product.name} (${input.variantLabel})`);
           }
 
-          // Reduce stock atomically
-          await Product.updateOne(
-            { _id: product._id, 'variants.label': input.variantLabel },
+          // Reduce stock atomically with guard against overselling / race conditions
+          const stockUpdateResult = await Product.updateOne(
+            {
+              _id: product._id,
+              variants: {
+                $elemMatch: {
+                  label: input.variantLabel,
+                  stock: { $gte: input.quantity },
+                },
+              },
+            },
             { $inc: { 'variants.$.stock': -input.quantity } },
             { session }
           );
+
+          if (stockUpdateResult.modifiedCount === 0) {
+            throw new Error(`Insufficient stock for ${product.name} (${input.variantLabel})`);
+          }
 
           // Server-calculated effective price taking discount percentage into account
           let effectivePrice = variant.price;
@@ -201,28 +227,6 @@ export const createOrder = async (req, res, next) => {
         const subtotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
         let discount = 0;
 
-        // Apply coupon if provided
-        if (data.couponCode) {
-          const coupon = await Coupon.findOne({
-            code: data.couponCode.toUpperCase(),
-            isActive: true,
-            expiry: { $gte: new Date() },
-            $expr: { $lt: ['$usedCount', '$usageLimit'] },
-          }).session(session);
-
-          if (coupon) {
-            discount =
-              coupon.discountType === 'percentage'
-                ? (subtotal * coupon.value) / 100
-                : coupon.value;
-
-            // Increment usage count
-            await Coupon.updateOne({ _id: coupon._id }, { $inc: { usedCount: 1 } }, { session });
-          }
-        }
-
-        const total = Math.max(0, subtotal + shippingCost - discount);
-
         // Link order to logged-in user or find matching registered user by email
         let userId = req.user?._id || null;
         const cleanGuestEmail = data.guestEmail ? data.guestEmail.toLowerCase().trim() : '';
@@ -235,6 +239,63 @@ export const createOrder = async (req, res, next) => {
             userId = matchedUser._id;
           }
         }
+
+        // Apply coupon if provided
+        if (data.couponCode && data.couponCode.trim()) {
+          const codeUpper = data.couponCode.trim().toUpperCase();
+          const coupon = await Coupon.findOne({ code: codeUpper }).session(session);
+
+          if (!coupon) {
+            res.status(400);
+            throw new Error(`Coupon "${codeUpper}" does not exist`);
+          }
+          if (!coupon.isActive) {
+            res.status(400);
+            throw new Error(`Coupon "${codeUpper}" is inactive`);
+          }
+          if (coupon.expiry && new Date(coupon.expiry) < new Date()) {
+            res.status(400);
+            throw new Error(`Coupon "${codeUpper}" has expired`);
+          }
+          if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+            res.status(400);
+            throw new Error(`Coupon "${codeUpper}" has reached its maximum usage limit`);
+          }
+          if (coupon.minOrderAmount && subtotal < coupon.minOrderAmount) {
+            res.status(400);
+            throw new Error(`Order subtotal must be at least Rs ${coupon.minOrderAmount} to use coupon "${codeUpper}"`);
+          }
+
+          // Per-customer usage check
+          const customerConditions = [];
+          if (userId) customerConditions.push({ user: userId });
+          if (cleanGuestEmail) customerConditions.push({ guestEmail: cleanGuestEmail });
+          if (customerConditions.length > 0) {
+            const customerUses = await Order.countDocuments({
+              $or: customerConditions,
+              couponCode: codeUpper,
+              orderStatus: { $ne: 'cancelled' },
+            }).session(session);
+
+            const allowedLimit = coupon.perCustomerLimit || 1;
+            if (customerUses >= allowedLimit) {
+              res.status(400);
+              throw new Error(`You have already redeemed coupon "${codeUpper}" the maximum allowed times (${allowedLimit})`);
+            }
+          }
+
+          const rawDiscount =
+            coupon.discountType === 'percentage'
+              ? (subtotal * coupon.value) / 100
+              : coupon.value;
+
+          discount = Math.min(subtotal, Math.round(rawDiscount));
+
+          // Increment usage count atomically
+          await Coupon.updateOne({ _id: coupon._id }, { $inc: { usedCount: 1 } }, { session });
+        }
+
+        const total = Math.max(0, subtotal + shippingCost - discount);
 
         const initialHistory = [
           {
@@ -255,6 +316,13 @@ export const createOrder = async (req, res, next) => {
               guestPhone: data.guestPhone,
               items: orderItems,
               shippingAddress: data.shippingAddress,
+              shippingZone: deliveryRate.zoneName,
+              deliveryEstimate: {
+                minDays: deliveryRate.minDays,
+                maxDays: deliveryRate.maxDays,
+                estimatedFrom: new Date(Date.now() + deliveryRate.minDays * 86400000),
+                estimatedTo: new Date(Date.now() + deliveryRate.maxDays * 86400000),
+              },
               paymentMethod: paymentMethod.id === 'cod' ? 'COD' : paymentMethod.id,
               paymentDetails: {
                 name: paymentMethod.name,
@@ -265,7 +333,7 @@ export const createOrder = async (req, res, next) => {
               transactionId: data.transactionId || '',
               orderStatus: 'pending',
               statusHistory: initialHistory,
-              couponCode: data.couponCode || '',
+              couponCode: data.couponCode ? data.couponCode.trim().toUpperCase() : '',
               notes: data.notes || '',
               whatsappConsent: data.whatsappConsent !== false,
               whatsappPhone: data.whatsappPhone || data.shippingAddress.phone || data.guestPhone || '',
@@ -308,10 +376,9 @@ export const getMyOrders = async (req, res, next) => {
     const userPhone = req.user?.phone?.trim();
 
     const matchConditions = [];
-    if (userEmail) matchConditions.push({ guestEmail: userEmail });
-    if (userPhone) {
-      matchConditions.push({ guestPhone: userPhone });
-      matchConditions.push({ 'shippingAddress.phone': userPhone });
+    // Link guest orders strictly by verified email (prevents unverified phone order hijacking)
+    if (userEmail) {
+      matchConditions.push({ guestEmail: userEmail });
     }
 
     // Auto-link any matching orders that didn't have user ID set
@@ -363,10 +430,13 @@ export const trackOrder = async (req, res, next) => {
     const isAdmin = req.user?.role === 'admin';
 
     if (!isOwner && !isAdmin) {
-      const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
-      const orderShippingPhone = order.shippingAddress?.phone ? String(order.shippingAddress.phone).replace(/\D/g, '') : '';
-      const orderGuestPhone = order.guestPhone ? String(order.guestPhone).replace(/\D/g, '') : '';
-      const phoneMatch = cleanPhone && (cleanPhone === orderShippingPhone || cleanPhone === orderGuestPhone || orderShippingPhone.endsWith(cleanPhone) || cleanPhone.endsWith(orderShippingPhone));
+      const normInputPhone = normalizePhoneForStrictMatch(phone);
+      const normShippingPhone = normalizePhoneForStrictMatch(order.shippingAddress?.phone);
+      const normGuestPhone = normalizePhoneForStrictMatch(order.guestPhone);
+      const phoneMatch = normInputPhone && normInputPhone.length >= 10 && (
+        normInputPhone === normShippingPhone ||
+        normInputPhone === normGuestPhone
+      );
 
       const cleanEmail = email ? String(email).trim().toLowerCase() : '';
       const emailMatch = cleanEmail && order.guestEmail && order.guestEmail.toLowerCase() === cleanEmail;
@@ -463,14 +533,12 @@ export const uploadPaymentScreenshot = async (req, res, next) => {
     const isAdmin = req.user?.role === 'admin';
 
     if (!isOwner && !isAdmin) {
-      const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
-      const orderShippingPhone = order.shippingAddress?.phone ? String(order.shippingAddress.phone).replace(/\D/g, '') : '';
-      const orderGuestPhone = order.guestPhone ? String(order.guestPhone).replace(/\D/g, '') : '';
-      const phoneMatch = cleanPhone && (
-        cleanPhone === orderShippingPhone ||
-        cleanPhone === orderGuestPhone ||
-        orderShippingPhone.endsWith(cleanPhone) ||
-        cleanPhone.endsWith(orderShippingPhone)
+      const normInputPhone = normalizePhoneForStrictMatch(phone);
+      const normShippingPhone = normalizePhoneForStrictMatch(order.shippingAddress?.phone);
+      const normGuestPhone = normalizePhoneForStrictMatch(order.guestPhone);
+      const phoneMatch = normInputPhone && normInputPhone.length >= 10 && (
+        normInputPhone === normShippingPhone ||
+        normInputPhone === normGuestPhone
       );
 
       const cleanEmail = email ? String(email).trim().toLowerCase() : '';

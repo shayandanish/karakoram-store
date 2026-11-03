@@ -7,6 +7,7 @@
     "dev": "node --watch server.js",
     "seed": "node seed.js",
     "seed:admin": "node seedAdmin.js",
+    "lint": "oxlint",
     "test": "vitest",
     "test:run": "vitest run"
   },
@@ -39,6 +40,7 @@
     "jose": "^4.15.9"
   },
   "devDependencies": {
+    "oxlint": "^1.90.0",
     "vitest": "^5.0.5"
   }
 }

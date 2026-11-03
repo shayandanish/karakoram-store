@@ -15,7 +15,7 @@ export default function FloatingWhatsApp() {
   return (
     <aside
       aria-label="Direct WhatsApp Contact"
-      className="fixed bottom-6 right-6 z-40 flex items-center group"
+      className="fixed bottom-24 right-4 z-40 flex items-center group sm:bottom-6 sm:right-6"
     >
       {/* Tooltip on hover/focus */}
       <span

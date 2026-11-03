@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /order-success
+Disallow: /checkout
+Disallow: /my-orders
+
+Sitemap: https://karakoram-store.vercel.app/sitemap.xml
+

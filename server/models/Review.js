@@ -6,12 +6,18 @@ const reviewSchema = new mongoose.Schema(
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     rating: { type: Number, required: true, min: 1, max: 5 },
     comment: { type: String, trim: true },
-    images: [
-      {
-        url: { type: String },
-        publicId: { type: String },
+    images: {
+      type: [
+        {
+          url: { type: String, required: true },
+          publicId: { type: String, default: '' },
+        },
+      ],
+      validate: {
+        validator: (images) => images.length <= 3,
+        message: 'A review can include at most 3 photos',
       },
-    ],
+    },
   },
   { timestamps: true }
 );

@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
 
-const DEFAULT_IMAGE = '/favicon.svg';
+const DEFAULT_IMAGE = '/regions/hunza-960.webp';
 
 export default function SEO({
   title,

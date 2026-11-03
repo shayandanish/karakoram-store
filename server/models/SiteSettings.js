@@ -16,6 +16,20 @@ const paymentMethodSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const deliveryZoneSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, trim: true, maxlength: 80 },
+    name: { type: String, required: true, trim: true, maxlength: 80 },
+    cities: { type: [String], default: [] },
+    provinces: { type: [String], default: [] },
+    shippingFee: { type: Number, required: true, min: 0, max: 100000 },
+    minDays: { type: Number, required: true, min: 1, max: 60 },
+    maxDays: { type: Number, required: true, min: 1, max: 60 },
+    enabled: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
 const siteSettingsSchema = new mongoose.Schema(
   {
     // Singleton key. There should only ever be one document.
@@ -53,6 +67,9 @@ const siteSettingsSchema = new mongoose.Schema(
       default: 200,
       min: 0,
     },
+    deliveryMinDays: { type: Number, default: 2, min: 1, max: 60 },
+    deliveryMaxDays: { type: Number, default: 5, min: 1, max: 60 },
+    deliveryZones: { type: [deliveryZoneSchema], default: [] },
     easypaisaAccountName: {
       type: String,
       default: 'Shayan Danish',

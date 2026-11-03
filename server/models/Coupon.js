@@ -8,6 +8,7 @@ const couponSchema = new mongoose.Schema(
     minOrderAmount: { type: Number, default: 0 },   // minimum cart total to apply
     expiry: { type: Date, required: true },
     usageLimit: { type: Number, default: 1 },
+    perCustomerLimit: { type: Number, default: 1, min: 1 },
     usedCount: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
   },

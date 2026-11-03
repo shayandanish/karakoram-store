@@ -1,5 +1,5 @@
 // ── Global Toast Notification System ─────────────────────────────
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const ToastContext = createContext(null);
 
@@ -21,15 +21,16 @@ export function ToastProvider({ children }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const toast = {
+  const toast = useMemo(() => ({
     success: (msg, dur) => addToast(msg, 'success', dur),
     error: (msg, dur) => addToast(msg, 'error', dur),
     info: (msg, dur) => addToast(msg, 'info', dur),
     warning: (msg, dur) => addToast(msg, 'warning', dur),
-  };
+  }), [addToast]);
+  const contextValue = useMemo(() => ({ toast, removeToast }), [toast, removeToast]);
 
   return (
-    <ToastContext.Provider value={{ toast, removeToast }}>
+    <ToastContext.Provider value={contextValue}>
       {children}
       {/* Toast Render Portal */}
       <div

@@ -1,14 +1,37 @@
 // ── Cart Page ─────────────────────────────────────────────────
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { fmtPKR, buildWhatsAppLink } from '../lib/utils';
-import { getVariantDiscount } from '../lib/discountUtils';
 import ProductImage from '../components/ui/ProductImage';
+import TrustBadges from '../components/ui/TrustBadges';
 import SEO from '../components/ui/SEO';
 import { useSiteSettings } from '../hooks/useSiteSettings';
+import { useWishlist } from '../context/WishlistContext';
+import { useToast } from '../context/ToastContext';
 
 function CartItem({ item }) {
   const { updateQty, removeFromCart } = useCart();
+  const { addToWishlist, isWishlisted } = useWishlist();
+  const toast = useToast();
+
+  const saved = isWishlisted(item.productId);
+
+  const handleSaveForLater = () => {
+    if (saved) {
+      toast.info(`${item.productName} is already in your wishlist`);
+      return;
+    }
+    addToWishlist({
+      _id: item.productId,
+      name: item.productName,
+      slug: item.productSlug,
+      images: item.image ? [{ url: item.image, alt: item.productName }] : [],
+      variants: [{ label: item.variantLabel, price: item.price, stock: 1 }],
+    });
+    removeFromCart(item.key);
+    toast.success(`Saved ${item.productName} for later`);
+  };
 
   return (
     <div
@@ -68,16 +91,32 @@ function CartItem({ item }) {
                 </p>
               )}
             </div>
-            <button
-              id={`cart-remove-${item.key}`}
-              onClick={() => removeFromCart(item.key)}
-              className="text-mountain-400 hover:text-red-500 transition-colors"
-              aria-label={`Remove ${item.productName} from cart`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                id={`cart-save-${item.key}`}
+                onClick={handleSaveForLater}
+                className={`rounded-lg p-1.5 transition-colors ${saved
+                  ? 'text-rose-500'
+                  : 'text-mountain-400 hover:bg-apricot-50 hover:text-apricot-600'
+                  }`}
+                aria-label={`Save ${item.productName} for later`}
+                title="Save for later"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill={saved ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4.2L5 21V4.5a1 1 0 0 1 1-1Z" />
+                </svg>
+              </button>
+              <button
+                id={`cart-remove-${item.key}`}
+                onClick={() => removeFromCart(item.key)}
+                className="rounded-lg p-1.5 text-mountain-400 transition-colors hover:bg-rose-50 hover:text-red-500"
+                aria-label={`Remove ${item.productName} from cart`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -86,7 +125,23 @@ function CartItem({ item }) {
 }
 
 export default function CartPage() {
-  const { items, clearCart, subtotal } = useCart();
+  const { items, clearCart, subtotal, revalidateCart } = useCart();
+  const toast = useToast();
+
+  useEffect(() => {
+    let mounted = true;
+    if (items.length > 0) {
+      revalidateCart().then((res) => {
+        if (mounted && res?.warnings?.length > 0) {
+          res.warnings.forEach((msg) => toast.info(msg));
+        }
+      });
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [revalidateCart, items.length, toast]);
+  const { count: wishlistCount } = useWishlist();
   const { settings } = useSiteSettings();
   const shippingFee = settings.shippingFee;
   const total = subtotal + shippingFee;
@@ -95,20 +150,34 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-24 text-center">
+      <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
         <SEO title="Shopping Cart" description={`Your shopping cart at ${settings.storeName}.`} canonicalUrl="/cart" />
-        <p className="text-6xl mb-4">🛒</p>
-        <h1 className="font-display font-bold text-2xl text-mountain-900 mb-2">Your cart is empty</h1>
-        <p className="text-mountain-500 text-sm mb-8">
-          {settings.storeDescription}
-        </p>
-        <Link
-          to="/shop"
-          id="cart-shop-btn"
-          className="inline-block px-8 py-3.5 bg-apricot-500 hover:bg-apricot-600 text-white font-semibold rounded-full transition-colors"
-        >
-          Start Shopping
-        </Link>
+        <div className="rounded-3xl border border-cream-200 bg-white p-8 text-center shadow-sm sm:p-10">
+          <p className="mb-4 text-6xl" aria-hidden="true">🛒</p>
+          <h1 className="mb-2 font-display text-2xl font-bold text-mountain-900">Your cart is empty</h1>
+          <p className="mb-8 text-sm text-mountain-500">
+            {settings.storeDescription}
+          </p>
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              to="/shop"
+              id="cart-shop-btn"
+              className="inline-block rounded-full bg-apricot-500 px-8 py-3.5 font-semibold text-white transition-colors hover:bg-apricot-600"
+            >
+              Start Shopping
+            </Link>
+            {wishlistCount > 0 && (
+              <Link
+                to="/wishlist"
+                className="inline-block rounded-full border border-cream-300 bg-white px-6 py-3.5 text-sm font-semibold text-mountain-700 transition-colors hover:border-apricot-300 hover:text-apricot-700"
+              >
+                View wishlist ({wishlistCount})
+              </Link>
+            )}
+          </div>
+        </div>
+
+        <TrustBadges className="mt-6" />
       </div>
     );
   }
@@ -171,6 +240,13 @@ export default function CartPage() {
               <span className="font-display font-bold text-apricot-600 text-xl">{fmtPKR(total)}</span>
             </div>
           </div>
+
+          <p className="mt-4 flex items-start gap-2 rounded-xl bg-cream-100 p-3 text-[11px] leading-relaxed text-mountain-600">
+            <span aria-hidden="true">🚚</span>
+            <span>
+              Orders are usually dispatched within 24 hours. Delivery takes 2–5 working days across Pakistan.
+            </span>
+          </p>
 
           <Link
             to="/checkout"

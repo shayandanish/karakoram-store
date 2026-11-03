@@ -112,6 +112,13 @@ const orderSchema = new mongoose.Schema(
     statusHistory: [statusHistorySchema],
 
     // Courier and shipment logistics
+    shippingZone: { type: String, default: '' },
+    deliveryEstimate: {
+      minDays: { type: Number, default: null },
+      maxDays: { type: Number, default: null },
+      estimatedFrom: { type: Date, default: null },
+      estimatedTo: { type: Date, default: null },
+    },
     shipment: {
       type: shipmentSchema,
       default: () => ({}),
@@ -172,5 +179,7 @@ orderSchema.index({ guestEmail: 1 });
 orderSchema.index({ guestPhone: 1 });
 orderSchema.index({ 'shippingAddress.phone': 1 });
 orderSchema.index({ createdAt: -1 });
+orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1, orderStatus: 1, createdAt: -1 });
 
 export default mongoose.model('Order', orderSchema);

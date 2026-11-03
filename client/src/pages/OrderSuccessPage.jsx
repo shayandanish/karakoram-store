@@ -369,9 +369,19 @@ export default function OrderSuccessPage() {
                   <span className="font-semibold text-slate-900">{fmtPKR(order.subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>Shipping Fee (Nationwide)</span>
+                  <span>
+                    Delivery{order.shippingZone ? ` · ${order.shippingZone}` : ''}
+                  </span>
                   <span className="font-semibold text-slate-900">{fmtPKR(order.shippingCost)}</span>
                 </div>
+                {order.deliveryEstimate?.minDays && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Estimated delivery</span>
+                    <span className="font-semibold text-slate-900">
+                      {order.deliveryEstimate.minDays}–{order.deliveryEstimate.maxDays} days
+                    </span>
+                  </div>
+                )}
                 {order.discount > 0 && (
                   <div className="flex justify-between text-emerald-600 font-semibold">
                     <span>Discount Applied</span>

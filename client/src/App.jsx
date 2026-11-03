@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CartProvider } from './context/CartContext';
+import { WishlistProvider } from './context/WishlistContext';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import Layout from './components/layout/Layout';
@@ -21,6 +22,7 @@ const TrackOrderPage = lazy(() => import('./pages/TrackOrderPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
+const WishlistPage = lazy(() => import('./pages/WishlistPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -60,49 +62,52 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <CartProvider>
-          <ToastProvider>
-            <BrowserRouter>
-              <ScrollToTop />
-              <Routes>
-                {/* ── Admin Dashboard Routes (Protected) ────────── */}
-                <Route path="/admin" element={<AdminGuard />}>
-                  <Route element={<AdminLayout />}>
-                    <Route index element={<AdminDashboardPage />} />
-                    <Route path="products" element={<AdminProductsPage />} />
-                    <Route path="products/new" element={<AdminProductFormPage />} />
-                    <Route path="products/:id/edit" element={<AdminProductFormPage />} />
-                    <Route path="categories" element={<AdminCategoriesPage />} />
-                    <Route path="artisans" element={<AdminArtisansPage />} />
-                    <Route path="orders" element={<AdminOrdersPage />} />
-                    <Route path="users" element={<AdminUsersPage />} />
-                    <Route path="coupons" element={<AdminCouponsPage />} />
-                    <Route path="cities" element={<AdminCitiesPage />} />
-                    <Route path="settings" element={<AdminSettingsPage />} />
-                    <Route path="accounts" element={<AdminAccountsPage />} />
+          <WishlistProvider>
+            <ToastProvider>
+              <BrowserRouter>
+                <ScrollToTop />
+                <Routes>
+                  {/* ── Admin Dashboard Routes (Protected) ────────── */}
+                  <Route path="/admin" element={<AdminGuard />}>
+                    <Route element={<AdminLayout />}>
+                      <Route index element={<AdminDashboardPage />} />
+                      <Route path="products" element={<AdminProductsPage />} />
+                      <Route path="products/new" element={<AdminProductFormPage />} />
+                      <Route path="products/:id/edit" element={<AdminProductFormPage />} />
+                      <Route path="categories" element={<AdminCategoriesPage />} />
+                      <Route path="artisans" element={<AdminArtisansPage />} />
+                      <Route path="orders" element={<AdminOrdersPage />} />
+                      <Route path="users" element={<AdminUsersPage />} />
+                      <Route path="coupons" element={<AdminCouponsPage />} />
+                      <Route path="cities" element={<AdminCitiesPage />} />
+                      <Route path="settings" element={<AdminSettingsPage />} />
+                      <Route path="accounts" element={<AdminAccountsPage />} />
+                    </Route>
                   </Route>
-                </Route>
 
-                {/* ── Storefront Routes ─────────────────────────── */}
-                <Route path="/" element={<Layout />}>
-                  <Route index element={<HomePage />} />
-                  <Route path="shop" element={<ShopPage />} />
-                  <Route path="products/:slug" element={<ProductDetailPage />} />
-                  <Route path="cart" element={<CartPage />} />
-                  <Route path="checkout" element={<CheckoutPage />} />
-                  <Route path="order-success" element={<OrderSuccessPage />} />
-                  <Route path="track-order" element={<TrackOrderPage />} />
-                  <Route path="login" element={<LoginPage />} />
-                  <Route path="register" element={<RegisterPage />} />
-                  <Route path="my-orders" element={<MyOrdersPage />} />
-                  <Route path="orders" element={<MyOrdersPage />} />
-                  <Route path="dashboard" element={<MyOrdersPage />} />
-                  <Route path="about" element={<AboutPage />} />
-                  <Route path="contact" element={<ContactPage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Route>
-              </Routes>
-            </BrowserRouter>
-          </ToastProvider>
+                  {/* ── Storefront Routes ─────────────────────────── */}
+                  <Route path="/" element={<Layout />}>
+                    <Route index element={<HomePage />} />
+                    <Route path="shop" element={<ShopPage />} />
+                    <Route path="products/:slug" element={<ProductDetailPage />} />
+                    <Route path="cart" element={<CartPage />} />
+                    <Route path="checkout" element={<CheckoutPage />} />
+                    <Route path="order-success" element={<OrderSuccessPage />} />
+                    <Route path="track-order" element={<TrackOrderPage />} />
+                    <Route path="login" element={<LoginPage />} />
+                    <Route path="register" element={<RegisterPage />} />
+                    <Route path="my-orders" element={<MyOrdersPage />} />
+                    <Route path="wishlist" element={<WishlistPage />} />
+                    <Route path="orders" element={<MyOrdersPage />} />
+                    <Route path="dashboard" element={<MyOrdersPage />} />
+                    <Route path="about" element={<AboutPage />} />
+                    <Route path="contact" element={<ContactPage />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                  </Route>
+                </Routes>
+              </BrowserRouter>
+            </ToastProvider>
+          </WishlistProvider>
         </CartProvider>
       </AuthProvider>
     </QueryClientProvider>

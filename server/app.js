@@ -22,6 +22,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import cityRoutes from './routes/cityRoutes.js';
 import otpRoutes from './routes/otpRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import cronRoutes from './routes/cronRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,7 +60,10 @@ app.use(
 // On Vercel, uploads are stored in Cloudinary instead of this folder.
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const defaultOrigins = ['https://karakoram-store.vercel.app'];
+const defaultOrigins = [
+  'https://karakoram-store.vercel.app',
+  'https://karakoramstore.vercel.app',
+];
 
 const configuredOrigins = (process.env.CLIENT_URL || '')
   .split(',')
@@ -68,21 +72,28 @@ const configuredOrigins = (process.env.CLIENT_URL || '')
 
 const allowedOrigins = [...new Set([...defaultOrigins, ...configuredOrigins])];
 
-const localhostPattern = /^http:\/\/localhost:\d+$/;
-const vercelPreviewPattern = /^https:\/\/karakoram-store[\w-]*\.vercel\.app$/;
+const isDev = process.env.NODE_ENV !== 'production';
+const localhostPattern = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
 
 app.use(cors({
   origin: (origin, callback) => {
-    const normalizedOrigin = origin?.replace(/\/+$/, '');
-    if (
-      !origin ||
-      allowedOrigins.includes(normalizedOrigin) ||
-      localhostPattern.test(origin) ||
-      vercelPreviewPattern.test(origin)
-    ) {
+    // Requests from same-origin or non-browser tools (curl, server-to-server) have no origin header
+    if (!origin) return callback(null, true);
+
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+
+    // Allow configured production/staging origins
+    if (allowedOrigins.includes(normalizedOrigin)) {
       return callback(null, true);
     }
-    callback(new Error('Not allowed by CORS'));
+
+    // Allow localhost only in non-production environments
+    if (isDev && localhostPattern.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Disallow unexpected origins
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
 }));
@@ -98,13 +109,38 @@ app.use(sanitize); // strip $-prefixed / dot-containing keys from body, params, 
 
 // ── CSRF Protection ──────────────────────────
 const isPublicStateChanging = (req) => {
-  const path = req.path;
   const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
   if (!isStateChanging) return false;
-  if (path.includes('/auth/') || path.includes('/otp/')) return true;
-  if (path.includes('/orders/track')) return true;
-  if (path === '/orders' || path === '/app/orders') return true;
-  if (path.includes('/orders/') && path.includes('/payment-screenshot')) return true;
+
+  const path = req.path.replace(/^\/(api|app)/, ''); // Normalize prefix
+
+  // Explicit public endpoints that do not require CSRF token
+  const publicExactRoutes = [
+    '/auth/login',
+    '/auth/register',
+    '/auth/verify',
+    '/auth/resend',
+    '/auth/cancel-pending',
+    '/auth/google',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+    '/otp/send',
+    '/otp/verify',
+    '/otp/request',
+    '/otp/generate',
+    '/orders',               // Public checkout order creation
+    '/orders/track',         // Public tracking lookup
+    '/contact',              // Public contact message
+    '/cron/payment-reminders', // Vercel / serverless cron endpoint
+  ];
+
+  if (publicExactRoutes.includes(path)) return true;
+
+  // Public upload for payment proof: /orders/:id/payment-screenshot
+  if (/^\/orders\/[a-zA-Z0-9_-]+\/payment-screenshot$/.test(path)) {
+    return true;
+  }
+
   return false;
 };
 
@@ -139,6 +175,7 @@ for (const prefix of ['/api', '/app']) {
   app.use(`${prefix}/admin`, adminRoutes);
   app.use(`${prefix}/cities`, cityRoutes);
   app.use(`${prefix}/settings`, settingsRoutes);
+  app.use(`${prefix}/cron`, cronRoutes);
 }
 
 // ── Error Handling ───────────────────────────

@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/axios';
 import { useCart } from '../../context/CartContext';
+import { useWishlist } from '../../context/WishlistContext';
 import { useAuth } from '../../context/AuthContext';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
 import SiteLogoMark from '../ui/SiteLogoMark';
@@ -29,6 +30,7 @@ export default function Navbar() {
   const headerRef = useRef(null);
   const searchInputRef = useRef(null);
   const { totalItems } = useCart();
+  const { count: wishlistCount } = useWishlist();
   const { user, logout } = useAuth();
   const { logo, settings } = useSiteSettings();
   const hasCustomLogo = Boolean(logo?.url);
@@ -342,6 +344,23 @@ export default function Navbar() {
               )}
             </button>
 
+            {/* Wishlist icon */}
+            <Link
+              to="/wishlist"
+              id="nav-wishlist-btn"
+              className="relative p-2 rounded-xl hover:bg-apricot-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500"
+              aria-label={`Wishlist with ${wishlistCount} saved ${wishlistCount === 1 ? 'item' : 'items'}`}
+            >
+              <svg className="w-6 h-6 text-mountain-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[20px] h-5 bg-rose-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1 leading-none shadow-xs">
+                  {wishlistCount > 99 ? '99+' : wishlistCount}
+                </span>
+              )}
+            </Link>
+
             {/* Cart icon */}
             <Link
               to="/cart"
@@ -434,6 +453,9 @@ export default function Navbar() {
             </NavLink>
             <NavLink to="/shop" onClick={closeMenu} className={mobileLinkClass}>
               Shop
+            </NavLink>
+            <NavLink to="/wishlist" onClick={closeMenu} className={mobileLinkClass}>
+              Wishlist {wishlistCount > 0 && `(${wishlistCount})`}
             </NavLink>
             <NavLink to="/my-orders" onClick={closeMenu} className={mobileLinkClass}>
               My Orders {ordersCount > 0 && `(${ordersCount})`}

@@ -1,4 +1,4 @@
-﻿# ── Dependencies ───────────────────────────────────────────────────────
+# ── Dependencies ───────────────────────────────────────────────────────
 node_modules/
 .pnp
 .pnp.js
@@ -41,9 +41,14 @@ coverage/
 .nyc_output/
 
 # Scratch / temp files (not committed)
+scratch/
 server/scratch/
+client/scratch/
 *.scratch.js
 *.tmp
+test*.js
+test*.mjs
+*.test.tmp.js
 
 # Test artifacts
 client/tests/e2e/playwright-report/

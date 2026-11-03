@@ -1,6 +1,6 @@
 // ── Shop Page – grid, search, filters, sorting, pagination ───
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import ProductCard from '../components/ui/ProductCard';
@@ -17,11 +17,34 @@ const SORT_OPTIONS = [
   { value: '-ratingAverage', label: 'Top Rated' },
 ];
 
-function FilterPanel({ categories, filters, onFilter, onReset }) {
+function FilterPanel({ categories, filters, onFilter, onReset, onPriceRange }) {
+  const activeCount = [
+    filters.category,
+    filters.region,
+    filters.minPrice,
+    filters.maxPrice,
+    filters.inStock,
+    filters.sale,
+  ].filter(Boolean).length;
+
+  const priceRanges = [
+    { label: 'Under 500', min: '', max: 500 },
+    { label: '500–1,500', min: 500, max: 1500 },
+    { label: '1,500–3,000', min: 1500, max: 3000 },
+    { label: '3,000+', min: 3000, max: '' },
+  ];
+
   return (
     <aside id="filter-panel" className="bg-white rounded-2xl p-5 shadow-sm space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="font-display font-semibold text-mountain-900">Filters</h2>
+        <h2 className="flex items-center gap-2 font-display font-semibold text-mountain-900">
+          Filters
+          {activeCount > 0 && (
+            <span className="rounded-full bg-apricot-100 px-2 py-0.5 text-[11px] font-bold text-apricot-700">
+              {activeCount}
+            </span>
+          )}
+        </h2>
         <button
           id="filter-reset-btn"
           onClick={onReset}
@@ -112,6 +135,30 @@ function FilterPanel({ categories, filters, onFilter, onReset }) {
       {/* Price range */}
       <div>
         <h3 className="text-sm font-semibold text-mountain-700 mb-3">Price Range (PKR)</h3>
+
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {priceRanges.map((range) => {
+            const isActive =
+              String(filters.minPrice || '') === String(range.min) &&
+              String(filters.maxPrice || '') === String(range.max);
+            return (
+              <button
+                key={range.label}
+                type="button"
+                onClick={() => onPriceRange(range.min, range.max)}
+                aria-pressed={isActive}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                  isActive
+                    ? 'border-apricot-400 bg-apricot-50 text-apricot-700'
+                    : 'border-cream-300 bg-white text-mountain-600 hover:border-apricot-300 hover:text-apricot-700'
+                }`}
+              >
+                {range.label}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="flex gap-2">
           <input
             id="filter-min-price"
@@ -270,6 +317,21 @@ export default function ShopPage() {
       return next;
     });
 
+  const setPriceRange = useCallback(
+    (min, max) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (min === '' || min === null || min === undefined) next.delete('minPrice');
+        else next.set('minPrice', String(min));
+        if (max === '' || max === null || max === undefined) next.delete('maxPrice');
+        else next.set('maxPrice', String(max));
+        next.set('page', '1');
+        return next;
+      });
+    },
+    [setSearchParams]
+  );
+
   const resetFilters = () => {
     setSearch('');
     setSearchParams({});
@@ -386,6 +448,11 @@ export default function ShopPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18M7 12h10M11 20h2" />
           </svg>
           Filters
+          {[filters.category, filters.region, filters.minPrice, filters.maxPrice, filters.inStock, filters.sale].filter(Boolean).length > 0 && (
+            <span className="rounded-full bg-apricot-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+              {[filters.category, filters.region, filters.minPrice, filters.maxPrice, filters.inStock, filters.sale].filter(Boolean).length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -420,12 +487,15 @@ export default function ShopPage() {
       <div className="flex gap-6">
         {/* Filter sidebar – desktop always visible, mobile toggle */}
         <div className={`lg:block w-56 shrink-0 ${showFilters ? 'block' : 'hidden'}`}>
-          <FilterPanel
-            categories={cats || []}
-            filters={filters}
-            onFilter={setFilter}
-            onReset={resetFilters}
-          />
+          <div className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1">
+            <FilterPanel
+              categories={cats || []}
+              filters={filters}
+              onFilter={setFilter}
+              onReset={resetFilters}
+              onPriceRange={setPriceRange}
+            />
+          </div>
         </div>
 
         {/* Product grid */}
@@ -439,16 +509,47 @@ export default function ShopPage() {
           )}
 
           {!isLoading && !isFetching && !error && products.length === 0 && (
-            <div className="text-center py-20">
-              <p className="text-5xl mb-4">🏔️</p>
-              <h3 className="font-display font-semibold text-mountain-800 mb-2">No products found</h3>
-              <p className="text-mountain-500 text-sm">Try adjusting your search or filters.</p>
-              <button
-                onClick={resetFilters}
-                className="mt-4 px-5 py-2 bg-apricot-500 text-white rounded-full text-sm font-medium hover:bg-apricot-600 transition-colors"
-              >
-                Clear filters
-              </button>
+            <div className="rounded-3xl border border-cream-200 bg-white px-6 py-16 text-center shadow-sm">
+              <p className="mb-4 text-5xl" aria-hidden="true">🏔️</p>
+              <h3 className="mb-2 font-display text-lg font-semibold text-mountain-800">No products found</h3>
+              <p className="mx-auto mb-5 max-w-sm text-sm text-mountain-500">
+                We couldn&apos;t match that combination. Try a different search term, or clear your filters to
+                see everything we stock.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  onClick={resetFilters}
+                  className="rounded-full bg-apricot-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-apricot-600"
+                >
+                  Clear all filters
+                </button>
+                <Link
+                  to="/shop?sale=true"
+                  className="rounded-full border border-cream-300 bg-white px-5 py-2.5 text-sm font-semibold text-mountain-700 transition-colors hover:border-apricot-300 hover:text-apricot-700"
+                >
+                  Browse sale items
+                </Link>
+              </div>
+
+              {Array.isArray(cats) && cats.length > 0 && (
+                <div className="mt-8 border-t border-cream-200 pt-6">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-mountain-400">
+                    Popular categories
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {cats.slice(0, 6).map((cat) => (
+                      <Link
+                        key={cat._id}
+                        to={`/shop?category=${cat.slug}`}
+                        className="rounded-full bg-cream-100 px-3.5 py-1.5 text-xs font-medium text-mountain-700 transition-colors hover:bg-apricot-100 hover:text-apricot-700"
+                      >
+                        {cat.icon ? `${cat.icon} ` : ''}
+                        {cat.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

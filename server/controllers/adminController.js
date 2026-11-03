@@ -10,7 +10,7 @@ import Review from '../models/Review.js';
 import cloudinary from '../config/cloudinary.js';
 import { deleteFirebaseUser, getFirebaseAuth } from '../utils/firebaseAdmin.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
-import { delCache, delCacheByPrefix } from '../utils/cache.js';
+import { delCacheByPrefix } from '../utils/cache.js';
 import { getRevenueStartDate } from '../utils/dashboardStats.js';
 
 /* ─────────────────────────────────────────────
@@ -151,7 +151,7 @@ export const adminUpdateProduct = async (req, res, next) => {
 
     // Invalidate product list caches + detail cache for this product
     await delCacheByPrefix('products:list:').catch(() => {});
-    await delCache(`products:detail:${req.params.id}`).catch(() => {});
+    await delCacheByPrefix('products:detail:').catch(() => {});
 
     res.json(product);
   } catch (err) { next(err); }
@@ -172,9 +172,9 @@ export const adminDeleteProduct = async (req, res, next) => {
 
     await product.deleteOne();
 
-    // Invalidate product list caches + detail cache for this product
+    // Invalidate product list caches + detail caches
     await delCacheByPrefix('products:list:').catch(() => {});
-    await delCache(`products:detail:${req.params.id}`).catch(() => {});
+    await delCacheByPrefix('products:detail:').catch(() => {});
 
     res.json({ message: 'Product deleted' });
   } catch (err) { next(err); }
@@ -241,9 +241,7 @@ export const adminBulkUpdateProducts = async (req, res, next) => {
 
     // Invalidate product caches after bulk update
     await delCacheByPrefix('products:list:');
-    for (const pid of productIds) {
-      await delCache(`products:detail:${pid}`);
-    }
+    await delCacheByPrefix('products:detail:');
 
     res.json({
       message: `Bulk ${action} completed`,
@@ -346,6 +344,7 @@ const couponSchema = z.object({
   minOrderAmount: z.number().min(0).optional(),
   expiry: z.string().datetime(),
   usageLimit: z.number().int().min(1),
+  perCustomerLimit: z.number().int().min(1).optional().default(1),
 });
 
 export const adminGetCoupons = async (req, res, next) => {
@@ -610,6 +609,24 @@ export const adminUpdateOrder = async (req, res, next) => {
         note: data.statusNote?.trim() || `Status updated from ${previousStatus} to ${data.orderStatus}`,
         changedBy: req.user?.name || 'Administrator',
       });
+
+      // Restore product stock and coupon count when an order is cancelled
+      if (data.orderStatus === 'cancelled') {
+        for (const item of order.items || []) {
+          if (item.product && item.variantLabel && item.quantity > 0) {
+            await Product.updateOne(
+              { _id: item.product, 'variants.label': item.variantLabel },
+              { $inc: { 'variants.$.stock': item.quantity } }
+            ).catch((err) => console.error(`Failed to restore stock for product ${item.product}:`, err.message));
+          }
+        }
+        if (order.couponCode) {
+          await Coupon.updateOne(
+            { code: order.couponCode.toUpperCase(), usedCount: { $gt: 0 } },
+            { $inc: { usedCount: -1 } }
+          ).catch((err) => console.error(`Failed to restore coupon ${order.couponCode}:`, err.message));
+        }
+      }
     }
 
     // Handle shipment details

@@ -38,6 +38,14 @@ jobs:
         run: npm run lint
         working-directory: ./client
 
+      - name: Lint server
+        run: npm run lint
+        working-directory: ./server
+
+      - name: Audit server dependencies
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: ./server
+
   test:
     name: Unit Tests
     runs-on: ubuntu-latest

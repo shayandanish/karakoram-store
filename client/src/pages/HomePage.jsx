@@ -330,7 +330,9 @@ export default function HomePage() {
     {
       icon: 'truck',
       title: 'Nationwide delivery',
-      desc: `Flat ${fmtPKR(settings.shippingFee)} shipping anywhere in Pakistan.`,
+      desc: settings.deliveryZones?.length
+        ? `Delivery rates and estimates are based on your city. From ${fmtPKR(settings.shippingFee)}.`
+        : `Flat ${fmtPKR(settings.shippingFee)} shipping anywhere in Pakistan.`,
     },
     {
       icon: 'wallet',

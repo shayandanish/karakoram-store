@@ -16,6 +16,16 @@ const createStoreForm = (settings) => ({
   storeTagline: settings.storeTagline,
   storeDescription: settings.storeDescription,
   shippingFee: String(settings.shippingFee),
+  deliveryMinDays: String(settings.deliveryMinDays ?? 2),
+  deliveryMaxDays: String(settings.deliveryMaxDays ?? 5),
+  deliveryZones: (settings.deliveryZones || []).map((zone) => ({
+    ...zone,
+    citiesText: (zone.cities || []).join(', '),
+    provincesText: (zone.provinces || []).join(', '),
+    shippingFee: String(zone.shippingFee),
+    minDays: String(zone.minDays),
+    maxDays: String(zone.maxDays),
+  })),
   paymentMethods: settings.paymentMethods.map((method) => ({ ...method })),
   whatsappNumber: settings.whatsappNumber,
   contactPhone: settings.contactPhone,
@@ -32,7 +42,9 @@ export default function AdminSettingsPage() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [storeForm, setStoreForm] = useState(null);
   const formValues = storeForm || createStoreForm(settings);
-  const hasUnsavedSettings = Boolean(storeForm);
+  const hasUnsavedSettings = Boolean(
+    storeForm && JSON.stringify(formValues) !== JSON.stringify(createStoreForm(settings))
+  );
 
   const publishLogo = async (nextLogo) => {
     const { data } = await api.put('/admin/settings', { logo: nextLogo });
@@ -108,11 +120,53 @@ export default function AdminSettingsPage() {
       return;
     }
 
+    const deliveryMinDays = Number(formValues.deliveryMinDays);
+    const deliveryMaxDays = Number(formValues.deliveryMaxDays);
+    if (
+      !Number.isInteger(deliveryMinDays) ||
+      !Number.isInteger(deliveryMaxDays) ||
+      deliveryMinDays < 1 ||
+      deliveryMaxDays < deliveryMinDays ||
+      deliveryMaxDays > 60
+    ) {
+      toast.error('Set a valid delivery estimate between 1 and 60 days.');
+      return;
+    }
+
+    const deliveryZones = formValues.deliveryZones.map((zone) => ({
+      id: zone.id,
+      name: zone.name.trim(),
+      cities: zone.citiesText.split(',').map((value) => value.trim()).filter(Boolean),
+      provinces: zone.provincesText.split(',').map((value) => value.trim()).filter(Boolean),
+      shippingFee: Number(zone.shippingFee),
+      minDays: Number(zone.minDays),
+      maxDays: Number(zone.maxDays),
+      enabled: zone.enabled,
+    }));
+    const invalidZone = deliveryZones.find((zone) =>
+      !zone.name ||
+      (!zone.cities.length && !zone.provinces.length) ||
+      !Number.isFinite(zone.shippingFee) ||
+      zone.shippingFee < 0 ||
+      !Number.isInteger(zone.minDays) ||
+      !Number.isInteger(zone.maxDays) ||
+      zone.minDays < 1 ||
+      zone.maxDays < zone.minDays ||
+      zone.maxDays > 60
+    );
+    if (invalidZone) {
+      toast.error(`Check the name, matching location, rate, and delivery estimate for "${invalidZone.name || 'new zone'}".`);
+      return;
+    }
+
     setSavingSettings(true);
     try {
       const { data } = await api.put('/admin/settings', {
         ...formValues,
         shippingFee,
+        deliveryMinDays,
+        deliveryMaxDays,
+        deliveryZones,
       });
       queryClient.setQueryData(SITE_SETTINGS_QUERY_KEY, data);
       setStoreForm(null);
@@ -144,6 +198,61 @@ export default function AdminSettingsPage() {
     });
   };
 
+  const updateDeliveryZone = (id, field) => (event) => {
+    const value = field === 'enabled' ? event.target.checked : event.target.value;
+    setStoreForm((current) => {
+      const next = current || createStoreForm(settings);
+      return {
+        ...next,
+        deliveryZones: next.deliveryZones.map((zone) =>
+          zone.id === id ? { ...zone, [field]: value } : zone
+        ),
+      };
+    });
+  };
+
+  const addDeliveryZone = () => {
+    const id = globalThis.crypto?.randomUUID?.() || `zone-${Date.now()}`;
+    setStoreForm((current) => {
+      const next = current || createStoreForm(settings);
+      return {
+        ...next,
+        deliveryZones: [
+          ...next.deliveryZones,
+          {
+            id,
+            name: '',
+            citiesText: '',
+            provincesText: '',
+            shippingFee: String(settings.shippingFee),
+            minDays: String(settings.deliveryMinDays ?? 2),
+            maxDays: String(settings.deliveryMaxDays ?? 5),
+            enabled: true,
+          },
+        ],
+      };
+    });
+  };
+
+  const removeDeliveryZone = (id) => {
+    setStoreForm((current) => {
+      const next = current || createStoreForm(settings);
+      return { ...next, deliveryZones: next.deliveryZones.filter((zone) => zone.id !== id) };
+    });
+  };
+
+  const moveDeliveryZone = (id, offset) => {
+    setStoreForm((current) => {
+      const next = current || createStoreForm(settings);
+      const index = next.deliveryZones.findIndex((zone) => zone.id === id);
+      const target = index + offset;
+      if (index < 0 || target < 0 || target >= next.deliveryZones.length) return next;
+      const deliveryZones = [...next.deliveryZones];
+      [deliveryZones[index], deliveryZones[target]] = [deliveryZones[target], deliveryZones[index]];
+      return { ...next, deliveryZones };
+    });
+  };
+
   return (
     <div className="space-y-6">
       <SEO title="Store Settings — Admin" />
@@ -161,6 +270,9 @@ export default function AdminSettingsPage() {
           </a>
           <a href="#checkout-payments" className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-apricot-300">
             Checkout payments
+          </a>
+          <a href="#delivery-rates" className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-apricot-300">
+            Delivery rates
           </a>
           {hasUnsavedSettings && (
             <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800" role="status">
@@ -366,7 +478,7 @@ export default function AdminSettingsPage() {
           </div>
           <button
             type="submit"
-            disabled={savingSettings || isLoading || isError}
+            disabled={!hasUnsavedSettings || savingSettings || isLoading || isError}
             className="mt-4 sm:mt-0 inline-flex justify-center rounded-xl bg-apricot-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-apricot-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {savingSettings ? 'Saving…' : 'Save Store Settings'}
@@ -377,7 +489,7 @@ export default function AdminSettingsPage() {
           {[
             { name: 'storeName', label: 'Store name', maxLength: 120 },
             { name: 'storeTagline', label: 'Brand tagline', maxLength: 160 },
-            { name: 'shippingFee', label: 'Flat shipping fee (PKR)', type: 'number', min: '0', max: '100000', step: '1' },
+            { name: 'shippingFee', label: 'Fallback shipping fee (PKR)', type: 'number', min: '0', max: '100000', step: '1' },
             { name: 'whatsappNumber', label: 'WhatsApp number', inputMode: 'tel' },
             { name: 'contactPhone', label: 'Public contact phone', inputMode: 'tel' },
             { name: 'contactEmail', label: 'Public contact email', type: 'email' },
@@ -404,6 +516,147 @@ export default function AdminSettingsPage() {
               className="mt-1.5 w-full resize-y rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-900 outline-none transition focus:border-apricot-400 focus:bg-white focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
             />
           </label>
+        </div>
+
+        <div className="mt-8 border-t border-stone-100 pt-6">
+          <section id="delivery-rates">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h3 className="font-display font-bold text-lg text-mountain-900">Delivery rates & estimates</h3>
+                <p className="mt-1 text-sm text-stone-500">
+                  Match a city, province, or both. The first matching active zone sets the checkout rate; unmatched addresses use the flat fallback.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={addDeliveryZone}
+                disabled={isLoading || isError || savingSettings}
+                className="shrink-0 rounded-xl border border-apricot-300 bg-apricot-50 px-4 py-2.5 text-sm font-semibold text-apricot-800 transition hover:bg-apricot-100 disabled:opacity-60"
+              >
+                Add delivery zone
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-medium text-stone-700">
+                Default minimum delivery days
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  step="1"
+                  value={formValues.deliveryMinDays}
+                  onChange={updateStoreField('deliveryMinDays')}
+                  disabled={isLoading || isError || savingSettings}
+                  className="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-900 outline-none focus:border-apricot-400 focus:bg-white focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-700">
+                Default maximum delivery days
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  step="1"
+                  value={formValues.deliveryMaxDays}
+                  onChange={updateStoreField('deliveryMaxDays')}
+                  disabled={isLoading || isError || savingSettings}
+                  className="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm text-stone-900 outline-none focus:border-apricot-400 focus:bg-white focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+                />
+              </label>
+            </div>
+
+            {formValues.deliveryZones.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-600">
+                No delivery zones yet. Checkout will use the flat shipping fee and default delivery estimate.
+              </p>
+            ) : (
+              <div className="mt-5 space-y-4">
+                {formValues.deliveryZones.map((zone, index) => (
+                  <section key={zone.id} className="rounded-2xl border border-stone-200 bg-stone-50/60 p-4 sm:p-5">
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <label className="inline-flex items-center gap-2 text-sm font-semibold text-stone-800">
+                          <input
+                            type="checkbox"
+                            checked={zone.enabled}
+                            onChange={updateDeliveryZone(zone.id, 'enabled')}
+                            disabled={isLoading || isError || savingSettings}
+                            className="h-4 w-4 rounded border-stone-300 text-apricot-600 focus:ring-apricot-400"
+                          />
+                          Active zone
+                        </label>
+                        <span className="text-xs text-stone-500">Priority {index + 1}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => moveDeliveryZone(zone.id, -1)}
+                          disabled={index === 0 || isLoading || isError || savingSettings}
+                          aria-label={`Move ${zone.name || 'zone'} up in priority`}
+                          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:bg-white disabled:opacity-40"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveDeliveryZone(zone.id, 1)}
+                          disabled={index === formValues.deliveryZones.length - 1 || isLoading || isError || savingSettings}
+                          aria-label={`Move ${zone.name || 'zone'} down in priority`}
+                          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:bg-white disabled:opacity-40"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeDeliveryZone(zone.id)}
+                          disabled={isLoading || isError || savingSettings}
+                          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {[
+                        ['name', 'Zone name', 'text'],
+                        ['shippingFee', 'Delivery fee (PKR)', 'number'],
+                        ['citiesText', 'Cities (comma-separated)', 'text'],
+                        ['provincesText', 'Provinces (comma-separated)', 'text'],
+                        ['minDays', 'Minimum delivery days', 'number'],
+                        ['maxDays', 'Maximum delivery days', 'number'],
+                      ].map(([field, label, type]) => (
+                        <label key={field} className="block text-xs font-medium text-stone-600">
+                          {label}
+                          <input
+                            type={type}
+                            min={type === 'number' ? (field === 'shippingFee' ? '0' : '1') : undefined}
+                            max={type === 'number' ? (field === 'shippingFee' ? '100000' : '60') : undefined}
+                            step={type === 'number' ? '1' : undefined}
+                            value={zone[field]}
+                            onChange={updateDeliveryZone(zone.id, field)}
+                            disabled={isLoading || isError || savingSettings}
+                            placeholder={
+                              field === 'citiesText'
+                                ? 'Gilgit, Karimabad'
+                                : field === 'provincesText'
+                                  ? 'Gilgit-Baltistan'
+                                  : ''
+                            }
+                            className="mt-1.5 w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-apricot-400 focus:ring-2 focus:ring-apricot-100 disabled:opacity-60"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <p className="mt-3 text-xs text-stone-500">
+                      If both cities and provinces are entered, both must match. If only one is entered, that field determines the zone.
+                    </p>
+                  </section>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
         <div className="mt-8 border-t border-stone-100 pt-6">
@@ -484,6 +737,35 @@ export default function AdminSettingsPage() {
                 </label>
               </section>
             ))}
+          </div>
+        </div>
+
+        <div className={`sticky bottom-3 z-20 mt-8 flex flex-col gap-3 rounded-2xl border p-3 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between ${
+          hasUnsavedSettings
+            ? 'border-amber-200 bg-amber-50/95'
+            : 'border-stone-200 bg-white/95'
+        }`}>
+          <p className="text-sm font-medium text-stone-700" role="status">
+            {hasUnsavedSettings ? 'You have unpublished settings changes.' : 'All settings are saved.'}
+          </p>
+          <div className="flex gap-2">
+            {hasUnsavedSettings && (
+              <button
+                type="button"
+                onClick={() => setStoreForm(null)}
+                disabled={savingSettings}
+                className="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+              >
+                Discard changes
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={!hasUnsavedSettings || savingSettings || isLoading || isError}
+              className="inline-flex min-w-36 justify-center rounded-xl bg-apricot-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-apricot-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {savingSettings ? 'Saving…' : 'Save settings'}
+            </button>
           </div>
         </div>
       </form>

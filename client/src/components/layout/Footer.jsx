@@ -161,7 +161,7 @@ export default function Footer() {
                     </svg>
                   ),
                   title: fmtPKR(settings.shippingFee),
-                  sub: 'Flat shipping',
+                  sub: settings.deliveryZones?.length ? 'Rates by location' : 'Flat shipping',
                 },
                 {
                   icon: (

@@ -2,12 +2,14 @@ import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Footer from './Footer';
+import MobileBottomNav from './MobileBottomNav';
 import FloatingWhatsApp from '../ui/FloatingWhatsApp';
+import BackToTop from '../ui/BackToTop';
 import PageLoading from '../ui/PageLoading';
 
 export default function Layout() {
   return (
-    <div className="flex flex-col min-h-screen bg-cream-100 text-mountain-900 selection:bg-apricot-200 selection:text-apricot-900">
+    <div className="flex min-h-screen flex-col bg-cream-100 pb-[calc(4rem+env(safe-area-inset-bottom))] text-mountain-900 selection:bg-apricot-200 selection:text-apricot-900 lg:pb-0">
       {/* Accessible Skip Link */}
       <a
         href="#main-content"
@@ -18,7 +20,7 @@ export default function Layout() {
 
       <Navbar />
 
-      <main id="main-content" tabIndex="-1" className="flex-1 w-full focus:outline-none">
+      <main id="main-content" tabIndex="-1" className="w-full flex-1 focus:outline-none">
         <Suspense fallback={<PageLoading />}>
           <Outlet />
         </Suspense>
@@ -26,7 +28,11 @@ export default function Layout() {
 
       <Footer />
 
-      {/* Floating WhatsApp on all pages */}
+      {/* Persistent quick navigation on small screens */}
+      <MobileBottomNav />
+
+      {/* Overlays */}
+      <BackToTop />
       <FloatingWhatsApp />
     </div>
   );

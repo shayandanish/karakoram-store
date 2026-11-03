@@ -20,12 +20,35 @@ const paymentMethodSchema = z.object({
   instructions: z.string().trim().max(2000).optional().default(''),
 });
 
+const deliveryZoneSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(80),
+  cities: z.array(z.string().trim().min(1).max(100)).max(50),
+  provinces: z.array(z.string().trim().min(1).max(100)).max(20),
+  shippingFee: z.number().min(0).max(100000),
+  minDays: z.number().int().min(1).max(60),
+  maxDays: z.number().int().min(1).max(60),
+  enabled: z.boolean(),
+}).refine(
+  (zone) => zone.cities.length > 0 || zone.provinces.length > 0,
+  'Each delivery zone needs at least one city or province'
+).refine(
+  (zone) => zone.minDays <= zone.maxDays,
+  'Maximum delivery days must be greater than or equal to minimum delivery days'
+);
+
 const settingsSchema = z.object({
   logo: logoSchema.optional(),
   storeName: z.string().trim().min(1).max(120).optional(),
   storeTagline: z.string().trim().max(160).optional(),
   storeDescription: z.string().trim().max(500).optional(),
   shippingFee: z.number().min(0).max(100000).optional(),
+  deliveryMinDays: z.number().int().min(1).max(60).optional(),
+  deliveryMaxDays: z.number().int().min(1).max(60).optional(),
+  deliveryZones: z.array(deliveryZoneSchema).max(50).optional().refine(
+    (zones) => !zones || new Set(zones.map((zone) => zone.id)).size === zones.length,
+    'Delivery zone IDs must be unique'
+  ),
   easypaisaAccountName: z.string().trim().max(120).optional(),
   easypaisaAccountNumber: z.string().trim().max(40).optional(),
   paymentMethods: z
@@ -65,6 +88,18 @@ export const serializeSettings = (settings) => ({
       ? settings.storeDescription
       : 'Handcrafted goods and artisan products from Gilgit-Baltistan, Pakistan.',
   shippingFee: Number.isFinite(settings.shippingFee) ? settings.shippingFee : 200,
+  deliveryMinDays: Number.isInteger(settings.deliveryMinDays) ? settings.deliveryMinDays : 2,
+  deliveryMaxDays: Number.isInteger(settings.deliveryMaxDays) ? settings.deliveryMaxDays : 5,
+  deliveryZones: (settings.deliveryZones || []).map((zone) => ({
+    id: zone.id,
+    name: zone.name,
+    cities: zone.cities || [],
+    provinces: zone.provinces || [],
+    shippingFee: zone.shippingFee,
+    minDays: zone.minDays,
+    maxDays: zone.maxDays,
+    enabled: zone.enabled,
+  })),
   paymentMethods: resolvePaymentMethods(settings),
   easypaisaAccountName:
     resolvePaymentMethods(settings).find((method) => method.id === 'easypaisa')?.accountName ||
@@ -160,6 +195,9 @@ export const adminUpdateSettings = async (req, res, next) => {
       'storeTagline',
       'storeDescription',
       'shippingFee',
+      'deliveryMinDays',
+      'deliveryMaxDays',
+      'deliveryZones',
       'whatsappNumber',
       'contactPhone',
       'contactEmail',
@@ -169,6 +207,11 @@ export const adminUpdateSettings = async (req, res, next) => {
 
     for (const field of scalarFields) {
       if (data[field] !== undefined) settings[field] = data[field];
+    }
+
+    if (settings.deliveryMinDays > settings.deliveryMaxDays) {
+      res.status(400);
+      throw new Error('Maximum delivery days must be greater than or equal to minimum delivery days.');
     }
 
     await settings.save();

@@ -29,8 +29,8 @@ export default defineConfig({
         },
       },
     },
-    // Enable source maps for production debugging
-    sourcemap: true,
+    // Only enable sourcemaps if explicitly requested via environment variable
+    sourcemap: process.env.VITE_SOURCEMAP === 'true',
     // Compress CSS and JS
     minify: 'esbuild',
     // Report chunk sizes > 500kb

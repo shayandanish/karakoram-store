@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const variantSchema = new mongoose.Schema({
   label:          { type: String, required: true },  // e.g. "250g", "500g", "Large"
   price:          { type: Number, required: true },  // PKR - actual checkout price
-  stock:          { type: Number, required: true, default: 0 },
+  stock:          { type: Number, required: true, default: 0, min: 0 },
   averageCostMinor: { type: Number, default: null, min: 0, select: false }, // weighted-average cost in paisa
   discountPercent: { type: Number, default: null, min: 0, max: 99 },
   compareAtPrice:  { type: Number, default: null },   // original "was" price; null = no discount
@@ -48,5 +48,7 @@ productSchema.index({ ratingAverage: -1 });
 productSchema.index({ origin: 1 });
 productSchema.index({ isFeatured: 1 });
 productSchema.index({ isSeasonal: 1 });
+productSchema.index({ isActive: 1, category: 1, createdAt: -1 });
+productSchema.index({ isActive: 1, isFeatured: 1, createdAt: -1 });
 
 export default mongoose.model('Product', productSchema);

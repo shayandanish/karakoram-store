@@ -113,7 +113,7 @@ export default function ContactPage() {
                 <div>
                   <p className="font-semibold text-mountain-800">Delivery Information</p>
                   <p className="text-mountain-600 text-xs mt-0.5">
-                    Flat {settings.shippingFee} PKR delivery across Pakistan (3–5 business days). Payment via Easypaisa.
+                    Delivery fees and estimated arrival times depend on your city and are shown at checkout. Payment options are displayed during checkout.
                   </p>
                 </div>
               </div>

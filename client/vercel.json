@@ -1,6 +1,17 @@
 {
   "rewrites": [
     {
+      "source": "/products/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|WhatsApp|Slackbot|LinkedInBot|Pinterestbot|Google-InspectionTool).*"
+        }
+      ],
+      "destination": "/api/og?slug=:slug"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

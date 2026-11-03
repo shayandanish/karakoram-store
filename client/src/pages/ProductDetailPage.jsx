@@ -8,6 +8,9 @@ import { useAuth } from '../context/AuthContext';
 import { fmtPKR, buildProductWhatsAppLink, cloudinaryImage, cloudinarySrcSet } from '../lib/utils';
 import { getVariantDiscount } from '../lib/discountUtils';
 import ProductImage from '../components/ui/ProductImage';
+import ProductCard from '../components/ui/ProductCard';
+import WishlistButton from '../components/ui/WishlistButton';
+import TrustBadges from '../components/ui/TrustBadges';
 import { SkeletonDetail } from '../components/ui/Skeleton';
 import ErrorState from '../components/ui/ErrorState';
 import SEO from '../components/ui/SEO';
@@ -107,6 +110,7 @@ export default function ProductDetailPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
+  const [reviewImages, setReviewImages] = useState([]);
   const [reviewError, setReviewError] = useState('');
 
   const { data: product, isLoading, error, refetch } = useQuery({
@@ -123,6 +127,24 @@ export default function ProductDetailPage() {
     enabled: Boolean(slug),
   });
 
+  // Same-category suggestions ("You may also like").
+  const relatedCategoryId = product?.category?._id;
+  const { data: relatedData } = useQuery({
+    queryKey: ['related-products', relatedCategoryId, product?._id],
+    queryFn: () =>
+      api
+        .get('/products', {
+          params: { category: relatedCategoryId, limit: 8, sort: '-createdAt' },
+        })
+        .then((r) => r.data),
+    enabled: Boolean(relatedCategoryId),
+    staleTime: 60_000,
+  });
+
+  const relatedProducts = (relatedData?.products || [])
+    .filter((item) => item._id !== product?._id)
+    .slice(0, 4);
+
   const reviews = reviewsData?.reviews || [];
   const hasUserReviewed =
     Boolean(user) &&
@@ -133,6 +155,7 @@ export default function ProductDetailPage() {
     onSuccess: (data) => {
       setReviewRating(0);
       setReviewComment('');
+      setReviewImages([]);
       setReviewError('');
       queryClient.invalidateQueries({ queryKey: ['reviews', slug] });
       queryClient.setQueryData(['product', slug], (prev) =>
@@ -157,10 +180,11 @@ export default function ProductDetailPage() {
       setReviewError('Please select a star rating');
       return;
     }
-    reviewMutation.mutate({
-      rating: reviewRating,
-      comment: reviewComment.trim(),
-    });
+    const formData = new FormData();
+    formData.append('rating', String(reviewRating));
+    formData.append('comment', reviewComment.trim());
+    reviewImages.forEach((image) => formData.append('images', image));
+    reviewMutation.mutate(formData);
   };
 
   // Derive the selected size from the loaded product. Prefer the first size
@@ -223,7 +247,7 @@ export default function ProductDetailPage() {
             gravity: 'auto',
             quality: 'auto',
             format: 'auto',
-          }) || '/favicon.svg'
+          }) || '/regions/hunza-960.webp'
         }
         type="product"
         canonicalUrl={`/products/${slug}`}
@@ -287,7 +311,8 @@ export default function ProductDetailPage() {
       {error && <ErrorState message={error.message} onRetry={refetch} />}
 
       {!isLoading && !error && product && (
-        <div className="grid md:grid-cols-2 gap-10 lg:gap-16">
+        <>
+          <div className="grid md:grid-cols-2 gap-10 lg:gap-16">
           {/* Images */}
           <div className="space-y-3">
             <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-cream-200">
@@ -435,8 +460,19 @@ export default function ProductDetailPage() {
                   })}
                 </div>
                 {variant && (
-                  <p className="mt-1 text-xs text-mountain-400">
-                    {variant.stock > 0 ? `${variant.stock} in stock` : 'Out of stock'}
+                  <p
+                    className={`mt-1 inline-flex items-center gap-1.5 text-xs font-medium ${
+                      variant.stock > 0 && variant.stock <= 5 ? 'text-amber-700' : 'text-mountain-400'
+                    }`}
+                  >
+                    {variant.stock > 0 && variant.stock <= 5 && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                    )}
+                    {variant.stock <= 0
+                      ? 'Out of stock'
+                      : variant.stock <= 5
+                        ? `Hurry — only ${variant.stock} left in stock`
+                        : `${variant.stock} in stock`}
                   </p>
                 )}
               </div>
@@ -502,6 +538,12 @@ export default function ProductDetailPage() {
                 </svg>
                 Order on WhatsApp
               </a>
+
+              <WishlistButton
+                product={product}
+                variant="full"
+                className="shrink-0 py-3.5 sm:w-auto"
+              />
             </div>
 
             {/* If already in cart */}
@@ -518,6 +560,8 @@ export default function ProductDetailPage() {
               {product.isSeasonal && <p>🌿 <span className="text-mountain-700">Seasonal product – limited availability</span></p>}
             </div>
 
+            <TrustBadges variant="inline" className="border-t border-cream-200 pt-4" />
+
             {/* Artisan story */}
             {product.artisan?.story && (
               <div className="bg-cream-100 border border-cream-200 rounded-xl p-4">
@@ -527,6 +571,164 @@ export default function ProductDetailPage() {
             )}
           </div>
         </div>
+
+          <section className="mt-14 border-t border-cream-200 pt-10">
+            <div className="mb-6">
+              <h2 className="font-display text-2xl font-bold text-mountain-900">Customer reviews</h2>
+              <p className="mt-1 text-sm text-mountain-500">
+                {product.ratingCount > 0
+                  ? `${Number(product.ratingAverage).toFixed(1)} out of 5 · ${product.ratingCount} review${product.ratingCount === 1 ? '' : 's'}`
+                  : 'Be the first to share your experience.'}
+              </p>
+            </div>
+
+            {reviewsLoading ? (
+              <p className="text-sm text-mountain-500" role="status">Loading reviews…</p>
+            ) : reviews.length > 0 ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                {reviews.map((review) => (
+                  <article key={review._id} className="rounded-2xl border border-cream-200 bg-white p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-mountain-900">{review.user?.name || 'Customer'}</p>
+                        <p className="mt-1 text-xs text-mountain-400">{formatReviewDate(review.createdAt)}</p>
+                      </div>
+                      <div aria-label={`${review.rating} out of 5 stars`}>
+                        <Stars value={review.rating} />
+                      </div>
+                    </div>
+                    {review.comment && (
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-mountain-700">
+                        {review.comment}
+                      </p>
+                    )}
+                    {review.images?.length > 0 && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {review.images.map((image, index) => (
+                          <a
+                            key={image.publicId || image.url}
+                            href={image.url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={image.url}
+                              alt={`Photo ${index + 1} shared by ${review.user?.name || 'a customer'} in their review`}
+                              loading="lazy"
+                              className="h-20 w-20 rounded-lg border border-cream-200 object-cover"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-cream-200 bg-white p-5 text-sm text-mountain-500">
+                No reviews yet.
+              </p>
+            )}
+
+            <div className="mt-6 rounded-2xl border border-cream-200 bg-white p-5 sm:p-6">
+              {!user ? (
+                <p className="text-sm text-mountain-600">
+                  <Link to="/login" className="font-semibold text-apricot-700 hover:text-apricot-800">
+                    Sign in
+                  </Link>{' '}
+                  to leave a review.
+                </p>
+              ) : hasUserReviewed ? (
+                <p className="text-sm text-mountain-600">You’ve already reviewed this product.</p>
+              ) : (
+                <form onSubmit={handleSubmitReview} className="space-y-4">
+                  <h3 className="font-display text-lg font-semibold text-mountain-900">Write a review</h3>
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-mountain-700">Your rating</p>
+                    <InteractiveStars value={reviewRating} onChange={setReviewRating} />
+                  </div>
+                  <label className="block text-sm font-medium text-mountain-700" htmlFor="review-comment">
+                    Your review
+                    <textarea
+                      id="review-comment"
+                      value={reviewComment}
+                      onChange={(event) => setReviewComment(event.target.value)}
+                      maxLength={2000}
+                      rows={4}
+                      className="mt-1 w-full rounded-xl border border-cream-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400"
+                    />
+                  </label>
+                  <label className="block text-sm font-medium text-mountain-700" htmlFor="review-images">
+                    Photos (optional, up to 3)
+                    <input
+                      id="review-images"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.files || []);
+                        if (selected.length > 3) {
+                          setReviewError('Choose no more than 3 photos.');
+                          event.target.value = '';
+                          setReviewImages([]);
+                          return;
+                        }
+                        if (selected.some((file) => file.size > 5 * 1024 * 1024)) {
+                          setReviewError('Each photo must be 5 MB or smaller.');
+                          event.target.value = '';
+                          setReviewImages([]);
+                          return;
+                        }
+                        setReviewError('');
+                        setReviewImages(selected);
+                      }}
+                      className="mt-1 block w-full text-sm text-mountain-600 file:mr-3 file:rounded-lg file:border-0 file:bg-cream-100 file:px-3 file:py-2 file:font-semibold file:text-mountain-700 hover:file:bg-cream-200"
+                    />
+                  </label>
+                  {reviewImages.length > 0 && (
+                    <p className="text-xs text-mountain-500" aria-live="polite">
+                      {reviewImages.map((file) => file.name).join(', ')}
+                    </p>
+                  )}
+                  {reviewError && <p className="text-sm text-red-600" role="alert">{reviewError}</p>}
+                  <button
+                    type="submit"
+                    disabled={reviewMutation.isPending}
+                    className="rounded-full bg-apricot-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-apricot-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {reviewMutation.isPending ? 'Submitting…' : 'Submit review'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </section>
+
+          {relatedProducts.length > 0 && (
+            <section className="mt-14 border-t border-cream-200 pt-10">
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-mountain-900">You may also like</h2>
+                  <p className="text-sm text-mountain-500">
+                    More from {product.category?.name || 'our shop'}
+                  </p>
+                </div>
+                {product.category?.slug && (
+                  <Link
+                    to={`/shop?category=${product.category.slug}`}
+                    className="text-sm font-semibold text-apricot-700 hover:text-apricot-800"
+                  >
+                    View all →
+                  </Link>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                {relatedProducts.map((item) => (
+                  <ProductCard key={item._id} product={item} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

@@ -2,6 +2,13 @@ import mongoose from 'mongoose';
 import { z } from 'zod';
 import Review from '../models/Review.js';
 import Product from '../models/Product.js';
+import {
+  deleteStoredImage,
+  isCloudinaryConfigured,
+  saveToLocalDisk,
+  streamUploadToCloudinary,
+} from './uploadController.js';
+import { hasAllowedImageSignature } from '../utils/imageValidation.js';
 
 const createReviewSchema = z.object({
   rating: z.coerce.number().int().min(1, 'Rating must be at least 1').max(5, 'Rating must be at most 5'),
@@ -86,6 +93,11 @@ export const createReview = async (req, res, next) => {
   try {
     const { slug } = req.params;
     const { rating, comment } = createReviewSchema.parse(req.body);
+    const files = req.files || [];
+    if (files.some((file) => !hasAllowedImageSignature(file))) {
+      res.status(400);
+      throw new Error('Review photos must be valid JPG, PNG, or WebP images');
+    }
 
     const product = await findProductBySlugOrId(slug);
     if (!product) {
@@ -102,6 +114,36 @@ export const createReview = async (req, res, next) => {
       throw new Error('You have already reviewed this product');
     }
 
+    if (files.length && process.env.VERCEL && !isCloudinaryConfigured()) {
+      res.status(503);
+      throw new Error('Review photos require Cloudinary storage on this deployment.');
+    }
+
+    const uploadedImages = [];
+    try {
+      for (const file of files) {
+        let image;
+        if (isCloudinaryConfigured()) {
+          image = await streamUploadToCloudinary(file.buffer, 'karakoram-store/reviews');
+        } else {
+          const extension = {
+            'image/jpeg': '.jpg',
+            'image/png': '.png',
+            'image/webp': '.webp',
+          }[file.mimetype];
+          image = await saveToLocalDisk(
+            req,
+            { ...file, originalname: `review${extension}` },
+            'reviews'
+          );
+        }
+        uploadedImages.push({ url: image.url, publicId: image.publicId });
+      }
+    } catch (uploadError) {
+      await Promise.all(uploadedImages.map((image) => deleteStoredImage(image.publicId)));
+      throw uploadError;
+    }
+
     let review;
     try {
       review = await Review.create({
@@ -109,8 +151,10 @@ export const createReview = async (req, res, next) => {
         user: req.user._id,
         rating,
         comment: comment || '',
+        images: uploadedImages,
       });
     } catch (err) {
+      await Promise.all(uploadedImages.map((image) => deleteStoredImage(image.publicId)));
       if (err.code === 11000) {
         res.status(400);
         throw new Error('You have already reviewed this product');

@@ -1,5 +1,4 @@
 /* ── Karakoram Store – Global Design System ─────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -47,10 +46,49 @@ body {
   background-color: var(--color-cream-100);
   color: var(--color-mountain-900);
   min-height: 100dvh;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 { font-family: var(--font-display); }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.25; }
+
+/* ── Loading shimmer ─────────────────────────────────────────── */
+@keyframes kk-shimmer {
+  100% { transform: translateX(100%); }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  animation: kk-shimmer 1.6s infinite;
+}
+
+/* ── Respect reduced-motion preferences ──────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  .shimmer::after { animation: none; }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
