@@ -27,10 +27,38 @@ const variantSchema = z.object({
 });
 
 const imageSchema = z.object({
-  url: z.string(),
-  publicId: z.string(),
+  url: z.string().min(1),
+  publicId: z.string().optional().default(''),
   alt: z.string().optional().default(''),
+  isPrimary: z.boolean().optional().default(false),
+  description: z.string().optional().default(''),
+  variantLabel: z.string().optional().default(''),
 });
+
+const normalizeProductImages = (images) => {
+  if (!images || images.length === 0) return [];
+  let foundPrimary = false;
+  const processed = images.map((img) => {
+    let isPrimary = Boolean(img.isPrimary);
+    if (isPrimary && !foundPrimary) {
+      foundPrimary = true;
+    } else if (isPrimary && foundPrimary) {
+      isPrimary = false;
+    }
+    return {
+      url: img.url,
+      publicId: img.publicId || '',
+      alt: img.alt || '',
+      isPrimary,
+      description: img.description || '',
+      variantLabel: img.variantLabel || '',
+    };
+  });
+  if (!foundPrimary && processed.length > 0) {
+    processed[0].isPrimary = true;
+  }
+  return processed;
+};
 
 const videoSchema = z.object({
   url: z.string().optional().default(''),
@@ -112,6 +140,9 @@ export const adminCreateProduct = async (req, res, next) => {
       res.status(400);
       throw new Error('Record initial and received stock from Accounts > Purchases');
     }
+    if (data.images) {
+      data.images = normalizeProductImages(data.images);
+    }
     const product = await Product.create(data);
 
     // Invalidate product list caches
@@ -145,6 +176,9 @@ export const adminUpdateProduct = async (req, res, next) => {
         res.status(400);
         throw new Error('A variant with available stock cannot be removed');
       }
+    }
+    if (data.images) {
+      data.images = normalizeProductImages(data.images);
     }
     const product = await Product.findByIdAndUpdate(req.params.id, data, { new: true, runValidators: true });
     if (!product) { res.status(404); throw new Error('Product not found'); }

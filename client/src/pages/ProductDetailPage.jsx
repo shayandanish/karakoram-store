@@ -1,5 +1,5 @@
 // ── Product Detail Page ───────────────────────────────────────
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
@@ -108,6 +108,7 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [activeImg, setActiveImg] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewImages, setReviewImages] = useState([]);
@@ -117,6 +118,18 @@ export default function ProductDetailPage() {
     queryKey: ['product', slug],
     queryFn: () => api.get(`/products/${slug}`).then((r) => r.data),
   });
+
+  // Default to primary image if one is marked
+  useEffect(() => {
+    if (product?.images?.length) {
+      const primaryIdx = product.images.findIndex((img) => img.isPrimary);
+      if (primaryIdx !== -1) {
+        setActiveImg(primaryIdx);
+      } else {
+        setActiveImg(0);
+      }
+    }
+  }, [product?._id]);
 
   const {
     data: reviewsData,
@@ -201,7 +214,53 @@ export default function ProductDetailPage() {
     setSelectedVariantLabel(nextVariant.label);
     setQuantity((q) => Math.max(1, Math.min(q, nextVariant.stock)));
     setAdded(false);
+
+    // If an image is assigned specifically to this variant, auto-switch gallery image
+    if (product?.images?.length) {
+      const matchingIdx = product.images.findIndex(
+        (img) => img.variantLabel && img.variantLabel.toLowerCase() === nextVariant.label.toLowerCase()
+      );
+      if (matchingIdx !== -1) {
+        setActiveImg(matchingIdx);
+      }
+    }
   };
+
+  const handleThumbnailClick = (idx) => {
+    setActiveImg(idx);
+    const targetImg = product?.images?.[idx];
+    if (targetImg?.variantLabel && product?.variants?.length) {
+      const matched = product.variants.find(
+        (v) => v.label.toLowerCase() === targetImg.variantLabel.toLowerCase()
+      );
+      if (matched && matched.stock > 0) {
+        setSelectedVariantLabel(matched.label);
+      }
+    }
+  };
+
+  const handlePrevImg = (e) => {
+    e?.stopPropagation?.();
+    if (!product?.images?.length) return;
+    setActiveImg((prev) => (prev - 1 + product.images.length) % product.images.length);
+  };
+
+  const handleNextImg = (e) => {
+    e?.stopPropagation?.();
+    if (!product?.images?.length) return;
+    setActiveImg((prev) => (prev + 1) % product.images.length);
+  };
+
+  useEffect(() => {
+    if (!lightboxOpen) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setLightboxOpen(false);
+      if (e.key === 'ArrowLeft') handlePrevImg();
+      if (e.key === 'ArrowRight') handleNextImg();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightboxOpen, product?.images?.length]);
 
   const handleAddToCart = () => {
     if (!product || !variant) return;
@@ -313,9 +372,12 @@ export default function ProductDetailPage() {
       {!isLoading && !error && product && (
         <>
           <div className="grid md:grid-cols-2 gap-10 lg:gap-16">
-          {/* Images */}
+          {/* Images Gallery */}
           <div className="space-y-3">
-            <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-cream-200">
+            <div
+              className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-cream-200 group cursor-pointer"
+              onClick={() => setLightboxOpen(true)}
+            >
               <ProductImage
                 src={mainImageSrc}
                 srcSet={mainImageSrcSet}
@@ -327,38 +389,135 @@ export default function ProductDetailPage() {
                 fetchPriority="high"
               />
               {product.isFeatured && (
-                <span className="absolute top-4 left-4 bg-apricot-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                <span className="absolute top-4 left-4 bg-apricot-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-xs">
                   Featured
                 </span>
               )}
-            </div>
-            {/* Thumbnails */}
-            {product.images?.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {product.images.map((img, idx) => (
+
+              {/* Prev / Next arrows over main image */}
+              {product.images?.length > 1 && (
+                <>
                   <button
-                    key={idx}
-                    id={`thumb-${idx}`}
-                    onClick={() => setActiveImg(idx)}
-                    className={`shrink-0 w-16 h-16 rounded-xl overflow-hidden border-2 transition-colors ${
-                      idx === activeImg ? 'border-apricot-500' : 'border-transparent hover:border-apricot-300'
-                    }`}
-                    aria-label={`View image ${idx + 1}`}
+                    type="button"
+                    onClick={handlePrevImg}
+                    aria-label="Previous photo"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 hover:bg-white text-mountain-800 shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer hover:scale-105"
                   >
-                    <ProductImage
-                      src={cloudinaryImage(img.url, {
-                        width: 160,
-                        height: 160,
-                        crop: 'fill',
-                        gravity: 'auto',
-                        quality: 'auto:eco',
-                        format: 'auto',
-                      })}
-                      sizes="64px"
-                      alt={img.alt || product.name}
-                    />
+                    ‹
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={handleNextImg}
+                    aria-label="Next photo"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 hover:bg-white text-mountain-800 shadow-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer hover:scale-105"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+
+              {/* Zoom pill top right */}
+              <div className="absolute top-4 right-4 z-20">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightboxOpen(true);
+                  }}
+                  aria-label="View photo fullscreen"
+                  className="w-8 h-8 rounded-full bg-white/85 hover:bg-white text-mountain-700 shadow-md flex items-center justify-center transition-transform hover:scale-105 cursor-pointer"
+                  title="Click to view full photo"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Bottom Badge: Assigned Variant Pill */}
+              {activeImage?.variantLabel && (
+                <div className="absolute bottom-4 left-4 z-20">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const matched = product.variants?.find(
+                        (v) => v.label.toLowerCase() === activeImage.variantLabel.toLowerCase()
+                      );
+                      if (matched) handleVariantSelect(matched);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-mountain-900/90 hover:bg-mountain-950 backdrop-blur-xs text-white text-xs font-semibold shadow-md transition cursor-pointer"
+                    title={`Shows size ${activeImage.variantLabel} — click to select this size`}
+                  >
+                    <span>🏷️ Size: {activeImage.variantLabel}</span>
+                    <span className="text-[10px] text-apricot-400 font-bold underline">Select</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Photo description / caption if provided */}
+            {activeImage?.description && (
+              <div className="bg-cream-100/70 border border-cream-200/90 rounded-2xl p-3.5 flex items-start gap-2.5 shadow-2xs">
+                <span className="text-apricot-600 text-sm mt-0.5">ℹ️</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-mountain-800">Photo Details</p>
+                  <p className="text-xs text-mountain-600 mt-0.5 leading-relaxed">{activeImage.description}</p>
+                </div>
+                {activeImage.variantLabel && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-apricot-100 text-apricot-700 shrink-0">
+                    {activeImage.variantLabel}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Clickable Gallery Thumbnails */}
+            {product.images?.length > 1 && (
+              <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-thin">
+                {product.images.map((img, idx) => {
+                  const isSelected = idx === activeImg;
+                  return (
+                    <button
+                      key={idx}
+                      id={`thumb-${idx}`}
+                      onClick={() => handleThumbnailClick(idx)}
+                      className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-apricot-500 ring-2 ring-apricot-400/40 scale-105 shadow-sm'
+                          : 'border-cream-300 opacity-70 hover:opacity-100 hover:border-apricot-300'
+                      }`}
+                      aria-label={`View image ${idx + 1}`}
+                    >
+                      <ProductImage
+                        src={cloudinaryImage(img.url, {
+                          width: 160,
+                          height: 160,
+                          crop: 'fill',
+                          gravity: 'auto',
+                          quality: 'auto:eco',
+                          format: 'auto',
+                        })}
+                        sizes="80px"
+                        alt={img.alt || product.name}
+                        className="w-full h-full object-cover"
+                      />
+                      {img.isPrimary && (
+                        <span
+                          className="absolute top-1 left-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] flex items-center justify-center font-bold shadow-xs"
+                          title="Primary image"
+                        >
+                          ★
+                        </span>
+                      )}
+                      {img.variantLabel && (
+                        <span className="absolute bottom-0 inset-x-0 bg-mountain-900/90 text-white text-[8px] font-bold py-0.5 text-center truncate px-0.5">
+                          {img.variantLabel}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -729,6 +888,86 @@ export default function ProductDetailPage() {
             </section>
           )}
         </>
+      )}
+
+      {/* Fullscreen Lightbox Modal */}
+      {lightboxOpen && activeImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setLightboxOpen(false)}
+        >
+          {/* Close button */}
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(false)}
+            aria-label="Close fullscreen photo"
+            className="absolute top-5 right-5 z-50 w-11 h-11 rounded-full bg-white/20 hover:bg-white/30 text-white text-xl flex items-center justify-center transition cursor-pointer"
+          >
+            ✕
+          </button>
+
+          {/* Lightbox Image Container */}
+          <div
+            className="relative max-w-4xl max-h-[75vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={cloudinaryImage(activeImage.url, {
+                width: 1600,
+                crop: 'limit',
+                quality: 'auto:good',
+                format: 'auto',
+              })}
+              alt={activeImage.alt || product.name}
+              className="max-w-full max-h-[72vh] object-contain rounded-2xl shadow-2xl"
+            />
+
+            {/* Prev / Next controls in lightbox */}
+            {product.images?.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={handlePrevImg}
+                  aria-label="Previous image"
+                  className="absolute left-2 sm:-left-16 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 hover:bg-white/40 text-white text-2xl flex items-center justify-center transition cursor-pointer"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextImg}
+                  aria-label="Next image"
+                  className="absolute right-2 sm:-right-16 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 hover:bg-white/40 text-white text-2xl flex items-center justify-center transition cursor-pointer"
+                >
+                  ›
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Caption & details in lightbox */}
+          <div
+            className="mt-4 text-center text-white space-y-1 max-w-lg px-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold flex items-center justify-center gap-2 flex-wrap">
+              <span>{product.name}</span>
+              {activeImage.variantLabel && (
+                <span className="px-2 py-0.5 rounded-full bg-apricot-500 text-white text-xs font-bold">
+                  {activeImage.variantLabel}
+                </span>
+              )}
+            </p>
+            {activeImage.description && (
+              <p className="text-xs text-stone-300 leading-relaxed">{activeImage.description}</p>
+            )}
+            <p className="text-[11px] text-stone-400 font-mono pt-1">
+              Image {activeImg + 1} of {product.images.length}
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );

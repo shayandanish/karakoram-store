@@ -11,9 +11,12 @@ const variantSchema = new mongoose.Schema({
 });
 
 const imageSchema = new mongoose.Schema({
-  url: { type: String, required: true },
-  publicId: { type: String, required: true },
-  alt: { type: String, default: '' },
+  url:          { type: String, required: true },
+  publicId:     { type: String, default: '' },
+  alt:          { type: String, default: '' },
+  isPrimary:    { type: Boolean, default: false },
+  description:  { type: String, default: '' },
+  variantLabel: { type: String, default: '' },
 });
 
 const productSchema = new mongoose.Schema(

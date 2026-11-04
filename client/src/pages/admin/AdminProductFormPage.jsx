@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../lib/axios';
 import { useToast } from '../../context/ToastContext';
+import { fmtPKR } from '../../lib/utils';
 import SEO from '../../components/ui/SEO';
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -135,8 +136,20 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
     return existing || [{ label: 'Standard', price: '', stock: 0, discountPercent: '', discountLabel: '' }];
   });
 
-  // Images state: [{ url, publicId, alt }]
-  const [images, setImages] = useState(initialData?.images || []);
+  // Images state: [{ url, publicId, alt, isPrimary, description, variantLabel }]
+  const [images, setImages] = useState(() => {
+    const list = initialData?.images || [];
+    const hasPrimary = list.some((img) => img.isPrimary);
+    return list.map((img, i) => ({
+      url: img.url || '',
+      publicId: img.publicId || '',
+      alt: img.alt || '',
+      isPrimary: hasPrimary ? Boolean(img.isPrimary) : i === 0,
+      description: img.description || '',
+      variantLabel: img.variantLabel || '',
+    }));
+  });
+  const [customImageUrl, setCustomImageUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
@@ -199,6 +212,58 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
     );
   };
 
+  const setPrimaryImage = (index) => {
+    setImages((prev) =>
+      prev.map((img, i) => ({
+        ...img,
+        isPrimary: i === index,
+      }))
+    );
+    toast.success(`Image #${index + 1} set as Primary Cover Photo`);
+  };
+
+  const updateImageField = (index, field, value) => {
+    setImages((prev) =>
+      prev.map((img, i) => (i === index ? { ...img, [field]: value } : img))
+    );
+  };
+
+  const moveImage = (index, direction) => {
+    const target = index + direction;
+    if (target < 0 || target >= images.length) return;
+    setImages((prev) => {
+      const copy = [...prev];
+      const [item] = copy.splice(index, 1);
+      copy.splice(target, 0, item);
+      return copy;
+    });
+  };
+
+  const handleAddCustomImageUrl = () => {
+    const trimmed = customImageUrl.trim();
+    if (!trimmed) return;
+    if (!/^https?:\/\//i.test(trimmed)) {
+      toast.error('Please enter a valid HTTP or HTTPS image URL');
+      return;
+    }
+    setImages((prev) => {
+      const isFirst = prev.length === 0;
+      return [
+        ...prev,
+        {
+          url: trimmed,
+          publicId: '',
+          alt: name ? `${name} photo` : 'Product photo',
+          isPrimary: isFirst,
+          description: '',
+          variantLabel: '',
+        },
+      ];
+    });
+    setCustomImageUrl('');
+    toast.success('Image URL added to gallery');
+  };
+
   const handleImageFiles = async (files) => {
     setUploadError('');
     const validFiles = [];
@@ -228,15 +293,24 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
         return {
           url: res.data.url,
           publicId: res.data.publicId,
-          alt: name ? `${name} image` : 'Product image',
+          alt: name ? `${name} photo` : 'Product photo',
+          isPrimary: false,
+          description: '',
+          variantLabel: '',
         };
       });
 
       const uploadedImages = await Promise.all(uploadPromises);
-      setImages((prev) => [...prev, ...uploadedImages]);
+      setImages((prev) => {
+        const next = [...prev, ...uploadedImages];
+        if (!next.some((img) => img.isPrimary) && next.length > 0) {
+          next[0].isPrimary = true;
+        }
+        return next;
+      });
       toast.success(`${uploadedImages.length} image(s) uploaded successfully`);
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to upload images to Cloudinary');
+      toast.error(err?.response?.data?.message || 'Failed to upload images');
     } finally {
       setIsUploading(false);
     }
@@ -251,14 +325,14 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
         // Ignored
       }
     }
-    setImages((prev) => prev.filter((_, i) => i !== index));
+    setImages((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (target?.isPrimary && next.length > 0) {
+        next[0].isPrimary = true;
+      }
+      return next;
+    });
     toast.info('Image removed');
-  };
-
-  const updateImageAlt = (index, alt) => {
-    setImages((prev) =>
-      prev.map((img, i) => (i === index ? { ...img, alt } : img))
-    );
   };
 
   const validateForm = () => {
@@ -353,8 +427,11 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
       })),
       images: images.map((img) => ({
         url: img.url,
-        publicId: img.publicId,
-        alt: img.alt || '',
+        publicId: img.publicId || '',
+        alt: img.alt?.trim() || '',
+        isPrimary: Boolean(img.isPrimary),
+        description: img.description?.trim() || '',
+        variantLabel: img.variantLabel?.trim() || '',
       })),
       video: videoUrl ? { url: videoUrl.trim(), publicId: videoPublicId.trim() } : undefined,
     };
@@ -728,40 +805,74 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
           )}
         </div>
 
-        {/* Media Upload */}
+        {/* Media Upload & Multi-Image Gallery */}
         <div className="space-y-4 pt-6 border-t border-stone-100">
-          <div>
-            <h2 className="text-sm font-bold font-display text-mountain-900 uppercase tracking-wider text-apricot-700">
-              3. Product Media & Gallery
-            </h2>
-            <p className="text-xs text-stone-500 mt-0.5">
-              Upload JPG, PNG, or WebP images (under 5MB). Set descriptive alt texts for accessibility & SEO.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-bold font-display text-mountain-900 uppercase tracking-wider text-apricot-700">
+                3. Product Media & Gallery ({images.length} {images.length === 1 ? 'image' : 'images'})
+              </h2>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Upload a primary cover image, additional gallery views, specific size variant links, and detailed captions.
+              </p>
+            </div>
+            {images.length > 0 && (
+              <span className="text-xs text-stone-500 font-medium">
+                ★ Cover: {images.find((img) => img.isPrimary)?.alt || `Image #${images.findIndex((img) => img.isPrimary) + 1 || 1}`}
+              </span>
+            )}
           </div>
 
-          <div className="p-6 border-2 border-dashed border-stone-300 rounded-2xl bg-stone-50/50 text-center hover:bg-stone-50 transition relative">
-            <input
-              type="file"
-              multiple
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(e) => {
-                if (e.target.files) handleImageFiles(e.target.files);
-                e.target.value = '';
-              }}
-              disabled={isUploading}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-              aria-label="Upload product images"
-            />
-            <div className="flex flex-col items-center justify-center pointer-events-none">
-              <svg className="w-10 h-10 text-stone-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <p className="text-xs font-semibold text-stone-700">
-                {isUploading ? 'Uploading to Cloudinary...' : 'Click or drag images here to upload'}
-              </p>
-              <p className="text-[11px] text-stone-400 mt-0.5">
-                JPG, PNG, WebP up to 5MB each
-              </p>
+          {/* Upload Dropzone & Direct URL Box */}
+          <div className="space-y-3">
+            <div className="p-6 border-2 border-dashed border-stone-300 rounded-2xl bg-stone-50/50 text-center hover:bg-stone-50 hover:border-apricot-400 transition relative">
+              <input
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  if (e.target.files) handleImageFiles(e.target.files);
+                  e.target.value = '';
+                }}
+                disabled={isUploading}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                aria-label="Upload product images"
+              />
+              <div className="flex flex-col items-center justify-center pointer-events-none">
+                <svg className="w-10 h-10 text-stone-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="text-xs font-semibold text-stone-700">
+                  {isUploading ? 'Uploading images...' : 'Click or drag multiple images here to upload'}
+                </p>
+                <p className="text-[11px] text-stone-400 mt-0.5">
+                  JPG, PNG, WebP up to 5MB each · Drag multiple files at once
+                </p>
+              </div>
+            </div>
+
+            {/* Direct URL input fallback */}
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={customImageUrl}
+                onChange={(e) => setCustomImageUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddCustomImageUrl();
+                  }
+                }}
+                placeholder="Or paste an image URL (e.g. https://images.unsplash.com/...)"
+                className="flex-1 px-3 py-2 text-xs bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+              />
+              <button
+                type="button"
+                onClick={handleAddCustomImageUrl}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-semibold transition"
+              >
+                + Add URL
+              </button>
             </div>
           </div>
 
@@ -771,38 +882,142 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
             </div>
           )}
 
+          {/* Image cards list */}
           {images.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
               {images.map((img, i) => (
                 <div
-                  key={img.publicId || i}
-                  className="p-3 bg-white border border-stone-200 rounded-xl shadow-2xs space-y-2 relative group"
+                  key={img.publicId || `${img.url}-${i}`}
+                  className={`p-4 bg-white border rounded-2xl shadow-xs space-y-3 relative transition-all duration-200 ${
+                    img.isPrimary
+                      ? 'border-amber-400 ring-2 ring-amber-300/40 bg-amber-50/20'
+                      : 'border-stone-200 hover:border-stone-300'
+                  }`}
                 >
-                  <div className="w-full h-36 bg-stone-100 rounded-lg overflow-hidden border border-stone-100 relative">
-                    <img src={img.url} alt={img.alt || name} width={200} height={144} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removeImage(i)}
-                      className="absolute top-2 right-2 p-1.5 bg-rose-600/90 hover:bg-rose-700 text-white rounded-lg shadow-sm transition"
-                      title="Remove image"
-                      aria-label={`Remove image ${i + 1}`}
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
+                  {/* Card Header: Primary badge / toggle + position arrows + remove */}
+                  <div className="flex items-center justify-between gap-1.5 pb-2 border-b border-stone-100">
+                    <div className="flex items-center gap-1.5">
+                      {img.isPrimary ? (
+                        <span className="px-2.5 py-1 bg-amber-500 text-white rounded-lg text-[10px] font-extrabold flex items-center gap-1 shadow-2xs">
+                          ★ PRIMARY COVER
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryImage(i)}
+                          className="px-2.5 py-1 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-800 rounded-lg text-[10px] font-bold transition flex items-center gap-1 border border-stone-200/80"
+                          title="Set this as the primary cover photo for product card and default view"
+                        >
+                          ☆ Set as Primary
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {/* Move controls */}
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => moveImage(i, -1)}
+                        className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 disabled:opacity-30 disabled:cursor-not-allowed transition text-xs"
+                        title="Move left/earlier in gallery"
+                        aria-label="Move earlier"
+                      >
+                        ◀
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === images.length - 1}
+                        onClick={() => moveImage(i, 1)}
+                        className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 disabled:opacity-30 disabled:cursor-not-allowed transition text-xs"
+                        title="Move right/later in gallery"
+                        aria-label="Move later"
+                      >
+                        ▶
+                      </button>
+                      {/* Delete */}
+                      <button
+                        type="button"
+                        onClick={() => removeImage(i)}
+                        className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition text-xs font-bold"
+                        title="Delete photo"
+                        aria-label={`Remove image ${i + 1}`}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
 
+                  {/* Thumbnail Preview */}
+                  <div className="w-full h-44 bg-stone-100 rounded-xl overflow-hidden border border-stone-200 relative group">
+                    <img
+                      src={img.url}
+                      alt={img.alt || name}
+                      className="w-full h-full object-contain bg-stone-50"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement.innerText = '⚠️ Image preview failed';
+                      }}
+                    />
+                    {img.variantLabel && (
+                      <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-mountain-900/85 backdrop-blur-xs text-white text-[10px] font-semibold flex items-center gap-1 shadow-sm">
+                        🏷️ Size: {img.variantLabel}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Field 1: Variant / Size Assignment */}
                   <div>
-                    <label className="block text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
-                      Alt Text (SEO)
+                    <label className="block text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-1">
+                      Assign to Size / Variant
+                    </label>
+                    <select
+                      value={img.variantLabel || ''}
+                      onChange={(e) => updateImageField(i, 'variantLabel', e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                    >
+                      <option value="">All Variants (General product photo)</option>
+                      {variants
+                        .filter((v) => v.label && v.label.trim())
+                        .map((v) => (
+                          <option key={v.label} value={v.label}>
+                            {v.label} {v.price ? `(${fmtPKR(v.price)})` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    <span className="text-[10px] text-stone-400 block mt-0.5">
+                      Client gallery automatically switches to this photo when selecting this size.
+                    </span>
+                  </div>
+
+                  {/* Field 2: Image Specific Description / Caption */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-1">
+                      Image Description / Caption
+                    </label>
+                    <input
+                      type="text"
+                      value={img.description || ''}
+                      onChange={(e) => updateImageField(i, 'description', e.target.value)}
+                      placeholder="e.g. Natural seal with organic wax and handcrafted wooden lid"
+                      className="w-full px-2.5 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                    />
+                    <span className="text-[10px] text-stone-400 block mt-0.5">
+                      Displayed as photo details under the gallery viewer.
+                    </span>
+                  </div>
+
+                  {/* Field 3: Alt Text (SEO) */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-stone-600 uppercase tracking-wider mb-1">
+                      Alt Text (SEO & Accessibility)
                     </label>
                     <input
                       type="text"
                       value={img.alt || ''}
-                      onChange={(e) => updateImageAlt(i, e.target.value)}
-                      placeholder="Image description"
-                      className="w-full px-2.5 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-md focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                      onChange={(e) => updateImageField(i, 'alt', e.target.value)}
+                      placeholder="e.g. Hunza Organic Dry Fruit Packaging"
+                      className="w-full px-2.5 py-1.5 text-xs bg-stone-50 border border-stone-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
                     />
                   </div>
                 </div>

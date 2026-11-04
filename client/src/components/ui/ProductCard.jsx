@@ -30,7 +30,8 @@ export default function ProductCard({ product }) {
   const lowStock = !outOfStock && totalStock > 0 && totalStock <= LOW_STOCK_THRESHOLD;
   const variantCount = variants.length;
 
-  const imageUrl = product.images?.[0]?.url || '';
+  const primaryImage = product.images?.find((img) => img.isPrimary) || product.images?.[0];
+  const imageUrl = primaryImage?.url || '';
   const img = imageUrl
     ? cloudinaryImage(imageUrl, {
         width: 640,
@@ -85,7 +86,7 @@ export default function ProductCard({ product }) {
               src={img}
               srcSet={imgSrcSet}
               sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-              alt={product.images?.[0]?.alt || product.name}
+              alt={primaryImage?.alt || product.name}
               fit="contain"
               smartCrop
               className="group-hover:scale-105"
