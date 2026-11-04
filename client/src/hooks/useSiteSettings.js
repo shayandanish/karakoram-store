@@ -14,6 +14,12 @@ export const DEFAULT_SETTINGS = {
   storeName: 'Karakoram Store',
   storeTagline: 'Authentic · Gilgit-Baltistan · Pakistan',
   storeDescription: 'Handcrafted goods and artisan products from Gilgit-Baltistan, Pakistan.',
+  pageContent: {
+    home: { heroTitle: 'Products and craft from Gilgit-Baltistan', heroDescription: 'Discover regional food, artisan goods, and cultural products from across Gilgit-Baltistan.', heroButton: 'Shop all products', categoryTitle: 'Shop by category', featuredTitle: 'New arrivals', sectionOrder: ['hero','categories','featured','promises','regions'], visibility: { categories: true, featured: true, promises: true, regions: true } },
+    about: { intro: 'Karakoram Store brings products and handmade goods from Gilgit-Baltistan to customers across Pakistan.', story: 'Gilgit-Baltistan is known for its valleys, local produce, and living craft traditions. Karakoram Store was created to make it easier to discover products connected to this region and order them from across Pakistan.', sections: [], founders: [{ name: 'Shayan Danish', role: 'Founder' }, { name: 'Inam Karim', role: 'Co-founder' }, { name: 'Saif Ullah Baig', role: 'Co-founder' }], seoTitle: 'Our Story', seoDescription: 'Learn about Karakoram Store and the team behind our Gilgit-Baltistan store.' },
+    contact: { intro: 'Got a question, need a recommendation, or looking for a special gift? Send us a message and our team will get back to you.', responseText: 'We’re here. Reach out to us directly and our team will respond as soon as possible.', seoTitle: 'Contact Us', seoDescription: 'Get in touch with Karakoram Store about products, orders, or delivery.' },
+    footer: { intro: 'We’re here to help. Reach out to us directly and our team will get back to you.', newsletterText: 'Get in touch to hear about new products and updates.', contactEmail: '', whatsappNumber: '', location: 'Zero Point, Karimabad, Sana Khan and Sons Market, Gilgit-Baltistan, Pakistan', mapUrl: 'https://www.google.com/maps/dir/?api=1&destination=36.3191588,74.6664695', socialLinks: [] },
+  },
   shippingFee: 200,
   deliveryMinDays: 2,
   deliveryMaxDays: 5,
@@ -84,6 +90,12 @@ export function useSiteSettings() {
   });
 
   const data = { ...DEFAULT_SETTINGS, ...(query.data || {}) };
+  data.pageContent = {
+    home: { ...DEFAULT_SETTINGS.pageContent.home, ...(query.data?.pageContent?.home || {}), visibility: { ...DEFAULT_SETTINGS.pageContent.home.visibility, ...(query.data?.pageContent?.home?.visibility || {}) } },
+    about: { ...DEFAULT_SETTINGS.pageContent.about, ...(query.data?.pageContent?.about || {}) },
+    contact: { ...DEFAULT_SETTINGS.pageContent.contact, ...(query.data?.pageContent?.contact || {}) },
+    footer: { ...DEFAULT_SETTINGS.pageContent.footer, ...(query.data?.pageContent?.footer || {}), contactEmail: query.data?.pageContent?.footer?.contactEmail ?? data.contactEmail, whatsappNumber: query.data?.pageContent?.footer?.whatsappNumber ?? data.whatsappNumber },
+  };
   const paymentMethods = Array.isArray(data.paymentMethods)
     ? data.paymentMethods
     : DEFAULT_SETTINGS.paymentMethods;

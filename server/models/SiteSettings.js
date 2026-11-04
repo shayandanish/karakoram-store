@@ -62,6 +62,7 @@ const siteSettingsSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
     },
+    pageContent: { type: mongoose.Schema.Types.Mixed, default: {} },
     shippingFee: {
       type: Number,
       default: 200,

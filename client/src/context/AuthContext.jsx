@@ -408,6 +408,14 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
+  const staffLogin = async (username, password) => {
+    const res = await api.post('/auth/staff-login', { username: username.trim(), password });
+    saveAuthToken(res.data?.token);
+    setUser(res.data);
+    clearPendingVerification();
+    return res.data;
+  };
+
   /** Abandon an unverified Firebase sign-up ("use a different email"). */
   const cancelPendingRegistration = async () => {
     if (!firebaseAuth) return;
@@ -453,6 +461,7 @@ export function AuthProvider({ children }) {
         completeMfaSignIn,
         loginWithGoogle,
         adminLogin,
+        staffLogin,
         register,
         resendVerificationEmail,
         completeRegistration,

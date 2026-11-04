@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getAuthErrorMessage } from '../lib/firebaseErrors';
+import { hasAdminAccess } from '../lib/adminAccess';
 import SEO from '../components/ui/SEO';
 import GoogleAuthButton from '../components/ui/GoogleAuthButton';
 import SiteLogoMark from '../components/ui/SiteLogoMark';
@@ -112,7 +113,7 @@ export default function RegisterPage() {
   useEffect(() => {
     if (!user) return;
     sessionStorage.removeItem(PENDING_KEY);
-    navigate(user.role === 'admin' ? '/admin' : '/my-orders', { replace: true });
+    navigate(hasAdminAccess(user.role) ? '/admin' : '/my-orders', { replace: true });
   }, [user, navigate]);
 
   const displayError = error || googleRedirectError;
@@ -180,7 +181,7 @@ export default function RegisterPage() {
       });
 
       sessionStorage.removeItem(PENDING_KEY);
-      navigate(user?.role === 'admin' ? '/admin' : '/my-orders', { replace: true });
+      navigate(hasAdminAccess(user?.role) ? '/admin' : '/my-orders', { replace: true });
     } catch (err) {
       if (err?.code === 'auth/email-not-verified') {
         setError(

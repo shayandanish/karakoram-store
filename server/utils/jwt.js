@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 export const sendTokenCookie = (res, userId, authContext = {}) => {
   const token = jwt.sign({
     id: userId,
+    principalType: authContext.principalType === 'staff' ? 'staff' : 'user',
+    staffAuthVersion: Number.isSafeInteger(authContext.staffAuthVersion) ? authContext.staffAuthVersion : 0,
     adminMfaVerified: authContext.adminMfaVerified === true,
     adminAuthTime: Number.isSafeInteger(authContext.adminAuthTime) ? authContext.adminAuthTime : 0,
   }, process.env.JWT_SECRET, {

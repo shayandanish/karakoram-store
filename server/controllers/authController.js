@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import User from '../models/User.js';
+import Staff from '../models/Staff.js';
 import { verifyFirebaseIdToken } from '../utils/firebaseAdmin.js';
 import { sendTokenCookie, clearTokenCookie } from '../utils/jwt.js';
 import { generateOtp, sendOtpEmail } from '../utils/mailer.js';
@@ -8,6 +9,11 @@ import { generateOtp, sendOtpEmail } from '../utils/mailer.js';
 const loginSchema = z.object({
   email: z.string().trim().email('Please enter a valid email address'),
   password: z.string().min(1, 'Password required'),
+});
+
+const staffLoginSchema = z.object({
+  username: z.string().trim().min(3).max(32),
+  password: z.string().min(1).max(200),
 });
 
 const registerSchema = z.object({
@@ -270,6 +276,34 @@ export const login = async (req, res, next) => {
   }
 };
 
+/** POST /api/auth/staff-login — username/password login for admin-created staff. */
+export const staffLogin = async (req, res, next) => {
+  try {
+    const data = staffLoginSchema.parse(req.body);
+    const staff = await Staff.findOne({ username: data.username.toLowerCase(), isActive: true })
+      .select('+passwordHash +authVersion');
+    if (!staff || !(await bcrypt.compare(data.password, staff.passwordHash))) {
+      throw httpError('Invalid username or password', 401);
+    }
+
+    const token = sendTokenCookie(res, staff._id, {
+      principalType: 'staff',
+      staffAuthVersion: staff.authVersion,
+    });
+    res.json({
+      _id: staff._id,
+      name: staff.name,
+      username: staff.username,
+      email: '',
+      role: staff.role,
+      isActive: staff.isActive,
+      token,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /api/auth/logout
 export const logout = (req, res) => {
   clearTokenCookie(res);
@@ -278,6 +312,11 @@ export const logout = (req, res) => {
 
 // GET /api/auth/me
 export const getMe = (req, res) => {
+  if (req.user?._authType === 'staff') {
+    const { _id, name, username, role, isActive } = req.user;
+    res.json({ _id, name, username, email: '', role, isActive, isStaff: true });
+    return;
+  }
   const { _id, name, email, phone, role, addresses, status, isVerified } = req.user;
   res.json({ _id, name, email, phone, role, addresses, status, isVerified });
 };

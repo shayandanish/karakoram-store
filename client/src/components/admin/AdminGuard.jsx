@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import AdminNotAuthorized from '../../pages/admin/AdminNotAuthorized';
+import { getAdminPermissionForPath, hasAdminAccess, hasAdminPermission } from '../../lib/adminAccess';
 
 export default function AdminGuard() {
   const { user, loading } = useAuth();
@@ -24,9 +25,12 @@ export default function AdminGuard() {
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
-  if (user.role !== 'admin') {
+  if (!hasAdminAccess(user.role)) {
     return <AdminNotAuthorized />;
   }
+
+  const requiredPermission = getAdminPermissionForPath(location.pathname);
+  if (!hasAdminPermission(user.role, requiredPermission)) return <AdminNotAuthorized />;
 
   return <Outlet />;
 }

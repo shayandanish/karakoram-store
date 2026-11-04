@@ -4,6 +4,7 @@ import {
   firebaseRegister,
   firebaseLogin,
   login,
+  staffLogin,
   logout,
   getMe,
   sendOtp,
@@ -72,6 +73,7 @@ router.post('/firebase-login', firebaseAuthLimiter, firebaseLogin);
 
 // Legacy password login — admin accounts only
 router.post('/login', adminLoginLimiter, login);
+router.post('/staff-login', adminLoginLimiter, staffLogin);
 
 router.post('/logout', logout);
 router.get('/me', protect, getMe);

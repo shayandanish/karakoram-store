@@ -5,6 +5,7 @@ import Product from '../models/Product.js';
 import Coupon from '../models/Coupon.js';
 import SiteSettings from '../models/SiteSettings.js';
 import User from '../models/User.js';
+import { hasAdminPermission } from '../middlewares/auth.js';
 import { getEnabledPaymentMethod } from '../utils/paymentMethods.js';
 import { generateOrderId } from '../utils/orderIdGenerator.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
@@ -427,7 +428,7 @@ export const trackOrder = async (req, res, next) => {
 
     // Verification: if user is authenticated and is owner/admin, allow directly
     const isOwner = req.user && order.user && String(order.user) === String(req.user._id);
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = hasAdminPermission(req.user, 'orders');
 
     if (!isOwner && !isAdmin) {
       const normInputPhone = normalizePhoneForStrictMatch(phone);
@@ -492,7 +493,7 @@ export const getOrderById = async (req, res, next) => {
 
     // Check ownership or admin
     const isOwner = req.user && order.user && String(order.user._id || order.user) === String(req.user._id);
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = hasAdminPermission(req.user, 'orders');
 
     if (!isOwner && !isAdmin) {
       res.status(403);
@@ -530,7 +531,7 @@ export const uploadPaymentScreenshot = async (req, res, next) => {
 
     // Verify caller: owner, admin, or contact match
     const isOwner = req.user && order.user && String(order.user) === String(req.user._id);
-    const isAdmin = req.user?.role === 'admin';
+    const isAdmin = hasAdminPermission(req.user, 'orders');
 
     if (!isOwner && !isAdmin) {
       const normInputPhone = normalizePhoneForStrictMatch(phone);

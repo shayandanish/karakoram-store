@@ -10,7 +10,6 @@ import SEO from '../../components/ui/SEO';
 import ResponsiveTable from '../../components/ResponsiveTable';
 
 const PAGE_SIZE = 10;
-
 function RoleBadge({ role }) {
   const isAdmin = role === 'admin';
   return (
@@ -289,7 +288,7 @@ export default function AdminUsersPage() {
       {
         header: 'Role',
         accessor: 'role',
-        render: (row) => <RoleBadge role={row.role} />, 
+        render: (row) => <RoleBadge role={row.role} />,
       },
       {
         header: 'Status',

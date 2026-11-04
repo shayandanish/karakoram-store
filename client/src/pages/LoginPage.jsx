@@ -9,19 +9,20 @@ import SEO from '../components/ui/SEO';
 import GoogleAuthButton from '../components/ui/GoogleAuthButton';
 import SiteLogoMark from '../components/ui/SiteLogoMark';
 import { useSiteSettings } from '../hooks/useSiteSettings';
+import { hasAdminAccess } from '../lib/adminAccess';
 
 const RESEND_SECONDS = 60;
 
 const getLoginDestination = (authenticatedUser, redirectParam) => {
   const defaultDestination =
-    authenticatedUser?.role === 'admin' ? '/admin' : '/my-orders';
+    hasAdminAccess(authenticatedUser?.role) ? '/admin' : '/my-orders';
   const redirectPath =
     typeof redirectParam === 'string' ? redirectParam : redirectParam?.pathname;
 
   if (
     !redirectPath?.startsWith('/') ||
     redirectPath.startsWith('//') ||
-    (authenticatedUser?.role !== 'admin' &&
+    (!hasAdminAccess(authenticatedUser?.role) &&
       (redirectPath === '/admin' || redirectPath.startsWith('/admin/')))
   ) {
     return defaultDestination;
@@ -36,6 +37,7 @@ export default function LoginPage() {
     completeMfaSignIn,
     mfaRequired,
     adminLogin,
+    staffLogin,
     resendVerificationEmail,
     sendPasswordReset,
     user,
@@ -48,6 +50,7 @@ export default function LoginPage() {
   const hasCustomLogo = Boolean(logo?.url);
 
   const [email, setEmail] = useState('');
+  const [staffLoginMode, setStaffLoginMode] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -94,6 +97,24 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (googleLoading) return;
+
+    if (staffLoginMode) {
+      if (!email.trim() || !password) {
+        setError('Enter your staff username and password.');
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const staffUser = await staffLogin(email.trim(), password);
+        navigate(getLoginDestination(staffUser, redirectParam), { replace: true });
+      } catch (err) {
+        setError(err?.response?.data?.message || 'Could not sign in with these staff credentials.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (!email.trim() || !password) {
       setError('Please provide both your email and password.');
@@ -330,7 +351,12 @@ export default function LoginPage() {
           </form>
         ) : (
         <>
-        <GoogleAuthButton
+        <div className="mb-5 grid grid-cols-2 rounded-xl bg-cream-100 p-1">
+          <button type="button" onClick={() => { setStaffLoginMode(false); setError(''); }} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${staffLoginMode ? 'text-stone-500' : 'bg-white text-mountain-900 shadow-xs'}`}>Customer / Admin</button>
+          <button type="button" onClick={() => { setStaffLoginMode(true); setError(''); setNeedsVerification(false); }} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${staffLoginMode ? 'bg-white text-mountain-900 shadow-xs' : 'text-stone-500'}`}>Staff sign in</button>
+        </div>
+
+        {!staffLoginMode && <GoogleAuthButton
           disabled={loading}
           onStart={() => {
             setError('');
@@ -341,24 +367,24 @@ export default function LoginPage() {
           onError={setError}
           onMfaRequired={() => setNeedsMfa(true)}
           onLoadingChange={setGoogleLoading}
-        />
+        />}
 
-        <div className="my-5 flex items-center gap-3" aria-hidden="true">
+        {!staffLoginMode && <div className="my-5 flex items-center gap-3" aria-hidden="true">
           <span className="h-px flex-1 bg-cream-200" />
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-mountain-400">
             or sign in with email
           </span>
           <span className="h-px flex-1 bg-cream-200" />
-        </div>
+        </div>}
 
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wider text-mountain-700 mb-1">
-              Email Address <span className="text-apricot-500">*</span>
+              {staffLoginMode ? 'Staff username' : 'Email Address'} <span className="text-apricot-500">*</span>
             </label>
             <input
               id="login-email"
-              type="email"
+              type={staffLoginMode ? 'text' : 'email'}
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
@@ -366,9 +392,9 @@ export default function LoginPage() {
                 setNotice('');
                 clearGoogleRedirectError();
               }}
-              placeholder="you@example.com"
+              placeholder={staffLoginMode ? 'username' : 'you@example.com'}
               required
-              autoComplete="email"
+              autoComplete={staffLoginMode ? 'username' : 'email'}
               className="w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 placeholder-mountain-300"
             />
           </div>
@@ -420,7 +446,7 @@ export default function LoginPage() {
                 )}
               </button>
             </div>
-            <div className="text-right mt-1.5">
+            {!staffLoginMode && <div className="text-right mt-1.5">
               <button
                 type="button"
                 onClick={handleForgotPassword}
@@ -429,7 +455,7 @@ export default function LoginPage() {
               >
                 {resetLoading ? 'Sending reset email…' : 'Forgot password?'}
               </button>
-            </div>
+            </div>}
           </div>
 
           <button
@@ -443,7 +469,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-3 text-[11px] text-mountain-400 text-center">
-          Store admins can also sign in with their existing admin password.
+          {staffLoginMode ? 'Use the username and password provided by your administrator.' : 'Store admins can also sign in with their existing admin password.'}
         </p>
         </>
         )}

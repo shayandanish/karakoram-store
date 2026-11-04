@@ -2,38 +2,41 @@
 @import "tailwindcss";
 
 @theme {
-  /* Warm earthy palette */
-  --color-apricot-50:  #fff8f0;
-  --color-apricot-100: #feecd6;
-  --color-apricot-200: #fdd5a5;
-  --color-apricot-300: #fbb86a;
-  --color-apricot-400: #f89535;
-  --color-apricot-500: #f07a18;
-  --color-apricot-600: #e0630e;
-  --color-apricot-700: #ba4d0d;
-  --color-apricot-800: #943e12;
-  --color-apricot-900: #783414;
+  /* Brand palette: near-white paper, deep navy ink, muted teal accent.
+     The legacy token names (apricot / mountain / cream) are kept so the
+     whole storefront picks up the new colours without touching every file. */
+  --color-apricot-50:  #f0f8f6;
+  --color-apricot-100: #dcf0ec;
+  --color-apricot-200: #b9e1d9;
+  --color-apricot-300: #8bcbbf;
+  --color-apricot-400: #45ab9b;
+  --color-apricot-500: #108474;
+  --color-apricot-600: #0d6f62;
+  --color-apricot-700: #0b5a50;
+  --color-apricot-800: #094740;
+  --color-apricot-900: #073832;
 
-  --color-mountain-50:  #eef3f8;
-  --color-mountain-100: #d8e4ef;
-  --color-mountain-200: #b5cae0;
-  --color-mountain-300: #87a9cc;
-  --color-mountain-400: #5f89b7;
-  --color-mountain-500: #3f6d9e;
-  --color-mountain-600: #2f5582;
-  --color-mountain-700: #1e3c5e;
-  --color-mountain-800: #132740;
-  --color-mountain-900: #0b1a2d;
+  --color-mountain-50:  #f4f6f7;
+  --color-mountain-100: #e8ecef;
+  --color-mountain-200: #d5dbdf;
+  --color-mountain-300: #aab3ba;
+  --color-mountain-400: #6b7683;
+  --color-mountain-500: #4e5965;
+  --color-mountain-600: #333e4a;
+  --color-mountain-700: #1c2733;
+  --color-mountain-800: #0b1420;
+  --color-mountain-900: #020912;
+  --color-mountain-950: #01060d;
 
-  --color-cream-50:  #fffef9;
-  --color-cream-100: #fdf9ed;
-  --color-cream-200: #f9f0d3;
-  --color-cream-300: #f3e2af;
-  --color-cream-400: #e8cc7e;
-  --color-cream-500: #d9b04d;
+  --color-cream-50:  #ffffff;
+  --color-cream-100: #fcfcfc;
+  --color-cream-200: #f2f3f4;
+  --color-cream-300: #e4e6e8;
+  --color-cream-400: #cfd3d6;
+  --color-cream-500: #a8afb4;
 
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-body:    'Inter', system-ui, sans-serif;
+  --font-display: 'Tenor Sans', 'Assistant', Georgia, sans-serif;
+  --font-body:    'Assistant', system-ui, -apple-system, sans-serif;
 }
 
 /* ── Base ────────────────────────────────────────────────────── */
@@ -50,7 +53,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3 { font-family: var(--font-display); line-height: 1.25; }
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.2; letter-spacing: -0.01em; }
 
 /* ── Loading shimmer ─────────────────────────────────────────── */
 @keyframes kk-shimmer {

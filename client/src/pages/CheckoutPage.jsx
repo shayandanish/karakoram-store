@@ -8,7 +8,7 @@ import { COUNTRY_CODES, validatePhoneNumber, validateEmail } from '../lib/phoneU
 import { getDeliveryRate } from '../lib/deliveryRates';
 import api from '../lib/axios';
 import SEO from '../components/ui/SEO';
-import TrustBadges from '../components/ui/TrustBadges';
+import ProductImage from '../components/ui/ProductImage';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 
 const PROVINCES = [
@@ -16,48 +16,71 @@ const PROVINCES = [
   'Gilgit-Baltistan', 'Azad Jammu & Kashmir', 'Islamabad Capital Territory',
 ];
 
+const FIELD_IDS = {
+  guestName: 'field-name',
+  guestPhone: 'field-phone',
+  guestEmail: 'field-email',
+  street: 'field-street',
+  city: 'field-city',
+  province: 'field-province',
+};
+
 function Field({ id, label, required, children, error, hint }) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-mountain-700 mb-1">
-        {label} {required && <span className="text-apricot-500">*</span>}
+      <label htmlFor={id} className="mb-1.5 block text-[13px] font-semibold text-mountain-700">
+        {label}
+        {required && (
+          <span className="ml-0.5 text-apricot-600" aria-hidden="true">
+            *
+          </span>
+        )}
       </label>
       {children}
-      {hint && <p className="text-xs text-mountain-400 mt-0.5">{hint}</p>}
-      {error && <p className="text-xs text-red-500 mt-0.5">{error}</p>}
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1.5 text-xs leading-relaxed text-mountain-500">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p
+          id={`${id}-error`}
+          role="alert"
+          className="mt-1.5 flex items-start gap-1.5 text-xs font-medium leading-relaxed text-red-600"
+        >
+          <span aria-hidden="true">•</span>
+          <span>{error}</span>
+        </p>
+      )}
     </div>
   );
 }
 
-const inputClass =
-  'w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white placeholder-mountain-300 text-mountain-800';
+const controlProps = (id, { error, hint, required } = {}) => ({
+  id,
+  'aria-invalid': error ? 'true' : undefined,
+  'aria-required': required ? 'true' : undefined,
+  'aria-describedby':
+    [hint ? `${id}-hint` : '', error ? `${id}-error` : ''].filter(Boolean).join(' ') ||
+    undefined,
+});
 
-const PAYMENT_CARD_STYLES = {
+const inputClass =
+  'w-full min-w-0 scroll-mt-32 rounded-lg border border-cream-300 bg-white px-3.5 py-2.5 text-sm text-mountain-900 placeholder:text-mountain-400 transition-colors focus:border-apricot-500 focus:outline-none focus:ring-2 focus:ring-apricot-500/35';
+
+const copyButtonClass =
+  'inline-flex shrink-0 items-center gap-1.5 rounded-md border border-cream-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-mountain-800 transition-colors hover:border-apricot-400 hover:text-apricot-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500/40 focus-visible:ring-offset-1';
+
+const MOBILE_WALLET_LOGOS = {
   easypaisa: {
-    card: 'border-stone-300 from-white to-stone-50',
-    icon: 'bg-white border border-stone-200',
-    badge: 'bg-stone-100 text-stone-700',
-    directBadge: 'text-stone-700 bg-white border-stone-200',
-    account: 'border-stone-200',
-    verified: 'bg-stone-100 text-stone-700',
-    number: 'text-stone-900',
-    copy: 'bg-stone-800 hover:bg-stone-900 hover:shadow-stone-900/20',
-    steps: 'bg-stone-50 border-stone-200',
-    stepIcon: 'bg-stone-700',
-    stepTitle: 'text-stone-900',
+    src: '/easypaisa-logo.png',
+    alt: 'Easypaisa',
+    className: 'h-7 w-auto max-w-[96px]',
   },
   jazzcash: {
-    card: 'border-stone-300 from-white to-stone-50',
-    icon: 'bg-white border border-stone-200',
-    badge: 'bg-stone-100 text-stone-700',
-    directBadge: 'text-stone-700 bg-white border-stone-200',
-    account: 'border-stone-200',
-    verified: 'bg-stone-100 text-stone-700',
-    number: 'text-stone-900',
-    copy: 'bg-stone-800 hover:bg-stone-900 hover:shadow-stone-900/20',
-    steps: 'bg-stone-50 border-stone-200',
-    stepIcon: 'bg-stone-700',
-    stepTitle: 'text-stone-900',
+    src: '/jazzcash-logo.svg',
+    alt: 'JazzCash',
+    className: 'h-8 w-auto max-w-[56px]',
   },
 };
 
@@ -107,6 +130,7 @@ export default function CheckoutPage() {
   const deliveryRate = getDeliveryRate(settings, form.city, form.province);
   const shippingFee = deliveryRate.shippingFee;
   const total = subtotal + shippingFee;
+  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   const [copiedNumber, setCopiedNumber] = useState(false);
   const [dialCode, setDialCode] = useState('+92');
@@ -114,8 +138,8 @@ export default function CheckoutPage() {
   const selectedPaymentMethod =
     enabledPaymentMethods.find((method) => method.id === selectedPaymentMethodId) ||
     enabledPaymentMethods[0];
-  const paymentCardStyles = PAYMENT_CARD_STYLES[selectedPaymentMethod?.id];
-  const isMobileWallet = Boolean(paymentCardStyles);
+  const walletLogo = MOBILE_WALLET_LOGOS[selectedPaymentMethod?.id];
+  const isMobileWallet = Boolean(walletLogo);
 
   const handleCopyNumber = () => {
     if (!selectedPaymentMethod?.accountNumber) return;
@@ -140,18 +164,23 @@ export default function CheckoutPage() {
 
   const [errors, setErrors] = useState({});
   const [emailWarning, setEmailWarning] = useState('');
-
-
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState('');
 
   if (items.length === 0) {
     return (
-      <div className="max-w-lg mx-auto px-4 py-24 text-center">
-        <p className="text-5xl mb-4">🛒</p>
-        <h1 className="font-display font-bold text-2xl text-mountain-900 mb-2">Your cart is empty</h1>
-        <Link to="/shop" id="checkout-empty-shop-btn" className="mt-4 inline-block px-8 py-3 bg-apricot-500 text-white font-semibold rounded-full hover:bg-apricot-600 transition-colors">
-          Shop Now
+      <div className="mx-auto max-w-lg px-4 py-24 text-center">
+        <p className="mb-4 text-4xl" aria-hidden="true">
+          🛒
+        </p>
+        <h1 className="mb-2 font-display text-2xl font-bold text-mountain-900">Your cart is empty</h1>
+        <p className="text-sm text-mountain-500">Add an item to your cart before checking out.</p>
+        <Link
+          to="/shop"
+          id="checkout-empty-shop-btn"
+          className="mt-5 inline-flex items-center justify-center rounded-lg bg-apricot-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-apricot-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-apricot-500/30 focus-visible:ring-offset-2"
+        >
+          Shop now
         </Link>
       </div>
     );
@@ -202,7 +231,14 @@ export default function CheckoutPage() {
       return;
     }
     const errs = validate();
-    if (Object.keys(errs).length) { setErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      const firstInvalidId = FIELD_IDS[Object.keys(errs)[0]];
+      if (firstInvalidId) {
+        window.requestAnimationFrame(() => document.getElementById(firstInvalidId)?.focus());
+      }
+      return;
+    }
 
     setSubmitting(true);
     setApiError('');
@@ -286,33 +322,34 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
       <SEO
         title="Checkout"
         description={`Choose a payment option and place your order with ${settings.storeName}.`}
       />
 
-      {/* Back to Cart Navigation Button */}
-      <div className="mb-4">
+      <div className="mb-6">
         <Link
           to="/cart"
           id="checkout-back-to-cart-btn"
-          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
+          className="group inline-flex items-center gap-2 rounded-md text-xs font-semibold text-mountain-600 transition-colors hover:text-apricot-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500/40 focus-visible:ring-offset-2"
         >
-          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md border border-cream-300 bg-white text-mountain-700 transition-colors group-hover:border-apricot-400 group-hover:text-apricot-700" aria-hidden="true">
             ←
           </span>
-          <span>Back to Cart</span>
+          <span>Back to cart</span>
         </Link>
       </div>
 
-      <div className="mb-8">
-        <h1 className="font-display font-bold text-3xl text-mountain-900">Checkout</h1>
-        <p className="mt-1 text-sm text-mountain-500">{settings.storeTagline}</p>
+      <div className="mb-7">
+        <h1 className="font-display text-3xl font-bold text-mountain-900 sm:text-4xl">Checkout</h1>
+        <p className="mt-1.5 text-sm text-mountain-500">{settings.storeTagline}</p>
       </div>
 
-      {/* Progress indicator */}
-      <ol className="mb-8 flex flex-wrap items-center gap-y-2 text-xs" aria-label="Checkout progress">
+      <ol
+        className="mb-8 flex flex-wrap items-center gap-x-2 gap-y-2 text-xs"
+        aria-label="Checkout progress"
+      >
         {[
           { id: 'cart', label: 'Cart', state: 'done' },
           { id: 'details', label: 'Details', state: 'current' },
@@ -322,12 +359,12 @@ export default function CheckoutPage() {
           <li key={step.id} className="flex items-center gap-2">
             <span
               aria-current={step.state === 'current' ? 'step' : undefined}
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
                 step.state === 'done'
-                  ? 'bg-emerald-100 text-emerald-700'
+                  ? 'bg-mountain-900 text-white'
                   : step.state === 'current'
-                    ? 'bg-apricot-500 text-white shadow-sm'
-                    : 'bg-cream-200 text-mountain-400'
+                    ? 'bg-apricot-600 text-white'
+                    : 'border border-cream-300 bg-white text-mountain-400'
               }`}
             >
               {step.state === 'done' ? '✓' : index + 1}
@@ -342,27 +379,28 @@ export default function CheckoutPage() {
               {step.label}
             </span>
             {index < steps.length - 1 && (
-              <span className="mx-1 h-px w-5 bg-cream-300 sm:w-9" aria-hidden="true" />
+              <span className="mx-1 h-px w-4 bg-cream-300 sm:w-8" aria-hidden="true" />
             )}
           </li>
         ))}
       </ol>
 
-
       <form id="checkout-form" onSubmit={handleSubmit} noValidate>
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid gap-6 lg:grid-cols-3 lg:gap-8">
           {/* Left – Contact & Shipping */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="min-w-0 space-y-6 lg:col-span-2">
             {/* Guest info */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="font-display font-semibold text-mountain-900 text-lg mb-5 flex items-center gap-2">
-                <span className="w-7 h-7 bg-apricot-100 text-apricot-600 rounded-full text-sm font-bold flex items-center justify-center">1</span>
-                Contact Information
+            <section className="rounded-xl border border-cream-300 bg-white p-5 sm:p-6">
+              <h2 className="mb-5 flex items-center gap-2.5 font-display text-lg font-semibold text-mountain-900">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-apricot-50 text-xs font-bold text-apricot-700">
+                  1
+                </span>
+                Contact information
               </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field id="field-name" label="Full Name" required error={errors.guestName}>
+              <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+                <Field id="field-name" label="Full name" required error={errors.guestName}>
                   <input
-                    id="field-name"
+                    {...controlProps('field-name', { error: errors.guestName, required: true })}
                     type="text"
                     value={form.guestName}
                     onChange={set('guestName')}
@@ -374,16 +412,16 @@ export default function CheckoutPage() {
 
                 <Field
                   id="field-phone"
-                  label="Phone Number"
+                  label="Phone number"
                   required
                   error={errors.guestPhone}
                   hint={
                     dialCode === '+92'
-                      ? 'Pakistani format: 03XX-XXXXXXX · Used for courier delivery updates'
-                      : `Enter subscriber digits without the country code · Courier updates sent here`
+                      ? 'Pakistani format: 03XX-XXXXXXX'
+                      : 'Enter the number without the country code.'
                   }
                 >
-                  <div className="flex gap-2">
+                  <div className="flex min-w-0 gap-2">
                     {/* Country code selector */}
                     <select
                       value={dialCode}
@@ -391,7 +429,7 @@ export default function CheckoutPage() {
                         setDialCode(e.target.value);
                         setErrors((er) => ({ ...er, guestPhone: '' }));
                       }}
-                      className="shrink-0 border border-cream-300 rounded-xl px-2 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800"
+                      className="w-[6.5rem] shrink-0 scroll-mt-32 rounded-lg border border-cream-300 bg-white px-2.5 py-2.5 text-sm text-mountain-900 transition-colors focus:border-apricot-500 focus:outline-none focus:ring-2 focus:ring-apricot-500/35"
                       aria-label="Country code"
                     >
                       {COUNTRY_CODES.map((c) => (
@@ -402,7 +440,11 @@ export default function CheckoutPage() {
                     </select>
                     {/* Phone number input */}
                     <input
-                      id="field-phone"
+                      {...controlProps('field-phone', {
+                        error: errors.guestPhone,
+                        hint: true,
+                        required: true,
+                      })}
                       type="tel"
                       value={form.guestPhone}
                       onChange={set('guestPhone')}
@@ -418,42 +460,65 @@ export default function CheckoutPage() {
                   </div>
                 </Field>
 
-                <Field id="field-email" label="Email Address (Recommended for confirmation & invoices)" error={errors.guestEmail} hint="We'll send order invoice & delivery notifications here">
-                  <input
+                <div className="sm:col-span-2">
+                  <Field
                     id="field-email"
-                    type="email"
-                    value={form.guestEmail}
-                    onChange={set('guestEmail')}
-                    onBlur={() => {
-                      if (!form.guestEmail.trim()) return;
-                      const { valid, error, warning } = validateEmail(form.guestEmail);
-                      if (!valid) setErrors((er) => ({ ...er, guestEmail: error }));
-                      else setEmailWarning(warning || '');
-                    }}
-                    placeholder="you@gmail.com"
-                    className={inputClass}
-                    autoComplete="email"
-                  />
-                  {emailWarning && !errors.guestEmail && (
-                    <p className="text-xs text-amber-600 mt-0.5 flex items-center gap-1">
-                      <span>⚠️</span> {emailWarning}
-                    </p>
-                  )}
-                </Field>
+                    label="Email address (optional)"
+                    error={errors.guestEmail}
+                    hint="Used for your order confirmation and invoice."
+                  >
+                    <input
+                      {...controlProps('field-email', { error: errors.guestEmail, hint: true })}
+                      type="email"
+                      value={form.guestEmail}
+                      onChange={set('guestEmail')}
+                      onBlur={() => {
+                        if (!form.guestEmail.trim()) return;
+                        const { valid, error, warning } = validateEmail(form.guestEmail);
+                        if (!valid) setErrors((er) => ({ ...er, guestEmail: error }));
+                        else setEmailWarning(warning || '');
+                      }}
+                      aria-describedby={
+                        [
+                          'field-email-hint',
+                          emailWarning && !errors.guestEmail ? 'field-email-warning' : '',
+                          errors.guestEmail ? 'field-email-error' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || undefined
+                      }
+                      placeholder="you@example.com"
+                      className={inputClass}
+                      autoComplete="email"
+                      inputMode="email"
+                    />
+                    {emailWarning && !errors.guestEmail && (
+                      <p
+                        id="field-email-warning"
+                        role="status"
+                        className="mt-1.5 text-xs leading-relaxed text-amber-700"
+                      >
+                        {emailWarning}
+                      </p>
+                    )}
+                  </Field>
+                </div>
               </div>
             </section>
 
             {/* Shipping address */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="font-display font-semibold text-mountain-900 text-lg mb-5 flex items-center gap-2">
-                <span className="w-7 h-7 bg-apricot-100 text-apricot-600 rounded-full text-sm font-bold flex items-center justify-center">2</span>
-                Shipping Address
+            <section className="rounded-xl border border-cream-300 bg-white p-5 sm:p-6">
+              <h2 className="mb-5 flex items-center gap-2.5 font-display text-lg font-semibold text-mountain-900">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-apricot-50 text-xs font-bold text-apricot-700">
+                  2
+                </span>
+                Shipping address
               </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <Field id="field-street" label="Street / House No." required error={errors.street}>
+                  <Field id="field-street" label="Street / house no." required error={errors.street}>
                     <input
-                      id="field-street"
+                      {...controlProps('field-street', { error: errors.street, required: true })}
                       type="text"
                       value={form.street}
                       onChange={set('street')}
@@ -466,7 +531,7 @@ export default function CheckoutPage() {
 
                 <Field id="field-city" label="City" required error={errors.city}>
                   <input
-                    id="field-city"
+                    {...controlProps('field-city', { error: errors.city, required: true })}
                     type="text"
                     value={form.city}
                     onChange={set('city')}
@@ -478,7 +543,10 @@ export default function CheckoutPage() {
 
                 <Field id="field-province" label="Province" required error={errors.province}>
                   <select
-                    id="field-province"
+                    {...controlProps('field-province', {
+                      error: errors.province,
+                      required: true,
+                    })}
                     value={form.province}
                     onChange={set('province')}
                     className={inputClass}
@@ -491,47 +559,52 @@ export default function CheckoutPage() {
                   </select>
                 </Field>
 
-                <Field id="field-postal" label="Postal Code (optional)">
+                <Field id="field-postal" label="Postal code (optional)">
                   <input
-                    id="field-postal"
+                    {...controlProps('field-postal')}
                     type="text"
                     value={form.postalCode}
                     onChange={set('postalCode')}
                     placeholder="e.g. 44000"
                     className={inputClass}
                     autoComplete="postal-code"
+                    inputMode="numeric"
                   />
                 </Field>
               </div>
             </section>
 
             {/* Additional */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="font-display font-semibold text-mountain-900 text-lg mb-5 flex items-center gap-2">
-                <span className="w-7 h-7 bg-apricot-100 text-apricot-600 rounded-full text-sm font-bold flex items-center justify-center">3</span>
-                Additional Info
+            <section className="rounded-xl border border-cream-300 bg-white p-5 sm:p-6">
+              <h2 className="mb-5 flex items-center gap-2.5 font-display text-lg font-semibold text-mountain-900">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-apricot-50 text-xs font-bold text-apricot-700">
+                  3
+                </span>
+                Additional information
               </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field id="field-coupon" label="Coupon Code" hint="Optional discount code">
+              <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+                <Field id="field-coupon" label="Coupon code (optional)" hint="Enter a discount code if you have one.">
                   <input
-                    id="field-coupon"
+                    {...controlProps('field-coupon', { hint: true })}
                     type="text"
                     value={form.couponCode}
                     onChange={set('couponCode')}
-                    placeholder="SAVE10"
+                    placeholder="Enter code"
                     className={`${inputClass} uppercase`}
+                    autoComplete="off"
+                    spellCheck="false"
                   />
                 </Field>
 
                 <div className="sm:col-span-2">
-                  <Field id="field-notes" label="Order Notes (optional)">
+                  <Field id="field-notes" label="Order notes (optional)">
                     <textarea
-                      id="field-notes"
+                      {...controlProps('field-notes')}
                       rows={3}
                       value={form.notes}
                       onChange={set('notes')}
-                      placeholder="Any special instructions…"
-                      className={inputClass}
+                      placeholder="Any special instructions for your order…"
+                      className={`${inputClass} resize-y`}
                     />
                   </Field>
                 </div>
@@ -539,227 +612,272 @@ export default function CheckoutPage() {
             </section>
 
             {/* Payment */}
-            <section className="bg-white rounded-2xl shadow-sm p-6">
-              <h2 className="font-display font-semibold text-mountain-900 text-lg mb-4 flex items-center gap-2">
-                <span className="w-7 h-7 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold flex items-center justify-center">4</span>
-                Payment Method
+            <section className="rounded-xl border border-cream-300 bg-white p-5 sm:p-6">
+              <h2 className="mb-5 flex items-center gap-2.5 font-display text-lg font-semibold text-mountain-900">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-apricot-50 text-xs font-bold text-apricot-700">
+                  4
+                </span>
+                Payment method
               </h2>
 
               {enabledPaymentMethods.length === 0 ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                   No payment methods are currently available. Please contact the store.
                 </p>
               ) : (
-                <>
-                  <fieldset className="mb-5 grid gap-3 sm:grid-cols-2">
-                    <legend className="sr-only">Choose a payment method</legend>
-                    {enabledPaymentMethods.map((method) => (
+                <fieldset className="grid gap-3 sm:grid-cols-2">
+                  <legend className="sr-only">Choose a payment method</legend>
+                  {enabledPaymentMethods.map((method) => {
+                    const isSelected = selectedPaymentMethod?.id === method.id;
+                    return (
                       <label
                         key={method.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-4 transition ${
-                          selectedPaymentMethod?.id === method.id
-                            ? 'border-apricot-400 bg-apricot-50/50'
-                            : 'border-cream-200 hover:border-apricot-200'
+                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors focus-within:border-apricot-500 focus-within:ring-2 focus-within:ring-apricot-500/20 ${
+                          isSelected
+                            ? 'border-apricot-500 bg-apricot-50/60'
+                            : 'border-cream-300 bg-white hover:border-apricot-300'
                         }`}
                       >
                         <input
                           type="radio"
                           name="paymentMethod"
                           value={method.id}
-                          checked={selectedPaymentMethod?.id === method.id}
+                          checked={isSelected}
                           onChange={() => {
                             setSelectedPaymentMethodId(method.id);
                             setCopiedNumber(false);
                           }}
-                          className="mt-1 accent-apricot-500"
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-apricot-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500/40 focus-visible:ring-offset-2"
                         />
-                        <span>
-                          <span className="block font-semibold text-mountain-900">{method.name}</span>
-                          <span className="mt-0.5 block text-xs text-mountain-500">
-                            {method.id === 'cod' ? 'Pay when your order arrives' : 'Manual payment'}
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-mountain-900">
+                            {method.name}
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-relaxed text-mountain-500">
+                            {method.id === 'cod'
+                              ? 'Pay when your order arrives'
+                              : 'Manual payment'}
                           </span>
                         </span>
                       </label>
-                    ))}
-                  </fieldset>
-                </>
+                    );
+                  })}
+                </fieldset>
               )}
 
               {isMobileWallet && selectedPaymentMethod.accountNumber && (
-              <div className={`border-2 bg-gradient-to-br via-white rounded-2xl p-5 sm:p-6 shadow-sm space-y-5 ${paymentCardStyles.card}`}>
-                {/* Header Badge */}
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3">
-                    {selectedPaymentMethod.id === 'jazzcash' ? (
-                      <div className={`w-14 h-12 rounded-xl flex items-center justify-center p-1 shadow-sm ${paymentCardStyles.icon}`}>
-                        <img src="/jazzcash-logo.svg" alt="JazzCash" className="h-full w-full object-contain" />
+                <div className="mt-5 space-y-4">
+                  <div className="rounded-xl border border-cream-300 bg-cream-50/60 p-4 sm:p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-cream-300 pb-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-11 w-16 shrink-0 items-center justify-center rounded-md border border-cream-300 bg-white p-1.5">
+                          <img
+                            src={walletLogo.src}
+                            alt={walletLogo.alt}
+                            className={`${walletLogo.className} object-contain`}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-display text-base font-semibold text-mountain-900">
+                            {selectedPaymentMethod.name}
+                          </h3>
+                          <p className="mt-0.5 text-xs text-mountain-500">Mobile wallet transfer</p>
+                        </div>
                       </div>
-                    ) : selectedPaymentMethod.id === 'easypaisa' ? (
-                      <div className={`w-24 h-12 rounded-xl flex items-center justify-center p-2 shadow-sm ${paymentCardStyles.icon}`}>
-                        <img src="/easypaisa-logo.png" alt="Easypaisa" className="h-full w-full object-contain" />
+                      <div className="sm:text-right">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-mountain-500">
+                          Amount to send
+                        </p>
+                        <p className="mt-0.5 font-display text-xl font-bold text-apricot-700">
+                          {fmtPKR(total)}
+                        </p>
                       </div>
-                    ) : (
-                      <div className={`w-10 h-10 rounded-xl text-white flex items-center justify-center font-bold text-lg shadow-sm ${paymentCardStyles.icon}`}>
-                        📱
+                    </div>
+
+                    <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs font-medium text-mountain-500">Account title</dt>
+                        <dd className="mt-1 break-words text-sm font-semibold text-mountain-900">
+                          {selectedPaymentMethod.accountName || selectedPaymentMethod.name}
+                        </dd>
                       </div>
-                    )}
-                    <div>
-                      <h3 className="font-display font-bold text-base text-stone-900 flex items-center gap-2">
-                        {selectedPaymentMethod.name} Payment
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${paymentCardStyles.badge}`}>
-                          Active
-                        </span>
-                      </h3>
-                      <p className="text-xs text-stone-500">Fast & secure mobile wallet transfer</p>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-semibold border px-2.5 py-1 rounded-lg ${paymentCardStyles.directBadge}`}>
-                    Direct Transfer
-                  </span>
-                </div>
-
-                {/* Account Credentials Box */}
-                <div className={`bg-white rounded-xl p-4 sm:p-5 border shadow-xs space-y-3.5 ${paymentCardStyles.account}`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-stone-100">
-                    <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Account Title</span>
-                      <p className="text-base sm:text-lg font-bold text-stone-900 flex items-center gap-2">
-                        {selectedPaymentMethod.accountName || selectedPaymentMethod.name}
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${paymentCardStyles.verified}`}>
-                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                          </svg>
-                          Verified
-                        </span>
-                      </p>
-                    </div>
-                    <div className="text-left sm:text-right">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Total Payable</span>
-                      <p className="text-base sm:text-lg font-display font-bold text-apricot-600">{fmtPKR(total)}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-0.5">
-                    <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-stone-400">Account Number / IBAN</span>
-                      <p className={`text-xl sm:text-2xl font-mono font-bold tracking-wider ${paymentCardStyles.number}`}>{selectedPaymentMethod.accountNumber}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleCopyNumber}
-                      id="copy-payment-account-btn"
-                      className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold active:scale-95 text-white transition-all shadow-sm ${paymentCardStyles.copy}`}
-                    >
-                      {copiedNumber ? (
-                        <>
-                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Copied to Clipboard!</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                          <span>Copy Number</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Quick Steps */}
-                <div className={`border rounded-xl p-3.5 text-xs text-stone-700 space-y-2 ${paymentCardStyles.steps}`}>
-                  <p className={`font-bold flex items-center gap-1.5 ${paymentCardStyles.stepTitle}`}>
-                    <span className={`w-4 h-4 rounded-full text-white inline-flex items-center justify-center text-[10px] ${paymentCardStyles.stepIcon}`}>✓</span>
-                    Quick Payment Steps:
-                  </p>
-                  <ol className="list-decimal list-inside space-y-1 text-stone-600 pl-1 leading-relaxed">
-                    <li>Use <strong>{selectedPaymentMethod.name}</strong> to send the exact payable amount.</li>
-                    <li>Transfer <strong>{fmtPKR(total)}</strong> to <strong>{selectedPaymentMethod.accountNumber}</strong> (Title: <strong>{selectedPaymentMethod.accountName || selectedPaymentMethod.name}</strong>).</li>
-                    <li>Enter your transaction reference below or upload a payment screenshot after placing your order.</li>
-                  </ol>
-                  {selectedPaymentMethod.instructions && (
-                    <p className="border-t border-current/10 pt-2 text-stone-600">
-                      {selectedPaymentMethod.instructions}
+                      <div className="min-w-0">
+                        <dt className="text-xs font-medium text-mountain-500">Account number</dt>
+                        <dd className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                          <span className="min-w-0 break-all font-mono text-base font-semibold tracking-wide text-mountain-900">
+                            {selectedPaymentMethod.accountNumber}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleCopyNumber}
+                            id="copy-payment-account-btn"
+                            className={copyButtonClass}
+                          >
+                            {copiedNumber ? (
+                              <>
+                                <svg
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2.5}
+                                    d="M5 13l4 4L19 7"
+                                  />
+                                </svg>
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <svg
+                                  className="h-3.5 w-3.5"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                  />
+                                </svg>
+                                Copy
+                              </>
+                            )}
+                          </button>
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="sr-only" role="status">
+                      {copiedNumber ? 'Account number copied to clipboard.' : ''}
                     </p>
-                  )}
-                </div>
+                  </div>
 
-                {/* Optional TRX ID Input */}
-                <div className="pt-1">
+                  <div className="rounded-xl border border-cream-200 bg-white p-4">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-mountain-500">
+                      How to pay
+                    </h4>
+                    <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-sm leading-relaxed text-mountain-600">
+                      <li>
+                        Open <strong className="font-semibold text-mountain-800">{selectedPaymentMethod.name}</strong> and
+                        choose Send Money.
+                      </li>
+                      <li>
+                        Send <strong className="font-semibold text-mountain-800">{fmtPKR(total)}</strong> to{' '}
+                        <span className="break-all font-mono font-semibold text-mountain-800">
+                          {selectedPaymentMethod.accountNumber}
+                        </span>
+                        .
+                      </li>
+                      <li>Enter your transaction reference below.</li>
+                    </ol>
+                    {selectedPaymentMethod.instructions && (
+                      <p className="mt-3 break-words border-t border-cream-200 pt-3 text-xs leading-relaxed text-mountain-500">
+                        {selectedPaymentMethod.instructions}
+                      </p>
+                    )}
+                  </div>
+
                   <Field
                     id="field-transaction-id"
-                    label={`${selectedPaymentMethod.name} transaction reference (Optional)`}
+                    label={`${selectedPaymentMethod.name} transaction reference (optional)`}
                     hint="Enter the transaction reference from your payment provider."
                   >
                     <input
-                      id="field-transaction-id"
+                      {...controlProps('field-transaction-id', { hint: true })}
                       type="text"
                       value={form.transactionId}
                       onChange={set('transactionId')}
-                      placeholder="e.g. 29481948201 or 0349XXXXXXX"
+                      placeholder="e.g. 29481948201"
                       className={inputClass}
+                      autoComplete="off"
+                      spellCheck="false"
                     />
                   </Field>
                 </div>
-              </div>
               )}
 
               {selectedPaymentMethod && (!isMobileWallet || !selectedPaymentMethod.accountNumber) && (
-                <div className="rounded-2xl border border-cream-200 bg-cream-50/70 p-4 sm:p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="font-display font-bold text-mountain-900">
+                <div className="mt-5 rounded-xl border border-cream-200 bg-cream-50/60 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-display text-base font-semibold text-mountain-900">
                         {selectedPaymentMethod.name}
                       </h3>
-                      <p className="mt-1 text-xs text-mountain-600">
-                        {selectedPaymentMethod.instructions}
+                      {selectedPaymentMethod.instructions && (
+                        <p className="mt-1 break-words text-xs leading-relaxed text-mountain-600">
+                          {selectedPaymentMethod.instructions}
+                        </p>
+                      )}
+                    </div>
+                    <div className="sm:text-right">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-mountain-500">
+                        Amount to pay
+                      </p>
+                      <p className="mt-0.5 font-display text-xl font-bold text-apricot-700">
+                        {fmtPKR(total)}
                       </p>
                     </div>
-                    <span className="text-sm font-bold text-apricot-600">{fmtPKR(total)}</span>
                   </div>
+
                   {selectedPaymentMethod.id !== 'cod' && (
                     <>
-                      {(selectedPaymentMethod.accountName || selectedPaymentMethod.accountNumber) && (
-                        <div className="mt-4 rounded-xl border border-cream-200 bg-white p-4">
+                      {(selectedPaymentMethod.accountName ||
+                        selectedPaymentMethod.accountNumber) && (
+                        <div className="mt-4 rounded-lg border border-cream-300 bg-white p-4">
                           {selectedPaymentMethod.accountName && (
-                            <p className="text-sm text-mountain-700">
-                              <span className="text-xs text-mountain-400">Account name</span>
-                              <span className="block font-semibold">{selectedPaymentMethod.accountName}</span>
-                            </p>
-                          )}
-                          {selectedPaymentMethod.accountNumber && (
-                            <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-                              <p className="text-sm text-mountain-700">
-                                <span className="text-xs text-mountain-400">Account number / IBAN</span>
-                                <span className="block font-mono font-bold">{selectedPaymentMethod.accountNumber}</span>
+                            <div>
+                              <p className="text-xs font-medium text-mountain-500">Account name</p>
+                              <p className="mt-0.5 break-words text-sm font-semibold text-mountain-900">
+                                {selectedPaymentMethod.accountName}
                               </p>
-                              <button
-                                type="button"
-                                onClick={handleCopyNumber}
-                                className="rounded-lg bg-mountain-900 px-3 py-2 text-xs font-semibold text-white hover:bg-mountain-800"
-                              >
-                                {copiedNumber ? 'Copied' : 'Copy account'}
-                              </button>
                             </div>
                           )}
+                          {selectedPaymentMethod.accountNumber && (
+                            <div className={selectedPaymentMethod.accountName ? 'mt-3' : ''}>
+                              <p className="text-xs font-medium text-mountain-500">
+                                Account number / IBAN
+                              </p>
+                              <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2">
+                                <p className="min-w-0 break-all font-mono text-sm font-semibold text-mountain-900">
+                                  {selectedPaymentMethod.accountNumber}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={handleCopyNumber}
+                                  className={copyButtonClass}
+                                >
+                                  {copiedNumber ? 'Copied' : 'Copy account'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          <p className="sr-only" role="status">
+                            {copiedNumber ? 'Account number copied to clipboard.' : ''}
+                          </p>
                         </div>
                       )}
                       <div className="mt-4">
                         <Field
                           id="field-transaction-id"
                           label="Transaction ID / reference (optional)"
-                          hint="You can upload payment proof after placing the order."
+                          hint="Add the reference from your transfer, if you have it."
                         >
                           <input
-                            id="field-transaction-id"
+                            {...controlProps('field-transaction-id', { hint: true })}
                             type="text"
                             value={form.transactionId}
                             onChange={set('transactionId')}
                             placeholder="Enter your transaction reference"
                             className={inputClass}
+                            autoComplete="off"
+                            spellCheck="false"
                           />
                         </Field>
                       </div>
@@ -771,55 +889,90 @@ export default function CheckoutPage() {
           </div>
 
           {/* Right – Order Summary */}
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-sm p-6 sticky top-24">
-              <h2 className="font-display font-semibold text-mountain-900 text-lg mb-5">Order Summary</h2>
-
-              <div className="space-y-3 mb-5">
-                {items.map((item) => (
-                  <div key={item.key} className="flex justify-between gap-2 text-sm">
-                    <span className="text-mountain-700 min-w-0 truncate">
-                      {item.productName}
-                      <span className="text-mountain-400"> × {item.quantity} ({item.variantLabel})</span>
-                    </span>
-                    <span className="font-medium text-mountain-800 shrink-0">{fmtPKR(item.price * item.quantity)}</span>
-                  </div>
-                ))}
+          <aside className="min-w-0 space-y-4">
+            <div className="rounded-xl border border-cream-300 bg-white p-5 sm:p-6 lg:sticky lg:top-32">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 className="font-display text-lg font-semibold text-mountain-900">Order summary</h2>
+                <span className="shrink-0 text-xs font-medium text-mountain-500">
+                  {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                </span>
               </div>
 
-              <div className="border-t border-cream-200 pt-4 space-y-2 text-sm">
-                <div className="flex justify-between text-mountain-600">
+              <ul className="mt-4 divide-y divide-cream-200 border-y border-cream-200">
+                {items.map((item) => (
+                  <li key={item.key} className="flex gap-3 py-3">
+                    <div
+                      aria-hidden="true"
+                      className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-cream-200 bg-cream-100"
+                    >
+                      <ProductImage
+                        src={item.image}
+                        alt=""
+                        width={112}
+                        height={112}
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm font-semibold leading-snug text-mountain-900">
+                        {item.productName}
+                      </p>
+                      <p className="mt-0.5 break-words text-xs text-mountain-500">
+                        {item.variantLabel} · Qty {item.quantity}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-mountain-900">
+                      {fmtPKR(item.price * item.quantity)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-5 space-y-2.5 text-sm">
+                <div className="flex justify-between gap-4 text-mountain-600">
                   <span>Subtotal</span>
-                  <span>{fmtPKR(subtotal)}</span>
+                  <span className="tabular-nums">{fmtPKR(subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-mountain-600">
+                <div className="flex justify-between gap-4 text-mountain-600">
                   <span>Delivery</span>
-                  <span>{fmtPKR(shippingFee)}</span>
+                  <span className="tabular-nums">{fmtPKR(shippingFee)}</span>
                 </div>
                 <p className="text-xs leading-relaxed text-mountain-500" aria-live="polite">
                   {deliveryRate.zoneName
                     ? `${deliveryRate.zoneName} delivery · `
                     : 'Standard delivery · '}
-                  Estimated in {deliveryRate.minDays}–{deliveryRate.maxDays} days after placing your order.
+                  Estimated in {deliveryRate.minDays}–{deliveryRate.maxDays} days after placing your
+                  order.
                 </p>
-                <div className="border-t border-cream-200 pt-2 flex justify-between">
-                  <span className="font-bold text-mountain-900">Total</span>
-                  <span className="font-display font-bold text-apricot-600 text-xl">{fmtPKR(total)}</span>
+                <div className="flex items-baseline justify-between gap-4 border-t border-cream-300 pt-3">
+                  <span className="text-base font-semibold text-mountain-900">Total</span>
+                  <span className="font-display text-2xl font-bold tabular-nums text-apricot-700">
+                    {fmtPKR(total)}
+                  </span>
                 </div>
               </div>
 
               {apiError && (
-                <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-600">
+                <div
+                  role="alert"
+                  className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-relaxed text-red-700"
+                >
                   {apiError}
                 </div>
               )}
               {cartNotice && (
-                <div role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <div
+                  role="status"
+                  className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm leading-relaxed text-amber-800"
+                >
                   {cartNotice}
                 </div>
               )}
               {cartCheckError && (
-                <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <div
+                  role="alert"
+                  className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3.5 py-3 text-sm leading-relaxed text-red-700"
+                >
                   {cartCheckError}
                 </div>
               )}
@@ -828,22 +981,21 @@ export default function CheckoutPage() {
                 id="checkout-submit-btn"
                 type="submit"
                 disabled={submitting || revalidating || cartIsChecking}
-                className="mt-6 w-full py-4 bg-apricot-500 hover:bg-apricot-600 disabled:bg-apricot-300 text-white font-bold rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-apricot-500/30 disabled:cursor-not-allowed text-sm"
+                aria-busy={submitting || revalidating || cartIsChecking}
+                className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-apricot-600 px-5 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-apricot-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-apricot-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-apricot-300"
               >
                 {cartIsChecking || revalidating
                   ? 'Checking cart…'
                   : submitting
-                    ? 'Placing Order…'
-                    : `Place Order — ${fmtPKR(total)}`}
+                    ? 'Placing order…'
+                    : `Place order — ${fmtPKR(total)}`}
               </button>
 
-              <p className="text-xs text-center text-mountain-400 mt-3">
-                By placing this order you agree to our return & refund policy.
+              <p className="mt-3 text-center text-xs leading-relaxed text-mountain-500">
+                By placing this order you agree to our return &amp; refund policy.
               </p>
-
-              <TrustBadges variant="inline" className="mt-5 border-t border-cream-200 pt-4" />
             </div>
-          </div>
+          </aside>
         </div>
       </form>
     </div>

@@ -21,7 +21,7 @@ export default function FloatingWhatsApp() {
       <span
         id="wa-tooltip"
         role="tooltip"
-        className="pointer-events-none absolute right-16 px-3 py-1.5 bg-mountain-900 text-cream-100 text-xs font-medium rounded-xl shadow-lg opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 transition-all duration-200 whitespace-nowrap"
+        className="pointer-events-none absolute right-16 whitespace-nowrap border border-cream-300 bg-white px-3 py-1.5 text-xs font-medium text-mountain-800 opacity-0 translate-x-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0"
       >
         Chat on WhatsApp
       </span>
@@ -33,14 +33,8 @@ export default function FloatingWhatsApp() {
         id="floating-whatsapp-btn"
         aria-label={`Chat with ${settings.storeName} on WhatsApp`}
         aria-describedby="wa-tooltip"
-        className="relative flex items-center justify-center w-14 h-14 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#25D366]/40"
+        className="relative flex h-12 w-12 items-center justify-center bg-apricot-600 text-white transition-colors duration-200 hover:bg-apricot-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-400 focus-visible:ring-offset-2"
       >
-        {/* Ambient pulse effect */}
-        <span
-          className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-25 pointer-events-none"
-          aria-hidden="true"
-        />
-
         {/* WhatsApp Icon */}
         <svg
           className="w-7 h-7 drop-shadow-xs"

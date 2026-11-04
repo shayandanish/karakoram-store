@@ -40,6 +40,8 @@ const AdminOrdersPage = lazy(() => import('./pages/admin/AdminOrdersPage'));
 const AdminCouponsPage = lazy(() => import('./pages/admin/AdminCouponsPage'));
 const AdminCitiesPage = lazy(() => import('./pages/admin/AdminCitiesPage')); // cities & regions
 const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
+const AdminActivityPage = lazy(() => import('./pages/admin/AdminActivityPage'));
+const AdminStaffPage = lazy(() => import('./pages/admin/AdminStaffPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 const AdminAccountsPage = lazy(() => import('./pages/admin/AdminAccountsPage'));
 
@@ -78,6 +80,8 @@ export default function App() {
                       <Route path="artisans" element={<AdminArtisansPage />} />
                       <Route path="orders" element={<AdminOrdersPage />} />
                       <Route path="users" element={<AdminUsersPage />} />
+                      <Route path="staff" element={<AdminStaffPage />} />
+                      <Route path="activity" element={<AdminActivityPage />} />
                       <Route path="coupons" element={<AdminCouponsPage />} />
                       <Route path="cities" element={<AdminCitiesPage />} />
                       <Route path="settings" element={<AdminSettingsPage />} />

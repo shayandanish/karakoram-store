@@ -63,7 +63,7 @@ function BottomLink({ to, icon, label, badge, end = false }) {
       to={to}
       end={end}
       className={({ isActive }) =>
-        `relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-400 ${
+        `relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-apricot-400 ${
           isActive ? 'text-apricot-600' : 'text-mountain-500 hover:text-mountain-800'
         }`
       }
@@ -80,7 +80,7 @@ function BottomLink({ to, icon, label, badge, end = false }) {
           </span>
           <span>{label}</span>
           {isActive && (
-            <span className="absolute -top-px h-0.5 w-8 rounded-full bg-apricot-500" aria-hidden="true" />
+            <span className="absolute -top-px h-0.5 w-8 bg-apricot-500" aria-hidden="true" />
           )}
         </>
       )}
@@ -95,7 +95,7 @@ export default function MobileBottomNav() {
   return (
     <nav
       aria-label="Mobile quick navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-cream-200 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-8px_rgba(11,26,45,0.25)] backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-cream-300 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_-12px_rgba(2,9,18,0.25)] backdrop-blur-md lg:hidden"
     >
       <div className="mx-auto flex max-w-md items-stretch gap-1 px-2 py-1.5">
         <BottomLink to="/" end icon="home" label="Home" />

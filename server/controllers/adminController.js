@@ -97,7 +97,7 @@ export const adminGetProducts = async (req, res, next) => {
         throw new Error('Invalid stock filter');
       }
       if (filter.isActive === undefined) filter.isActive = true;
-      if (stock === 'low') filter.variants = { $elemMatch: { stock: { $lt: 10 } } };
+      if (stock === 'low') filter.variants = { $elemMatch: { stock: { $gt: 0, $lt: 10 } } };
       if (stock === 'out') {
         filter['variants.0'] = { $exists: true };
         filter.variants = { $not: { $elemMatch: { stock: { $gt: 0 } } } };
@@ -456,6 +456,7 @@ export const adminGetOrders = async (req, res, next) => {
       payment,
       paymentStatus,
       paymentMethod,
+      proof,
       search,
       page = 1,
       limit = 20,
@@ -475,6 +476,12 @@ export const adminGetOrders = async (req, res, next) => {
     const activePayment = payment || paymentStatus;
     if (activePayment && activePayment !== 'all') {
       filter.paymentStatus = activePayment;
+    }
+
+    // Show only orders that need a manual review of an uploaded payment proof.
+    if (proof === 'uploaded') {
+      filter.paymentStatus = 'pending';
+      filter.paymentScreenshot = { $exists: true, $nin: ['', null] };
     }
 
     if (paymentMethod && paymentMethod !== 'all') {
@@ -768,6 +775,11 @@ export const adminDeleteOrder = async (req, res, next) => {
 export const adminGetStats = async (req, res, next) => {
   try {
     const period = req.query.period || 'all';
+    const analyticsPeriod = req.query.analyticsPeriod || '30d';
+    if (!['7d', '30d'].includes(analyticsPeriod)) {
+      res.status(400);
+      throw new Error('Analytics period must be 7d or 30d');
+    }
     let revenueStartDate;
     try {
       revenueStartDate = getRevenueStartDate(period);
@@ -780,8 +792,21 @@ export const adminGetStats = async (req, res, next) => {
     if (revenueStartDate) revenueFilter.createdAt = { $gte: revenueStartDate };
     const lowStockFilter = {
       isActive: true,
-      variants: { $elemMatch: { stock: { $lt: 10 } } },
+      variants: { $elemMatch: { stock: { $gt: 0, $lt: 10 } } },
     };
+    const outOfStockFilter = {
+      isActive: true,
+      variants: { $exists: true, $ne: [] },
+      $nor: [{ variants: { $elemMatch: { stock: { $gt: 0 } } } }],
+    };
+    const paymentProofReviewFilter = {
+      paymentStatus: 'pending',
+      paymentScreenshot: { $exists: true, $nin: ['', null] },
+    };
+    const analyticsStartDate = new Date();
+    analyticsStartDate.setUTCHours(0, 0, 0, 0);
+    analyticsStartDate.setUTCDate(analyticsStartDate.getUTCDate() - (analyticsPeriod === '7d' ? 6 : 29));
+    const analyticsOrderFilter = { paymentStatus: 'paid', createdAt: { $gte: analyticsStartDate } };
 
     const [
       totalOrders,
@@ -791,6 +816,12 @@ export const adminGetStats = async (req, res, next) => {
       recentOrders,
       lowStockProducts,
       lowStockCount,
+      paymentProofReviewCount,
+      outOfStockCount,
+      paidOrderCount,
+      dailySales,
+      topProducts,
+      newCustomers,
     ] = await Promise.all([
       Order.countDocuments(),
       Order.aggregate([
@@ -806,17 +837,61 @@ export const adminGetStats = async (req, res, next) => {
         .limit(10)
         .lean(),
       Product.countDocuments(lowStockFilter),
+      Order.countDocuments(paymentProofReviewFilter),
+      Product.countDocuments(outOfStockFilter),
+      Order.countDocuments(analyticsOrderFilter),
+      Order.aggregate([
+        { $match: analyticsOrderFilter },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'UTC' } },
+            revenue: { $sum: '$total' },
+            orders: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+      Order.aggregate([
+        { $match: analyticsOrderFilter },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: { product: '$items.product', name: '$items.name' },
+            units: { $sum: '$items.quantity' },
+            revenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
+          },
+        },
+        { $sort: { units: -1, revenue: -1 } },
+        { $limit: 5 },
+        { $project: { _id: 0, productId: '$_id.product', name: '$_id.name', units: 1, revenue: 1 } },
+      ]),
+      User.countDocuments({ role: 'customer', createdAt: { $gte: analyticsStartDate } }),
     ]);
 
+    const isAdministrator = req.user?.role === 'admin';
+    const canViewOrders = isAdministrator || req.user?.role === 'orders_manager';
+    const canViewCatalog = isAdministrator || req.user?.role === 'catalog_manager';
+    const canViewAccounts = isAdministrator || req.user?.role === 'accounts_manager';
+
     res.json({
-      totalOrders,
-      totalRevenue: totalRevenue[0]?.total || 0,
-      revenueStartDate,
-      totalCustomers,
-      pendingOrders,
-      recentOrders,
-      lowStockProducts,
-      lowStockCount,
+      role: req.user?.role,
+      ...(canViewAccounts ? {
+        totalOrders,
+        totalRevenue: totalRevenue[0]?.total || 0,
+        revenueStartDate,
+        totalCustomers,
+        salesOverview: {
+        period: analyticsPeriod,
+        startDate: analyticsStartDate,
+        paidOrderCount,
+        averageOrderValue: paidOrderCount ? (dailySales.reduce((sum, day) => sum + day.revenue, 0) / paidOrderCount) : 0,
+        dailySales,
+        topProducts,
+        newCustomers,
+        },
+      } : {}),
+      ...(canViewOrders ? { pendingOrders, recentOrders, paymentProofReviewCount } : {}),
+      ...(canViewCatalog ? { lowStockProducts, lowStockCount, outOfStockCount } : {}),
     });
   } catch (err) { next(err); }
 };

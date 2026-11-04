@@ -4,12 +4,14 @@ import { useAuth } from '../../context/AuthContext';
 import SiteLogoMark from '../ui/SiteLogoMark';
 import PageLoading from '../ui/PageLoading';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
+import { hasAdminPermission } from '../../lib/adminAccess';
 
 const NAV_ITEMS = [
   {
     to: '/admin',
     end: true,
     label: 'Dashboard',
+    permission: 'dashboard',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -19,6 +21,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/products',
     label: 'Products',
+    permission: 'catalog',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -28,6 +31,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/categories',
     label: 'Categories',
+    permission: 'catalog',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -37,6 +41,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/artisans',
     label: 'Artisans',
+    permission: 'catalog',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -46,6 +51,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/cities',
     label: 'Cities & Regions',
+    permission: 'catalog',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -56,6 +62,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/orders',
     label: 'Orders',
+    permission: 'orders',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
@@ -65,6 +72,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/users',
     label: 'Users',
+    permission: 'users',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-2.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.5-4.5" />
@@ -72,8 +80,29 @@ const NAV_ITEMS = [
     ),
   },
   {
+    to: '/admin/staff',
+    label: 'Staff',
+    permission: 'users',
+    icon: (
+      <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M16 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2m12-13a4 4 0 11-8 0 4 4 0 018 0zm2 4a4 4 0 014 4v2m-1-13a4 4 0 010 6" />
+      </svg>
+    ),
+  },
+  {
+    to: '/admin/activity',
+    label: 'Activity Log',
+    permission: 'users',
+    icon: (
+      <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M3 12h4l3-8 4 16 3-8h4" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/coupons',
     label: 'Coupons',
+    permission: 'catalog',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
@@ -83,6 +112,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/accounts',
     label: 'Accounts',
+    permission: 'accounts',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M3 10h18M7 15h2m4 0h2m-11 5h16a2 2 0 002-2V6a2 2 0 00-2-2H4a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -92,6 +122,7 @@ const NAV_ITEMS = [
   {
     to: '/admin/settings',
     label: 'Store Settings',
+    permission: 'content',
     icon: (
       <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -103,6 +134,7 @@ const NAV_ITEMS = [
 export default function AdminLayout() {
   const { settings } = useSiteSettings();
   const { user, logout } = useAuth();
+  const visibleNavItems = NAV_ITEMS.filter((item) => hasAdminPermission(user?.role, item.permission));
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -201,7 +233,7 @@ export default function AdminLayout() {
             </div>
 
             <nav className="mt-5 space-y-1.5 flex-1 overflow-y-auto">
-              {NAV_ITEMS.map((item) => (
+              {visibleNavItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -225,7 +257,7 @@ export default function AdminLayout() {
             <div className="pt-4 border-t border-mountain-800 mt-auto">
               <div className="px-3 py-2 bg-mountain-800/60 rounded-xl mb-3">
                 <p className="text-xs font-medium text-cream-100 truncate">{user?.name || 'Administrator'}</p>
-                <p className="text-[11px] text-mountain-400 truncate">{user?.email}</p>
+                <p className="text-[11px] text-mountain-400 truncate">{user?.email || (user?.username ? `@${user.username}` : '')}</p>
               </div>
               <div className="flex gap-2">
                 <Link
@@ -273,7 +305,7 @@ export default function AdminLayout() {
 
         {/* Navigation links */}
         <nav className="p-4 space-y-1.5 flex-1">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -309,7 +341,7 @@ export default function AdminLayout() {
           <div className="p-3 bg-mountain-800/40 border border-mountain-700/40 rounded-xl flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-cream-50 truncate">{user?.name || 'Admin User'}</p>
-              <p className="text-[11px] text-mountain-400 truncate">{user?.email}</p>
+              <p className="text-[11px] text-mountain-400 truncate">{user?.email || (user?.username ? `@${user.username}` : '')}</p>
             </div>
             <button
               onClick={handleLogout}

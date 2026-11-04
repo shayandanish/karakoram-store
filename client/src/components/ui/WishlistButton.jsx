@@ -48,10 +48,10 @@ export default function WishlistButton({
         onClick={handleClick}
         aria-pressed={active}
         aria-label={active ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
-        className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2 ${
+        className={`inline-flex items-center justify-center gap-2 border px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2 ${
           active
-            ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
-            : 'border-cream-300 bg-white text-mountain-700 hover:border-apricot-300 hover:bg-apricot-50 hover:text-apricot-700'
+            ? 'border-apricot-500 bg-apricot-50 text-apricot-700 hover:bg-apricot-100'
+            : 'border-cream-300 bg-white text-mountain-700 hover:border-apricot-500 hover:text-apricot-700'
         } ${className}`}
       >
         <HeartIcon filled={active} className="h-5 w-5" />
@@ -67,10 +67,10 @@ export default function WishlistButton({
       aria-pressed={active}
       aria-label={active ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
       title={active ? 'Remove from wishlist' : 'Save to wishlist'}
-      className={`inline-flex items-center gap-1.5 rounded-full border p-2 shadow-sm backdrop-blur transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2 ${
+      className={`inline-flex items-center gap-1.5 border p-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2 ${
         active
-          ? 'border-rose-200 bg-white/95 text-rose-600'
-          : 'border-cream-200 bg-white/85 text-mountain-500 hover:border-apricot-300 hover:bg-white hover:text-rose-500'
+          ? 'border-apricot-500 bg-white text-apricot-600'
+          : 'border-cream-300 bg-white/95 text-mountain-500 hover:border-apricot-500 hover:text-apricot-600'
       } ${className}`}
     >
       <HeartIcon filled={active} className="h-[18px] w-[18px]" />

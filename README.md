@@ -44,7 +44,9 @@ A Pakistan-focused artisan storefront for products from Hunza and Gilgit-Baltist
 - Guest checkout and Firebase/JWT-backed customer accounts.
 - Easypaisa orders with transaction details, payment-proof upload, order tracking, and status notifications.
 - Admin product, category, city, artisan, coupon, order, and store-settings management.
-- Admin overview with paid-revenue periods, pending-order and inventory alerts, customer order summaries, and coupon redemption results.
+- Admin overview with paid-revenue periods, a 7/30-day sales chart, average order value, new customer accounts, top products, and a consolidated action queue.
+- Administrator-managed staff accounts with username/password sign-in, dashboard-specific roles, activation controls, and password resets.
+- Admin activity log covering successful admin/staff changes and Accounts audit events.
 - Admin-only Accounts workspace for supplier purchases, inventory cost, expenses, audit logs, profit reports, and formula-bearing Excel exports.
 - Product ratings/reviews and optional Redis caching.
 
@@ -52,15 +54,16 @@ Shipping rates and public payment/contact details are managed in **Admin → Set
 
 ## Admin daily workflow
 
-1. Start at **Admin → Dashboard** to review paid revenue, orders awaiting action, recent purchases, and active products with low stock. Select a revenue period to inspect all-time, 30-day, or 7-day totals; selecting the metric opens the corresponding paid-order list.
+1. Start at **Admin → Dashboard** to review the attention queue, recent purchases, sales chart, average order value, new customer accounts, and top products. Select a revenue period to inspect all-time, 30-day, or 7-day totals; the attention links open filtered orders or inventory lists.
 2. In **Admin → Orders**, search by order ID, customer name/email/phone, transaction reference, courier, or tracking number. Combine order/payment status, payment method, and date filters. Open an order to review proof, update its status, add courier details, or inspect the audit trail.
 3. Use **Admin → Products** stock filters to find low-stock, out-of-stock, and available products. Featured and seasonal flags are visible in the catalog list.
-4. **Admin → Users** shows each account’s order count, paid total, and latest order date; use **View orders** to open that customer’s order list.
+4. **Admin → Users** shows customer account order totals; use **View orders** to open a customer’s order list. Manage staff separately under **Admin → Staff**, where administrators can assign access, change passwords, and activate or deactivate accounts.
 5. **Admin → Coupons** reports redemptions found in orders and the total discount granted. The usage counter remains the coupon’s configured redemption-limit tracker.
 6. In **Admin → Store Settings**, use the section shortcuts to edit store details or checkout payment methods. A failed settings load disables edits so fallback defaults cannot accidentally overwrite saved settings.
 7. In **Admin → Accounts**, add suppliers, record opening stock and purchases, record supplier payments and expenses, and review product profit by day/week/month/custom period. Download a native Excel workbook (`.xlsx`) with summary, transaction, product, purchase, and supplier-payment sheets, including formulas.
+8. Review cross-area changes under **Admin → Activity Log**. It records field names and actions, not submitted values.
 
-All `/api/admin` routes require a valid authenticated administrator. Accounts endpoints also reject untrusted browser origins, are rate-limited, and return no-store responses. Keep admin credentials private and use HTTPS in production.
+All `/api/admin` routes require a valid authenticated administrator or an active staff account with the matching permission. Accounts endpoints also reject untrusted browser origins, are rate-limited, and return no-store responses. Keep credentials private and use HTTPS in production.
 
 Accounts stores costs in integer paisa, snapshots weighted-average inventory cost when an order is placed, and prevents product forms/bulk actions from changing stock outside the audited purchase workflow. Purchase, expense, supplier-payment, and reversal records are append-only; supplier/expense corrections should be made through new audited records. A purchase can be reversed only while inventory still matches its post-purchase stock and cost snapshot, and after any later supplier payments have been reversed; purchases paid at creation cannot be reversed. Otherwise, record a corrective stock adjustment. Historical orders without cost snapshots are not assigned estimated costs and are excluded from profit. Refunds, cancelled/returned paid orders, shipping income, and inventory purchases have separate report treatment; paid cancelled/returned orders are flagged for reconciliation. These reports are operational estimates, not formal accounting or tax statements.
 

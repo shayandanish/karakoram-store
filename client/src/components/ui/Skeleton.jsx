@@ -3,16 +3,13 @@
 // content arrives. `.shimmer` is defined in index.css.
 export function SkeletonCard() {
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-sm" aria-hidden="true">
-      <div className="shimmer aspect-[4/5] w-full bg-cream-200" />
-      <div className="space-y-3 p-4">
-        <div className="shimmer h-3 w-1/3 rounded-full bg-cream-200" />
-        <div className="shimmer h-4 w-3/4 rounded bg-cream-200" />
-        <div className="shimmer h-3 w-1/2 rounded bg-cream-200" />
-        <div className="flex items-end justify-between gap-3 border-t border-cream-100 pt-3">
-          <div className="shimmer h-5 w-24 rounded bg-apricot-100" />
-          <div className="shimmer h-3 w-16 rounded bg-cream-200" />
-        </div>
+    <div className="h-full overflow-hidden bg-white" aria-hidden="true">
+      <div className="shimmer aspect-square w-full bg-cream-200" />
+      <div className="flex flex-col items-center gap-2.5 p-4">
+        <div className="shimmer h-2.5 w-1/3 bg-cream-200" />
+        <div className="shimmer h-4 w-3/4 bg-cream-200" />
+        <div className="shimmer h-3 w-1/2 bg-cream-200" />
+        <div className="shimmer mt-1 h-5 w-24 bg-apricot-100" />
       </div>
     </div>
   );

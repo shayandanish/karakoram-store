@@ -42,6 +42,12 @@ const settingsSchema = z.object({
   storeName: z.string().trim().min(1).max(120).optional(),
   storeTagline: z.string().trim().max(160).optional(),
   storeDescription: z.string().trim().max(500).optional(),
+  pageContent: z.object({
+    home: z.object({ heroTitle: z.string().trim().max(160), heroDescription: z.string().trim().max(500), heroButton: z.string().trim().min(1).max(80), categoryTitle: z.string().trim().max(100), featuredTitle: z.string().trim().max(100), sectionOrder: z.array(z.enum(['hero','categories','featured','promises','regions'])).length(5).optional(), visibility: z.object({ categories: z.boolean(), featured: z.boolean(), promises: z.boolean(), regions: z.boolean() }).optional() }).optional(),
+    about: z.object({ intro: z.string().trim().max(500), story: z.string().trim().max(3000), sections: z.array(z.object({ heading: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(3000), imageUrl: z.string().trim().max(2048).optional().default(''), imageAlt: z.string().trim().max(160).optional().default('') })).max(8).optional(), founders: z.array(z.object({ name: z.string().trim().min(1).max(100), role: z.string().trim().min(1).max(60) })).max(10), seoTitle: z.string().trim().max(120).optional(), seoDescription: z.string().trim().max(300).optional() }).optional(),
+    contact: z.object({ intro: z.string().trim().max(500), responseText: z.string().trim().max(300), seoTitle: z.string().trim().max(120), seoDescription: z.string().trim().max(300) }).optional(),
+    footer: z.object({ intro: z.string().trim().max(300), newsletterText: z.string().trim().max(300), contactEmail: z.string().trim().email().max(160).or(z.literal('')).optional(), whatsappNumber: z.string().trim().max(40).optional(), location: z.string().trim().max(300).optional(), mapUrl: z.string().trim().url().max(1000).or(z.literal('')).optional(), socialLinks: z.array(z.object({ label: z.string().trim().max(40), url: z.string().trim().url().max(500) })).max(8) }).optional(),
+  }).optional(),
   shippingFee: z.number().min(0).max(100000).optional(),
   deliveryMinDays: z.number().int().min(1).max(60).optional(),
   deliveryMaxDays: z.number().int().min(1).max(60).optional(),
@@ -87,6 +93,7 @@ export const serializeSettings = (settings) => ({
     typeof settings.storeDescription === 'string'
       ? settings.storeDescription
       : 'Handcrafted goods and artisan products from Gilgit-Baltistan, Pakistan.',
+  pageContent: settings.pageContent || {},
   shippingFee: Number.isFinite(settings.shippingFee) ? settings.shippingFee : 200,
   deliveryMinDays: Number.isInteger(settings.deliveryMinDays) ? settings.deliveryMinDays : 2,
   deliveryMaxDays: Number.isInteger(settings.deliveryMaxDays) ? settings.deliveryMaxDays : 5,
@@ -140,6 +147,14 @@ export const adminUpdateSettings = async (req, res, next) => {
   try {
     res.status(400);
     const data = settingsSchema.parse(req.body);
+    if (req.user?.role !== 'admin') {
+      const allowedFields = new Set(['logo', 'pageContent', 'contactEmail', 'whatsappNumber']);
+      const restrictedField = Object.keys(data).find((field) => !allowedFields.has(field));
+      if (restrictedField) {
+        res.status(403);
+        throw new Error('Only administrators can change store operations and payment settings.');
+      }
+    }
 
     const settings = await SiteSettings.getSingleton();
     const previousPublicId = settings.logo?.publicId || '';
@@ -194,6 +209,7 @@ export const adminUpdateSettings = async (req, res, next) => {
       'storeName',
       'storeTagline',
       'storeDescription',
+      'pageContent',
       'shippingFee',
       'deliveryMinDays',
       'deliveryMaxDays',

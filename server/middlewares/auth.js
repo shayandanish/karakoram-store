@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import Staff from '../models/Staff.js';
 import { verifyFirebaseIdToken } from '../utils/firebaseAdmin.js';
 
 const unverifiedError = () => {
@@ -47,6 +48,15 @@ const collectTokens = (req) => {
 const resolveTokenUser = async (token) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.principalType === 'staff') {
+      const staff = await Staff.findById(decoded.id).select('+authVersion');
+      if (!staff?.isActive || staff.authVersion !== decoded.staffAuthVersion) return null;
+      const staffUser = staff.toObject();
+      delete staffUser.passwordHash;
+      delete staffUser.authVersion;
+      staffUser._authType = 'staff';
+      return staffUser;
+    }
     const user = await User.findById(decoded.id).select('-passwordHash');
     if (user) return user;
   } catch {
@@ -95,6 +105,41 @@ export const adminOnly = (req, res, next) => {
   if (req.user?.role !== 'admin') {
     res.status(403);
     return next(new Error('Admin access required'));
+  }
+  next();
+};
+
+const ADMIN_ROLE_PERMISSIONS = {
+  admin: ['dashboard', 'orders', 'catalog', 'accounts', 'content', 'users'],
+  orders_manager: ['dashboard', 'orders'],
+  catalog_manager: ['dashboard', 'catalog'],
+  accounts_manager: ['dashboard', 'accounts'],
+  content_manager: ['dashboard', 'content'],
+};
+
+export const hasAdminPermission = (user, permission) =>
+  Boolean(ADMIN_ROLE_PERMISSIONS[user?.role]?.includes(permission));
+
+export const adminStaffOnly = (req, res, next) => {
+  if (!ADMIN_ROLE_PERMISSIONS[req.user?.role]) {
+    res.status(403);
+    return next(new Error('Administrative staff access required'));
+  }
+  next();
+};
+
+export const requireAdminPermission = (permission) => (req, res, next) => {
+  if (!hasAdminPermission(req.user, permission)) {
+    res.status(403);
+    return next(new Error(`You do not have permission to access ${permission}.`));
+  }
+  next();
+};
+
+export const requireAnyAdminPermission = (...permissions) => (req, res, next) => {
+  if (!permissions.some((permission) => hasAdminPermission(req.user, permission))) {
+    res.status(403);
+    return next(new Error('You do not have permission to access this resource.'));
   }
   next();
 };

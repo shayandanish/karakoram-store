@@ -150,7 +150,7 @@ export default function AdminProductsPage() {
             className="w-full py-2 px-3 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden transition"
           >
             <option value="">All stock levels</option>
-            <option value="low">Low stock (under 10)</option>
+            <option value="low">Low stock (1–9)</option>
             <option value="out">Out of stock</option>
             <option value="in">In stock</option>
           </select>

@@ -1,148 +1,113 @@
-// ── About Page ─────────────────────────────────────────────────
+// ── About / Our Story Page ────────────────────────────────────
 import { Link } from 'react-router-dom';
 import SEO from '../components/ui/SEO';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 
+const FOUNDERS = [
+  { name: 'Shayan Danish', role: 'Founder' },
+  { name: 'Inam Karim', role: 'Co-founder' },
+  { name: 'Saif Ullah Baig', role: 'Co-founder' },
+];
+
 export default function AboutPage() {
   const { settings } = useSiteSettings();
+  const pageCopy = settings.pageContent.about;
+
   return (
-    <div className="py-12">
+    <main className="bg-cream-100 py-12 sm:py-16">
       <SEO
-        title="About Us"
-        description={`Learn the story behind ${settings.storeName}. ${settings.storeDescription}`}
+        title={pageCopy.seoTitle}
+        description={pageCopy.seoDescription || `Learn about ${settings.storeName} and the team behind our Gilgit-Baltistan store.`}
         canonicalUrl="/about"
       />
 
-      {/* Back to Home Navigation Button */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mb-4">
-        <Link
-          to="/"
-          id="about-back-btn"
-          className="inline-flex items-center gap-2 text-xs font-bold text-mountain-600 hover:text-apricot-600 transition group"
-        >
-          <span className="w-8 h-8 rounded-xl bg-white border border-cream-300 flex items-center justify-center text-mountain-700 group-hover:border-apricot-400 group-hover:text-apricot-600 transition shadow-2xs">
-            ←
-          </span>
-          <span>Back to Home</span>
-        </Link>
-      </div>
-
-      {/* Hero Header */}
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-16">
-        <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-apricot-100 text-apricot-800 text-xs font-semibold mb-4">
-          <span>🏔️</span> Pure from Gilgit-Baltistan
-        </span>
-        <h1 className="font-display font-bold text-4xl sm:text-5xl text-mountain-900 leading-tight mb-6">
-          Rooted in the Roof of the World
-        </h1>
-        <p className="text-mountain-700 text-lg sm:text-xl leading-relaxed max-w-2xl mx-auto font-light">
-          We bridge the breathtaking valleys of Hunza and Gilgit-Baltistan with homes across Pakistan, delivering centuries of Himalayan wellness and craftsmanship.
-        </p>
-      </section>
-
-      {/* Story Sections */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
-        {/* Section 1: The Valley */}
-        <section className="bg-white rounded-3xl p-8 sm:p-12 shadow-sm border border-cream-200 grid md:grid-cols-2 gap-8 items-center">
-          <div>
-            <span className="text-xs font-bold text-apricot-600 uppercase tracking-widest">Our Valley</span>
-            <h2 className="font-display font-bold text-2xl sm:text-3xl text-mountain-900 mt-2 mb-4">
-              Where Mountains Touch the Sky
-            </h2>
-            <p className="text-mountain-600 text-sm leading-relaxed mb-4">
-              In the shadow of Rakaposhi, Ultar Sar, and Ladyfinger Peak, life in Hunza has long been defined by harmony with high-altitude nature. Fed by mineral-rich glacial streams, the apricot orchards and walnut groves produce fruits revered worldwide for unmatched flavor and longevity benefits.
-            </p>
-            <p className="text-mountain-600 text-sm leading-relaxed">
-              Every apricot in our store is naturally sun-dried on rooftops using traditional family methods passed down through generations — without added sugars, sulfur, or preservatives.
-            </p>
-          </div>
-          <div className="bg-gradient-to-br from-apricot-100 via-cream-200 to-mountain-100 rounded-2xl aspect-4/3 flex flex-col items-center justify-center p-8 text-center border border-apricot-200/50">
-            <span className="text-6xl mb-4">☀️</span>
-            <p className="font-display font-semibold text-mountain-800 text-lg">
-              100% Sun-Dried & Organic
-            </p>
-            <p className="text-xs text-mountain-500 mt-2 max-w-xs">
-              Natural glacial hydration and high-altitude mountain sun create intense natural sweetness.
-            </p>
-          </div>
-        </section>
-
-        {/* Section 2: Artisans & Heritage */}
-        <section className="bg-white rounded-3xl p-8 sm:p-12 shadow-sm border border-cream-200 grid md:grid-cols-2 gap-8 items-center">
-          <div className="order-2 md:order-1 bg-gradient-to-br from-mountain-800 to-mountain-900 rounded-2xl aspect-4/3 flex flex-col items-center justify-center p-8 text-center text-white">
-            <span className="text-6xl mb-4">🧶</span>
-            <p className="font-display font-bold text-xl text-cream-100">
-              Preserving Living Heritage
-            </p>
-            <p className="text-xs text-mountain-300 mt-2 max-w-xs">
-              Handmade Pakols from pure wool, walnut wood carvings, and hand-stitched leather from Altit village.
-            </p>
-          </div>
-          <div className="order-1 md:order-2">
-            <span className="text-xs font-bold text-apricot-600 uppercase tracking-widest">Ethical Craft</span>
-            <h2 className="font-display font-bold text-2xl sm:text-3xl text-mountain-900 mt-2 mb-4">
-              Supporting Northern Artisans
-            </h2>
-            <p className="text-mountain-600 text-sm leading-relaxed mb-4">
-              Behind our handicrafts are master artisans like Muhammad Kareem from Altit village. Many of these craft techniques are vulnerable to mass factory production; by purchasing directly from artisans, we ensure fair compensation and sustain cultural traditions.
-            </p>
-            <p className="text-mountain-600 text-sm leading-relaxed">
-              When you wear a Karakoram Pakol or open a carved walnut wood box, you hold a tangible piece of northern folklore.
-            </p>
-          </div>
-        </section>
-
-        {/* Core Pillars */}
-        <section className="grid sm:grid-cols-3 gap-6">
-          {[
-            {
-              icon: '🌿',
-              title: 'Pure & Unadulterated',
-              desc: 'No artificial additives, no syrup coats, and no compromises. Authentic harvest from Hunza orchards.',
-            },
-            {
-              icon: '🤝',
-              title: 'Fair Trade Direct',
-              desc: 'We cut out middlemen so our northern farmers and local craftspeople receive what they deserve.',
-            },
-            {
-              icon: '📦',
-              title: 'Carefully Packed',
-              desc: 'Safely packaged in eco-conscious food-grade containers and delivered nationwide across Pakistan with secure Easypaisa payment.',
-            },
-          ].map((pillar) => (
-            <div key={pillar.title} className="bg-white rounded-2xl p-6 shadow-sm border border-cream-200 text-center">
-              <span className="text-4xl block mb-3">{pillar.icon}</span>
-              <h3 className="font-display font-semibold text-mountain-900 text-base mb-2">{pillar.title}</h3>
-              <p className="text-xs text-mountain-600 leading-relaxed">{pillar.desc}</p>
-            </div>
-          ))}
-        </section>
-
-        {/* Call to action */}
-        <section className="bg-gradient-to-r from-apricot-500 to-apricot-600 rounded-3xl p-8 sm:p-12 text-center text-white shadow-lg shadow-apricot-500/20">
-          <h2 className="font-display font-bold text-2xl sm:text-3xl mb-3">
-            Experience the Flavors of the Karakoram
-          </h2>
-          <p className="text-cream-100 text-sm max-w-lg mx-auto mb-6">
-            From golden dried apricots to freshly harvested walnuts and hand-embroidered caps, bring a taste of Hunza home.
+      <div className="mx-auto max-w-5xl px-5 sm:px-8">
+        <header className="mx-auto mb-12 max-w-3xl text-center sm:mb-16">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-apricot-600">
+            Rooted in Gilgit-Baltistan
           </p>
-          <div className="flex flex-wrap gap-4 justify-center">
+          <h1 className="font-display text-3xl font-medium leading-tight text-mountain-900 sm:text-5xl">
+            Our Story
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-mountain-600 sm:text-lg">
+            {pageCopy.intro}
+          </p>
+        </header>
+
+        <article className="mx-auto max-w-3xl space-y-6 text-[15px] leading-8 text-mountain-700 sm:text-base">
+          <p>
+            {pageCopy.story}
+          </p>
+          <p>
+            Our collection brings together regional food, artisan goods, and cultural products. We want each part of the experience—from exploring the collection to getting help with an order—to feel straightforward and welcoming.
+          </p>
+          <p>
+            The founding team behind {settings.storeName}.
+          </p>
+        </article>
+
+        {pageCopy.sections?.length > 0 && (
+          <div className="mx-auto mt-12 max-w-5xl space-y-10 sm:mt-16">
+            {pageCopy.sections.map((section, index) => (
+              <section key={`${section.heading}-${index}`} className="grid items-center gap-6 border-y border-cream-300 py-8 sm:grid-cols-2 sm:gap-10 sm:py-10">
+                <div className={index % 2 ? 'sm:order-2' : ''}>
+                  <h2 className="font-display text-2xl font-medium text-mountain-900 sm:text-3xl">{section.heading}</h2>
+                  <p className="mt-4 whitespace-pre-line text-sm leading-7 text-mountain-600 sm:text-base">{section.body}</p>
+                </div>
+                {section.imageUrl && <img src={section.imageUrl} alt={section.imageAlt || section.heading} loading="lazy" className={`aspect-[4/3] w-full object-cover ${index % 2 ? 'sm:order-1' : ''}`} />}
+              </section>
+            ))}
+          </div>
+        )}
+
+        <section aria-labelledby="founders-heading" className="mx-auto mt-16 max-w-4xl border-y border-cream-300 py-10 sm:mt-20 sm:py-12">
+          <div className="mb-8 text-center">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-apricot-600">
+              The people behind the store
+            </p>
+            <h2 id="founders-heading" className="font-display text-2xl font-medium text-mountain-900 sm:text-3xl">
+              Meet the Founders
+            </h2>
+          </div>
+          <div className="grid gap-px border border-cream-300 bg-cream-300 sm:grid-cols-3">
+            {(pageCopy.founders?.length ? pageCopy.founders : FOUNDERS).map((founder) => (
+              <div key={founder.name} className="bg-cream-100 px-5 py-7 text-center sm:px-6">
+                <div
+                  className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full border border-cream-400 bg-white font-display text-lg text-mountain-700"
+                  aria-hidden="true"
+                >
+                  {founder.name.split(' ').map((part) => part[0]).join('')}
+                </div>
+                <h3 className="font-display text-lg font-medium text-mountain-900">{founder.name}</h3>
+                <p className="mt-1 text-sm text-mountain-500">{founder.role}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-12 text-center sm:mt-16">
+          <h2 className="font-display text-2xl font-medium text-mountain-900 sm:text-3xl">
+            Explore the collection
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-mountain-600">
+            Browse products from Gilgit-Baltistan or contact our team if you have a question.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link
               to="/shop"
-              className="px-8 py-3.5 bg-mountain-900 hover:bg-mountain-800 text-white font-semibold rounded-full text-sm transition-all shadow-md"
+              className="inline-flex min-h-11 items-center justify-center border border-mountain-900 bg-mountain-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-mountain-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2"
             >
-              Explore Products
+              Shop the collection
             </Link>
             <Link
               to="/contact"
-              className="px-8 py-3.5 bg-white/20 hover:bg-white/30 text-white font-semibold rounded-full text-sm backdrop-blur-xs transition-colors"
+              className="inline-flex min-h-11 items-center justify-center border border-cream-400 px-6 py-3 text-sm font-semibold text-mountain-800 transition-colors hover:border-mountain-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2"
             >
-              Get in Touch
+              Contact us
             </Link>
           </div>
         </section>
       </div>
-    </div>
+    </main>
   );
 }

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
+import AnnouncementBar from './AnnouncementBar';
 import Footer from './Footer';
 import MobileBottomNav from './MobileBottomNav';
 import FloatingWhatsApp from '../ui/FloatingWhatsApp';
@@ -13,11 +14,12 @@ export default function Layout() {
       {/* Accessible Skip Link */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2.5 focus:bg-apricot-600 focus:text-white focus:rounded-xl focus:shadow-xl focus:outline-none focus:ring-2 focus:ring-white text-sm font-semibold transition-all"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2.5 focus:bg-apricot-600 focus:text-white focus:shadow-xl focus:outline-none focus:ring-2 focus:ring-white text-sm font-semibold transition-all"
       >
         Skip to main content
       </a>
 
+      <AnnouncementBar />
       <Navbar />
 
       <main id="main-content" tabIndex="-1" className="w-full flex-1 focus:outline-none">

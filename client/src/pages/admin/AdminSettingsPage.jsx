@@ -1,8 +1,10 @@
 // ── Admin Logo & Branding Page ────────────────────────────────
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import api from '../../lib/axios';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import SEO from '../../components/ui/SEO';
 import SiteLogoMark from '../../components/ui/SiteLogoMark';
 import { cloudinaryImage } from '../../lib/utils';
@@ -32,16 +34,27 @@ const createStoreForm = (settings) => ({
   contactEmail: settings.contactEmail,
 });
 
+const DEFAULT_SOCIAL_LABELS = ['Instagram', 'Facebook', 'YouTube', 'TikTok'];
+
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { user } = useAuth();
+  const isAdministrator = user?.role === 'admin';
   const { logo, settings, isLoading, isError, error, refetch } = useSiteSettings();
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [storeForm, setStoreForm] = useState(null);
+  const [pageForm, setPageForm] = useState(null);
+  const [savingPageContent, setSavingPageContent] = useState(false);
   const formValues = storeForm || createStoreForm(settings);
+  const pageValues = pageForm || settings.pageContent;
+  useEffect(() => {
+    if (!pageForm && settings.pageContent) setPageForm(settings.pageContent);
+  }, [settings.pageContent, pageForm]);
+  const hasUnsavedPageContent = Boolean(pageForm && JSON.stringify(pageForm) !== JSON.stringify(settings.pageContent));
   const hasUnsavedSettings = Boolean(
     storeForm && JSON.stringify(formValues) !== JSON.stringify(createStoreForm(settings))
   );
@@ -185,6 +198,64 @@ export default function AdminSettingsPage() {
     }));
   };
 
+  const updatePageField = (section, field) => (event) => {
+    setPageForm((current) => ({ ...current, [section]: { ...current[section], [field]: event.target.value } }));
+  };
+
+  const updateFounder = (index, field) => (event) => {
+    setPageForm((current) => ({
+      ...current,
+      about: { ...current.about, founders: current.about.founders.map((founder, i) => i === index ? { ...founder, [field]: event.target.value } : founder) },
+    }));
+  };
+
+  const updateStorySection = (index, field, value) => setPageForm((current) => ({ ...current, about: { ...current.about, sections: current.about.sections.map((section, i) => i === index ? { ...section, [field]: value } : section) } }));
+  const addStorySection = () => setPageForm((current) => ({ ...current, about: { ...current.about, sections: [...current.about.sections, { heading: '', body: '', imageUrl: '', imageAlt: '' }] } }));
+  const removeStorySection = (index) => setPageForm((current) => ({ ...current, about: { ...current.about, sections: current.about.sections.filter((_, i) => i !== index) } }));
+  const uploadStoryImage = async (index, file) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('image', file);
+    try {
+      const { data } = await api.post('/admin/upload?folder=branding', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      updateStorySection(index, 'imageUrl', data.url);
+      toast.success('Story image uploaded. Save page content to publish it.');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not upload the story image.');
+    }
+  };
+
+  const moveHomeSection = (index, delta) => setPageForm((current) => {
+    const order = [...current.home.sectionOrder];
+    const next = index + delta;
+    if (next < 0 || next >= order.length) return current;
+    [order[index], order[next]] = [order[next], order[index]];
+    return { ...current, home: { ...current.home, sectionOrder: order } };
+  });
+
+  const toggleHomeSection = (key) => setPageForm((current) => ({ ...current, home: { ...current.home, visibility: { ...current.home.visibility, [key]: !current.home.visibility[key] } } }));
+
+  const updateContentField = (section, field) => (event) => setPageForm((current) => ({ ...current, [section]: { ...current[section], [field]: event.target.value } }));
+
+  const socialLinks = DEFAULT_SOCIAL_LABELS.map((label) => pageValues.footer.socialLinks.find((link) => link.label === label) || { label, url: '' });
+  const updateSocialLink = (index, value) => setPageForm((current) => ({ ...current, footer: { ...current.footer, socialLinks: socialLinks.map((link, i) => i === index ? { ...link, url: value } : link) } }));
+
+  const savePageContent = async (event) => {
+    event.preventDefault();
+    setSavingPageContent(true);
+    try {
+      const payload = { ...pageValues, footer: { ...pageValues.footer, socialLinks: pageValues.footer.socialLinks.filter((link) => link.url?.trim()) } };
+      const { data } = await api.put('/admin/settings', { pageContent: payload, contactEmail: payload.footer.contactEmail, whatsappNumber: payload.footer.whatsappNumber });
+      queryClient.setQueryData(SITE_SETTINGS_QUERY_KEY, data);
+      setPageForm(data.pageContent);
+      toast.success('Page content updated.');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Could not save page content.');
+    } finally {
+      setSavingPageContent(false);
+    }
+  };
+
   const updatePaymentMethod = (id, field) => (event) => {
     const value = field === 'enabled' ? event.target.checked : event.target.value;
     setStoreForm((current) => {
@@ -262,9 +333,9 @@ export default function AdminSettingsPage() {
           Store Settings
         </h1>
         <p className="text-sm text-stone-500 mt-1">
-          Manage public store details, delivery pricing, payment instructions, and branding.
+          {isAdministrator ? 'Manage public store details, delivery pricing, payment instructions, and branding.' : 'Manage homepage, Our Story, contact, and footer content.'}
         </p>
-        <nav aria-label="Settings sections" className="mt-4 flex flex-wrap gap-2">
+        {isAdministrator && <nav aria-label="Settings sections" className="mt-4 flex flex-wrap gap-2">
           <a href="#store-details" className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-apricot-300">
             Store details
           </a>
@@ -273,6 +344,9 @@ export default function AdminSettingsPage() {
           </a>
           <a href="#delivery-rates" className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-apricot-300">
             Delivery rates
+          </a>
+          <a href="#page-content" className="rounded-full border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-apricot-300">
+            Page content
           </a>
           {hasUnsavedSettings && (
             <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800" role="status">
@@ -284,7 +358,7 @@ export default function AdminSettingsPage() {
               Settings up to date
             </span>
           )}
-        </nav>
+        </nav>}
       </div>
 
       {isError && (
@@ -464,7 +538,7 @@ export default function AdminSettingsPage() {
         </aside>
       </div>
 
-      <form
+      {isAdministrator && <form
         onSubmit={handleSettingsSubmit}
         id="store-details"
         className="bg-white rounded-3xl border border-stone-200 shadow-xs p-6 sm:p-8"
@@ -768,6 +842,48 @@ export default function AdminSettingsPage() {
             </button>
           </div>
         </div>
+      </form>}
+
+      <form id="page-content" onSubmit={savePageContent} className="space-y-6 rounded-3xl border border-stone-200 bg-white p-6 shadow-xs sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><h2 className="font-display text-xl font-bold text-mountain-900">Homepage & Our Story content</h2><p className="mt-1 text-sm text-stone-500">Edit the storefront text and founding team. Changes publish when saved.</p></div>
+          <button type="submit" disabled={!hasUnsavedPageContent || savingPageContent || isLoading || isError} className="rounded-xl bg-apricot-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{savingPageContent ? 'Saving…' : 'Save page content'}</button>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <fieldset className="space-y-4"><legend className="mb-2 font-semibold text-mountain-900">Homepage</legend>
+            {[['heroTitle','Hero heading',160],['heroDescription','Hero description',500],['heroButton','Main button label',80],['categoryTitle','Categories heading',100],['featuredTitle','Featured products heading',100]].map(([field,label,maxLength]) => <label key={field} className="block text-sm font-medium text-stone-700">{label}<textarea rows={field.includes('Description') ? 3 : 1} maxLength={maxLength} value={pageValues.home[field]} onChange={updatePageField('home',field)} className="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm" /></label>)}
+            {isAdministrator && <div className="rounded-xl border border-stone-200 bg-stone-50 p-4"><p className="text-xs font-semibold text-stone-700">Update homepage images</p><p className="mt-1 text-xs text-stone-500">The hero carousel uses region images; category tiles and featured cards use their own records.</p><div className="mt-3 flex flex-wrap gap-2"><Link to="/admin/cities" className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-mountain-800">Region images</Link><Link to="/admin/categories" className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-mountain-800">Category images</Link><Link to="/admin/products" className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-mountain-800">Product images</Link></div></div>}
+          </fieldset>
+          <fieldset className="space-y-4"><legend className="mb-2 font-semibold text-mountain-900">Our Story</legend>
+            {[['intro','Introduction',500],['story','Story text',3000]].map(([field,label,maxLength]) => <label key={field} className="block text-sm font-medium text-stone-700">{label}<textarea rows={field === 'story' ? 6 : 3} maxLength={maxLength} value={pageValues.about[field]} onChange={updatePageField('about',field)} className="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm" /></label>)}
+            <p className="text-sm font-semibold text-mountain-900">Founders</p>
+            {pageValues.about.founders.map((founder,index) => <div key={index} className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-medium text-stone-600">Name<input maxLength={100} value={founder.name} onChange={updateFounder(index,'name')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" /></label><label className="text-xs font-medium text-stone-600">Role<input maxLength={60} value={founder.role} onChange={updateFounder(index,'role')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" /></label></div>)}
+            <div className="space-y-3 border-t border-stone-200 pt-4"><div className="flex items-center justify-between"><p className="text-sm font-semibold text-mountain-900">Story sections</p><button type="button" onClick={addStorySection} disabled={pageValues.about.sections.length >= 8} className="text-xs font-semibold text-apricot-700 disabled:opacity-50">Add section</button></div>
+              {pageValues.about.sections.map((section,index) => <div key={index} className="space-y-2 rounded-xl border border-stone-200 p-3"><div className="flex justify-between"><span className="text-xs font-semibold">Section {index + 1}</span><button type="button" onClick={() => removeStorySection(index)} className="text-xs text-rose-700">Remove</button></div><input aria-label={`Section ${index + 1} heading`} maxLength={120} placeholder="Heading" value={section.heading} onChange={(event) => updateStorySection(index,'heading',event.target.value)} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" /><textarea aria-label={`Section ${index + 1} story`} maxLength={3000} rows={3} placeholder="Story text" value={section.body} onChange={(event) => updateStorySection(index,'body',event.target.value)} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" /><input aria-label={`Section ${index + 1} image alt text`} maxLength={160} placeholder="Image description (alt text)" value={section.imageAlt} onChange={(event) => updateStorySection(index,'imageAlt',event.target.value)} className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" /><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadStoryImage(index,event.target.files?.[0]); event.target.value = ''; }} className="block w-full text-xs" />{section.imageUrl && <img src={section.imageUrl} alt={section.imageAlt || ''} className="h-28 w-full object-cover" />}</div>)}
+            </div>
+            <label className="block text-sm text-stone-700">SEO title<input maxLength={120} value={pageValues.about.seoTitle} onChange={updateContentField('about','seoTitle')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <label className="block text-sm text-stone-700">SEO description<textarea maxLength={300} value={pageValues.about.seoDescription} onChange={updateContentField('about','seoDescription')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+          </fieldset>
+        </div>
+        <div className="grid gap-6 border-t border-stone-200 pt-5 lg:grid-cols-2">
+          <fieldset><legend className="mb-3 font-semibold text-mountain-900">Homepage sections</legend><div className="space-y-2">{pageValues.home.sectionOrder.map((section,index) => <div key={section} className="flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2 text-sm"><label className="flex items-center gap-2 capitalize"><input type="checkbox" checked={section === 'hero' || pageValues.home.visibility[section]} disabled={section === 'hero'} onChange={() => toggleHomeSection(section)} />{section}</label><span className="flex gap-1"><button type="button" disabled={!index} onClick={() => moveHomeSection(index,-1)} aria-label={`Move ${section} up`} className="rounded border px-2 disabled:opacity-40">↑</button><button type="button" disabled={index === pageValues.home.sectionOrder.length - 1} onClick={() => moveHomeSection(index,1)} aria-label={`Move ${section} down`} className="rounded border px-2 disabled:opacity-40">↓</button></span></div>)}</div></fieldset>
+          <fieldset className="space-y-3"><legend className="mb-2 font-semibold text-mountain-900">Contact and footer</legend>
+            {['intro','responseText'].map((field) => <label key={field} className="block text-sm text-stone-700">{field === 'intro' ? 'Contact page intro' : 'Contact response text'}<textarea maxLength={500} value={pageValues.contact[field]} onChange={updateContentField('contact',field)} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>)}
+            <label className="block text-sm text-stone-700">Footer introduction<textarea maxLength={300} value={pageValues.footer.intro} onChange={updateContentField('footer','intro')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <label className="block text-sm text-stone-700">Newsletter text<textarea maxLength={300} value={pageValues.footer.newsletterText} onChange={updateContentField('footer','newsletterText')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            {pageValues.contact && <><label className="block text-sm text-stone-700">Contact SEO title<input maxLength={120} value={pageValues.contact.seoTitle} onChange={updateContentField('contact','seoTitle')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label><label className="block text-sm text-stone-700">Contact SEO description<textarea maxLength={300} value={pageValues.contact.seoDescription} onChange={updateContentField('contact','seoDescription')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label></>}
+            <p className="text-sm font-semibold text-mountain-900">Social profile links</p>
+            <label className="block text-sm text-stone-700">Footer WhatsApp number<input value={pageValues.footer.whatsappNumber} onChange={updateContentField('footer','whatsappNumber')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <label className="block text-sm text-stone-700">Footer email<input type="email" value={pageValues.footer.contactEmail} onChange={updateContentField('footer','contactEmail')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <label className="block text-sm text-stone-700">Store location<textarea maxLength={300} rows={3} value={pageValues.footer.location} onChange={updateContentField('footer','location')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <label className="block text-sm text-stone-700">Map link<input type="url" value={pageValues.footer.mapUrl} onChange={updateContentField('footer','mapUrl')} placeholder="https://maps.google.com/..." className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            {socialLinks.map((link,index) => <label key={link.label} className="block text-xs font-medium text-stone-600">{link.label} URL<input type="url" value={link.url} onChange={(event) => updateSocialLink(index,event.target.value)} placeholder="https://…" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" /></label>)}
+          </fieldset>
+        </div>
+        <aside aria-label="Page content preview" className="grid gap-4 border-t border-stone-200 pt-5 sm:grid-cols-2">
+          <div className="border border-stone-200 bg-stone-50 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-apricot-700">Homepage preview</p><h3 className="mt-2 font-display text-lg text-mountain-900">{pageValues.home.heroTitle}</h3><p className="mt-1 text-sm text-stone-600">{pageValues.home.heroDescription}</p><span className="mt-3 inline-block bg-mountain-900 px-3 py-1.5 text-xs font-semibold text-white">{pageValues.home.heroButton}</span></div>
+          <div className="border border-stone-200 bg-stone-50 p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-apricot-700">Our Story preview</p><h3 className="mt-2 font-display text-lg text-mountain-900">{pageValues.about.intro}</h3><p className="mt-1 line-clamp-3 text-sm text-stone-600">{pageValues.about.story}</p><p className="mt-2 text-xs font-semibold text-stone-700">{pageValues.about.founders.map((founder) => founder.name).join(' · ')}</p></div>
+        </aside>
       </form>
     </div>
   );

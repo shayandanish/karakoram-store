@@ -4,9 +4,17 @@ import { Link } from 'react-router-dom';
 import api from '../../lib/axios';
 import { fmtPKR, fmtDate } from '../../lib/utils';
 import SEO from '../../components/ui/SEO';
+import { useAuth } from '../../context/AuthContext';
+import { hasAdminPermission } from '../../lib/adminAccess';
 
 export default function AdminDashboardPage() {
+  const { user } = useAuth();
+  const canViewOrders = hasAdminPermission(user?.role, 'orders');
+  const canViewCatalog = hasAdminPermission(user?.role, 'catalog');
+  const canViewAccounts = hasAdminPermission(user?.role, 'accounts');
+  const isAdministrator = user?.role === 'admin';
   const [revenuePeriod, setRevenuePeriod] = useState('all');
+  const [analyticsPeriod, setAnalyticsPeriod] = useState('30d');
   const {
     data: stats,
     isLoading,
@@ -15,12 +23,22 @@ export default function AdminDashboardPage() {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ['admin-stats', revenuePeriod],
+    queryKey: ['admin-stats', revenuePeriod, analyticsPeriod],
     queryFn: async () => {
-      const res = await api.get('/admin/stats', { params: { period: revenuePeriod } });
+      const res = await api.get('/admin/stats', { params: { period: revenuePeriod, analyticsPeriod } });
       return res.data;
     },
   });
+  const salesOverview = stats?.salesOverview;
+  const chartLength = analyticsPeriod === '7d' ? 7 : 30;
+  const chartSales = Array.from({ length: chartLength }, (_, index) => {
+    const day = new Date();
+    day.setUTCHours(0, 0, 0, 0);
+    day.setUTCDate(day.getUTCDate() - (chartLength - index - 1));
+    const date = day.toISOString().slice(0, 10);
+    return salesOverview?.dailySales?.find((item) => item._id === date) || { _id: date, revenue: 0, orders: 0 };
+  });
+  const chartMaxRevenue = Math.max(1, ...chartSales.map((day) => day.revenue));
   const revenueOrderParams = new URLSearchParams({ payment: 'paid' });
   if (stats?.revenueStartDate) {
     revenueOrderParams.set('startDate', stats.revenueStartDate.slice(0, 10));
@@ -38,7 +56,7 @@ export default function AdminDashboardPage() {
             Dashboard Overview
           </h1>
           <p className="text-sm text-stone-600 mt-1">
-            Real-time performance metrics and store inventory status.
+            {isAdministrator ? 'Store performance, fulfillment, and inventory overview.' : canViewOrders ? 'Review orders and payment proofs that need your attention.' : canViewCatalog ? 'Review inventory availability and catalog alerts.' : canViewAccounts ? 'Review paid sales performance and store accounts.' : 'Manage storefront content and page sections.'}
           </p>
         </div>
 
@@ -93,10 +111,101 @@ export default function AdminDashboardPage() {
 
       {!isError && (
         <>
+      {/* ── Needs Attention ─────────────────────────────────────── */}
+      <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-xs" aria-labelledby="needs-attention-heading">
+        <div className="flex flex-col gap-1 border-b border-amber-100 bg-amber-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="needs-attention-heading" className="text-base font-bold font-display text-mountain-900">{canViewOrders || canViewCatalog ? 'Needs attention' : 'Quick access'}</h2>
+            <p className="text-xs text-stone-600">{canViewOrders || canViewCatalog ? 'Review the tasks for your dashboard access.' : canViewAccounts ? 'Open your accounts workspace and financial reports.' : 'Edit the storefront pages and content you manage.'}</p>
+          </div>
+          <span className="text-[11px] font-medium text-stone-500">Counts update when dashboard data refreshes</span>
+        </div>
+        {canViewOrders || canViewCatalog ? <div className="grid grid-cols-1 divide-y divide-stone-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+          {[
+            { label: 'Pending orders', description: 'Orders awaiting confirmation', count: stats?.pendingOrders, to: '/admin/orders?status=pending', tone: 'amber', permission: 'orders' },
+            { label: 'Payment proofs', description: 'Uploaded receipts to review', count: stats?.paymentProofReviewCount, to: '/admin/orders?payment=pending&proof=uploaded', tone: 'violet', permission: 'orders' },
+            { label: 'Out of stock', description: 'Active products with no stock', count: stats?.outOfStockCount, to: '/admin/products?stock=out', tone: 'rose', permission: 'catalog' },
+            { label: 'Low stock', description: 'Active products below 10 units', count: stats?.lowStockCount ?? stats?.lowStockProducts?.length, to: '/admin/products?stock=low', tone: 'orange', permission: 'catalog' },
+          ].filter((item) => hasAdminPermission(user?.role, item.permission)).map((item) => (
+            <Link key={item.label} to={item.to} className="group flex items-center justify-between gap-3 px-5 py-4 transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-apricot-500">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-mountain-900">{item.label}</span>
+                <span className="mt-0.5 block text-xs text-stone-500">{item.description}</span>
+              </span>
+              <span className={`shrink-0 rounded-xl px-3 py-1.5 text-lg font-bold tabular-nums ${item.tone === 'amber' ? 'bg-amber-100 text-amber-800' : item.tone === 'violet' ? 'bg-violet-100 text-violet-800' : item.tone === 'rose' ? 'bg-rose-100 text-rose-800' : 'bg-orange-100 text-orange-800'}`}>
+                {isLoading ? <span className="inline-block h-5 w-5 animate-pulse rounded bg-white/70" aria-label="Loading count" /> : item.count ?? 0}
+              </span>
+            </Link>
+          ))}
+        </div> : <div className="p-5"><Link to={canViewAccounts ? '/admin/accounts' : '/admin/settings'} className="inline-flex rounded-xl bg-mountain-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-mountain-800">{canViewAccounts ? 'Open Accounts' : 'Edit storefront content'}</Link></div>}
+      </section>
+
+      {/* ── Sales Overview ──────────────────────────────────────── */}
+      {canViewAccounts && <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-xs" aria-labelledby="sales-overview-heading">
+        <div className="flex flex-col gap-3 border-b border-stone-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="sales-overview-heading" className="text-base font-bold font-display text-mountain-900">Sales overview</h2>
+            <p className="text-xs text-stone-500">Paid sales, best sellers, and new customer accounts.</p>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-stone-600">
+            Period
+            <select value={analyticsPeriod} onChange={(event) => setAnalyticsPeriod(event.target.value)} className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs text-stone-700 focus:outline-none focus:ring-2 focus:ring-apricot-400">
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+          </label>
+        </div>
+        <div className="grid gap-5 p-5 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <div className="mb-3 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Paid revenue</p>
+                <p className="mt-1 text-2xl font-bold font-display text-mountain-900">{fmtPKR(chartSales.reduce((sum, day) => sum + day.revenue, 0))}</p>
+              </div>
+              <p className="text-xs text-stone-500">{salesOverview?.paidOrderCount ?? 0} paid orders</p>
+            </div>
+            <div className="flex h-40 items-end gap-1 border-b border-l border-stone-200 px-2 pt-3" role="img" aria-label={`Daily paid revenue for the last ${chartLength} days`}>
+              {chartSales.map((day, index) => {
+                const label = new Date(`${day._id}T00:00:00Z`).toLocaleDateString('en-PK', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+                const height = day.revenue ? Math.max(4, (day.revenue / chartMaxRevenue) * 100) : 0;
+                return <div key={day._id} className="group flex h-full min-w-0 flex-1 flex-col justify-end" title={`${label}: ${fmtPKR(day.revenue)} · ${day.orders} orders`}>
+                  <div className="w-full rounded-t-sm bg-emerald-500 transition-colors group-hover:bg-emerald-700" style={{ height: `${height}%` }} />
+                  {(chartLength === 7 || index === 0 || index === Math.floor((chartLength - 1) / 2) || index === chartLength - 1) && <span className="mt-1 truncate text-center text-[9px] text-stone-500">{label}</span>}
+                </div>;
+              })}
+            </div>
+            {isLoading && <p className="mt-2 text-xs text-stone-400">Loading sales data…</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+            <div className="rounded-xl bg-stone-50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">Average order value</p>
+              <p className="mt-2 text-xl font-bold text-mountain-900">{fmtPKR(salesOverview?.averageOrderValue || 0)}</p>
+              <p className="mt-1 text-[11px] text-stone-500">Paid order average</p>
+            </div>
+            <div className="rounded-xl bg-stone-50 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">New customers</p>
+              <p className="mt-2 text-xl font-bold text-mountain-900">{salesOverview?.newCustomers ?? 0}</p>
+              <p className="mt-1 text-[11px] text-stone-500">New customer accounts</p>
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-stone-100 px-5 py-4">
+          <h3 className="text-sm font-bold text-mountain-900">Top-selling products</h3>
+          {salesOverview?.topProducts?.length ? <ol className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {salesOverview.topProducts.map((product, index) => <li key={`${product.productId || product.name}-${index}`} className="rounded-xl border border-stone-100 bg-stone-50/70 p-3">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400">#{index + 1}</span>
+              {product.productId ? <Link to={`/admin/products/${product.productId}/edit`} className="mt-1 block truncate text-xs font-semibold text-mountain-900 hover:text-apricot-700">{product.name}</Link> : <span className="mt-1 block truncate text-xs font-semibold text-mountain-900">{product.name}</span>}
+              <span className="mt-1 block text-[11px] text-stone-500">{product.units} units · {fmtPKR(product.revenue)}</span>
+            </li>)}
+          </ol> : <p className="mt-2 text-xs text-stone-500">No paid product sales in this period yet.</p>}
+        </div>
+      </section>}
+
       {/* ── Metric Cards ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Total Revenue */}
-        <Link to={revenueOrdersUrl} className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-emerald-300 transition">
+        {canViewAccounts && (
+        <Link to={canViewOrders ? revenueOrdersUrl : '/admin/accounts'} className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-emerald-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
               Paid Revenue
@@ -119,9 +228,11 @@ export default function AdminDashboardPage() {
           </p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-emerald-500" />
         </Link>
+        )}
 
         {/* Total Orders */}
-        <Link to="/admin/orders" className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-sky-300 transition">
+        {canViewAccounts && (
+        <Link to={canViewOrders ? '/admin/orders' : '/admin/accounts'} className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-sky-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
               Total Orders
@@ -142,8 +253,10 @@ export default function AdminDashboardPage() {
           <p className="text-xs text-stone-500 mt-1">Across all order statuses</p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-400 to-sky-500" />
         </Link>
+        )}
 
         {/* Pending Orders */}
+        {canViewOrders && (
         <Link to="/admin/orders?status=pending" className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-amber-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
@@ -172,8 +285,10 @@ export default function AdminDashboardPage() {
           <p className="text-xs text-stone-500 mt-1">Awaiting fulfillment</p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
         </Link>
+        )}
 
         {/* Low-Stock Products */}
+        {canViewCatalog && (
         <Link to="/admin/products?stock=low" className="bg-white p-5 rounded-2xl border border-stone-200/80 shadow-xs relative overflow-hidden hover:border-rose-300 transition">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
@@ -194,7 +309,7 @@ export default function AdminDashboardPage() {
               </span>
               {(stats?.lowStockCount || stats?.lowStockProducts?.length || 0) > 0 && (
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
-                  Stock &lt; 10
+                  Stock 1–9
                 </span>
               )}
             </div>
@@ -202,12 +317,13 @@ export default function AdminDashboardPage() {
           <p className="text-xs text-stone-500 mt-1">Active products with a variant below 10</p>
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-400 to-rose-500" />
         </Link>
+        )}
       </div>
 
       {/* ── Two Column: Low-Stock Products + Recent Orders ───────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {(canViewOrders || canViewCatalog) && <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Orders (2 Columns on large) */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
+        {canViewOrders && <div className="lg:col-span-2 bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-stone-100 flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold font-display text-mountain-900">
@@ -354,10 +470,10 @@ export default function AdminDashboardPage() {
               </div>
             </>
           )}
-        </div>
+        </div>}
 
         {/* Low-Stock Alert List (1 Column on large) */}
-        <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden flex flex-col">
+        {canViewCatalog && <div className="bg-white rounded-2xl border border-stone-200/80 shadow-xs overflow-hidden flex flex-col">
           <div className="p-5 border-b border-stone-100 flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold font-display text-mountain-900 flex items-center gap-2">
@@ -366,7 +482,7 @@ export default function AdminDashboardPage() {
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
                 )}
               </h2>
-              <p className="text-xs text-stone-500">Items with stock under 10 units</p>
+              <p className="text-xs text-stone-500">Items with 1–9 units in stock</p>
             </div>
             <Link
               to="/admin/products?stock=low"
@@ -391,12 +507,12 @@ export default function AdminDashboardPage() {
                   </svg>
                 </div>
                 <p className="font-semibold text-stone-700">Healthy Stock Levels</p>
-                <p className="mt-0.5 text-stone-500">All product variants currently have 10+ items in stock.</p>
+                <p className="mt-0.5 text-stone-500">All active product variants have 10 or more units in stock.</p>
               </div>
             ) : (
               <div className="space-y-2.5">
                 {stats.lowStockProducts.map((p) => {
-                  const criticalVariants = (p.variants || []).filter((v) => v.stock < 10);
+                  const criticalVariants = (p.variants || []).filter((v) => v.stock > 0 && v.stock < 10);
                   return (
                     <div
                       key={p._id}
@@ -437,8 +553,8 @@ export default function AdminDashboardPage() {
               </div>
             )}
           </div>
-        </div>
-      </div>
+        </div>}
+      </div>}
           </>
       )}
     </div>

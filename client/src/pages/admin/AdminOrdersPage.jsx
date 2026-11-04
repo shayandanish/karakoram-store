@@ -53,6 +53,7 @@ export default function AdminOrdersPage() {
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
   const [paymentFilter, setPaymentFilter] = useState(searchParams.get('payment') || '');
+  const [proofFilter, setProofFilter] = useState(searchParams.get('proof') || '');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState(searchParams.get('paymentMethod') || '');
   const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
   const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
@@ -77,6 +78,7 @@ export default function AdminOrdersPage() {
     setSearch(searchParams.get('search') || '');
     setStatusFilter(searchParams.get('status') || '');
     setPaymentFilter(searchParams.get('payment') || '');
+    setProofFilter(searchParams.get('proof') || '');
     setPaymentMethodFilter(searchParams.get('paymentMethod') || '');
     setStartDate(searchParams.get('startDate') || '');
     setEndDate(searchParams.get('endDate') || '');
@@ -126,12 +128,13 @@ export default function AdminOrdersPage() {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ['admin-orders', statusFilter, paymentFilter, paymentMethodFilter, search, startDate, endDate, page],
+    queryKey: ['admin-orders', statusFilter, paymentFilter, proofFilter, paymentMethodFilter, search, startDate, endDate, page],
     enabled: !invalidDateRange,
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter) params.append('status', statusFilter);
       if (paymentFilter) params.append('payment', paymentFilter);
+      if (proofFilter) params.append('proof', proofFilter);
       if (paymentMethodFilter) params.append('paymentMethod', paymentMethodFilter);
       if (search.trim()) params.append('search', search.trim());
       if (startDate) params.append('startDate', startDate);
@@ -378,11 +381,26 @@ export default function AdminOrdersPage() {
             <option value="other">Other</option>
           </select>
 
-          {(search || paymentFilter || paymentMethodFilter || startDate || endDate) && (
+          <select
+            value={proofFilter}
+            onChange={(e) => {
+              setProofFilter(e.target.value);
+              if (e.target.value === 'uploaded') setPaymentFilter('pending');
+              setPage(1);
+            }}
+            aria-label="Filter by payment proof"
+            className="px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-stone-700"
+          >
+            <option value="">All payment proofs</option>
+            <option value="uploaded">Uploaded, needs review</option>
+          </select>
+
+          {(search || paymentFilter || proofFilter || paymentMethodFilter || startDate || endDate) && (
             <button
               onClick={() => {
                 setSearch('');
                 setPaymentFilter('');
+                setProofFilter('');
                 setPaymentMethodFilter('');
                 setStartDate('');
                 setEndDate('');
