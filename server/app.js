@@ -23,6 +23,7 @@ import cityRoutes from './routes/cityRoutes.js';
 import otpRoutes from './routes/otpRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import cronRoutes from './routes/cronRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -175,6 +176,7 @@ for (const prefix of ['/api', '/app']) {
   app.use(`${prefix}/admin`, adminRoutes);
   app.use(`${prefix}/cities`, cityRoutes);
   app.use(`${prefix}/settings`, settingsRoutes);
+  app.use(`${prefix}/contact`, contactRoutes);
   app.use(`${prefix}/cron`, cronRoutes);
 }
 

@@ -665,6 +665,11 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
     }
 
     // 2. Fallback to standard Nodemailer SMTP
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+    if (!(smtpUser && smtpPass)) {
+      throw new Error('Email sending is not configured. Set RESEND_API_KEY or SMTP_USER and SMTP_PASS.');
+    }
     const transporter = await getTransporter();
     const info = await transporter.sendMail({
       from,
@@ -686,3 +691,32 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
     return { success: false, error: err.message };
   }
 }
+
+export const sendContactReplyEmail = async ({ to, customerName, body }) => {
+  const settings = await SiteSettings.getSingleton();
+  const storeName = settings.storeName || 'Karakoram Store';
+  const from = process.env.EMAIL_FROM || (process.env.SMTP_USER
+    ? `${storeName} <${process.env.SMTP_USER}>`
+    : `${storeName} <onboarding@resend.dev>`);
+  const replyTo = settings.contactEmail || process.env.REPLY_TO_EMAIL || process.env.SMTP_USER || undefined;
+  const subject = `Re: Your message to ${storeName}`;
+  const text = `Hello ${customerName},\n\n${body}\n\nRegards,\n${storeName} Team`;
+  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#1c2b24;max-width:600px;margin:auto"><h2>${escapeHtml(storeName)}</h2><p>Hello ${escapeHtml(customerName)},</p><p style="white-space:pre-wrap">${escapeHtml(body)}</p><p>Regards,<br>${escapeHtml(storeName)} Team</p></div>`;
+
+  const resend = getResendClient();
+  if (resend) {
+    const { data, error } = await resend.emails.send({ from, to: [to], replyTo, subject, text, html });
+    if (!error && data?.id) return { success: true, messageId: data.id };
+    console.warn(`[Resend contact reply] ${error?.message || 'Delivery failed; trying SMTP.'}`);
+  }
+
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  if (!(smtpUser && smtpPass)) {
+    throw new Error('Email sending is not configured. Set RESEND_API_KEY or SMTP_USER and SMTP_PASS.');
+  }
+
+  const transporter = await getTransporter();
+  const info = await transporter.sendMail({ from, to, replyTo, subject, text, html });
+  return { success: true, messageId: info.messageId };
+};

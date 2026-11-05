@@ -12,6 +12,7 @@ import { getOrderPaymentDetails } from '../lib/paymentMethods';
 
 export default function TrackOrderPage() {
   const { settings } = useSiteSettings();
+  const pageCopy = settings.pageContent.trackOrder;
   const [searchParams] = useSearchParams();
   const [orderId, setOrderId] = useState(searchParams.get('orderId') || '');
   const [phoneOrEmail, setPhoneOrEmail] = useState(searchParams.get('phone') || searchParams.get('email') || '');
@@ -204,8 +205,9 @@ export default function TrackOrderPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <SEO
-        title="Track Your Order - Live Delivery Progress"
-        description={`Track your ${settings.storeName} order in real-time. View courier details, CN tracking, and delivery timelines.`}
+        title={pageCopy.seoTitle}
+        description={pageCopy.seoDescription}
+        canonicalUrl="/track-order"
       />
 
       {/* Back to Shop Navigation Button */}
@@ -231,7 +233,7 @@ export default function TrackOrderPage() {
           Track Your Delivery
         </h1>
         <p className="text-mountain-600 text-sm max-w-md mx-auto">
-          Enter your Order ID (e.g. KS-2026-001001) and the phone or email used during checkout to view real-time status.
+          {pageCopy.intro}
         </p>
       </div>
 

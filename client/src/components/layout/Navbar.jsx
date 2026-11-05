@@ -11,6 +11,13 @@ import { hasAdminAccess } from '../../lib/adminAccess';
 import SiteLogoMark from '../ui/SiteLogoMark';
 
 const POPULAR_SEARCHES = ['Apricots', 'Honey', 'Pakol caps'];
+const MAIN_NAV_LINKS = [
+  { key: 'home', path: '/', label: 'Home' },
+  { key: 'shop', path: '/shop', label: 'Shop' },
+  { key: 'trackOrder', path: '/track-order', label: 'Track Order' },
+  { key: 'about', path: '/about', label: 'About' },
+  { key: 'contact', path: '/contact', label: 'Contact' },
+];
 
 function SearchIcon({ className = 'h-5 w-5' }) {
   return (
@@ -34,6 +41,15 @@ export default function Navbar() {
   const { count: wishlistCount } = useWishlist();
   const { user, logout } = useAuth();
   const { logo, settings } = useSiteSettings();
+  const navConfig = settings.pageContent?.navigation;
+  const navItems = (navConfig?.order || MAIN_NAV_LINKS.map((item) => item.key))
+    .map((key) => MAIN_NAV_LINKS.find((item) => item.key === key))
+    .filter((item) => item && navConfig?.visibility?.[item.key] !== false);
+  const announcement = settings.pageContent?.announcement;
+  const now = Date.now();
+  const announcementStarts = announcement?.startsAt ? new Date(announcement.startsAt).getTime() : 0;
+  const announcementEnds = announcement?.endsAt ? new Date(announcement.endsAt).getTime() : Infinity;
+  const showAnnouncement = Boolean(announcement?.active && announcement.text?.trim() && now >= announcementStarts && now <= announcementEnds);
   const hasCustomLogo = Boolean(logo?.url);
   const location = useLocation();
   const navigate = useNavigate();
@@ -135,6 +151,10 @@ export default function Navbar() {
         scrolled ? 'shadow-[0_1px_14px_rgba(2,9,18,0.06)]' : ''
       }`}
     >
+      {showAnnouncement && <div className="bg-mountain-900 px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">
+        <span>{announcement.text}</span>
+        {announcement.linkUrl && announcement.linkLabel && <a href={announcement.linkUrl} className="ml-2 inline-flex font-bold underline underline-offset-2 hover:text-apricot-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" target={announcement.linkUrl.startsWith('http') ? '_blank' : undefined} rel={announcement.linkUrl.startsWith('http') ? 'noreferrer' : undefined}>{announcement.linkLabel}</a>}
+      </div>}
       <nav
         className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-10 xl:px-14"
         aria-label="Main Navigation"
@@ -167,11 +187,7 @@ export default function Navbar() {
 
           {/* Desktop nav links */}
           <div className="hidden items-center justify-center gap-5 lg:flex xl:gap-7">
-            <NavLink to="/" end className={linkClass}>Home</NavLink>
-            <NavLink to="/shop" className={linkClass}>Shop</NavLink>
-            <NavLink to="/track-order" className={linkClass}>Track Order</NavLink>
-            <NavLink to="/about" className={linkClass}>About</NavLink>
-            <NavLink to="/contact" className={linkClass}>Contact</NavLink>
+            {navItems.map((item) => <NavLink key={item.key} to={item.path} end={item.key === 'home'} className={linkClass}>{item.label}</NavLink>)}
           </div>
 
           {/* Right items: User + Cart + Mobile Hamburger */}
@@ -438,26 +454,12 @@ export default function Navbar() {
               </div>
             )}
 
-            <NavLink to="/" end onClick={closeMenu} className={mobileLinkClass}>
-              Home
-            </NavLink>
-            <NavLink to="/shop" onClick={closeMenu} className={mobileLinkClass}>
-              Shop
-            </NavLink>
+            {navItems.map((item) => <NavLink key={item.key} to={item.path} end={item.key === 'home'} onClick={closeMenu} className={mobileLinkClass}>{item.key === 'about' ? 'About Us' : item.label}</NavLink>)}
             <NavLink to="/wishlist" onClick={closeMenu} className={mobileLinkClass}>
               Wishlist {wishlistCount > 0 && `(${wishlistCount})`}
             </NavLink>
             <NavLink to="/my-orders" onClick={closeMenu} className={mobileLinkClass}>
               My Orders {ordersCount > 0 && `(${ordersCount})`}
-            </NavLink>
-            <NavLink to="/track-order" onClick={closeMenu} className={mobileLinkClass}>
-              Track Order
-            </NavLink>
-            <NavLink to="/about" onClick={closeMenu} className={mobileLinkClass}>
-              About Us
-            </NavLink>
-            <NavLink to="/contact" onClick={closeMenu} className={mobileLinkClass}>
-              Contact
             </NavLink>
             <NavLink to="/cart" onClick={closeMenu} className={mobileLinkClass}>
               Cart {totalItems > 0 && `(${totalItems})`}

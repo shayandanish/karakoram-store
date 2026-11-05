@@ -15,6 +15,10 @@ export const DEFAULT_SETTINGS = {
   storeTagline: 'Authentic · Gilgit-Baltistan · Pakistan',
   storeDescription: 'Handcrafted goods and artisan products from Gilgit-Baltistan, Pakistan.',
   pageContent: {
+    announcement: { active: false, text: '', linkLabel: '', linkUrl: '', startsAt: '', endsAt: '' },
+    promotion: { active: false, title: '', text: '', imageUrl: '', linkLabel: 'Shop now', linkUrl: '', startsAt: '', endsAt: '' },
+    navigation: { order: ['home', 'shop', 'trackOrder', 'about', 'contact'], visibility: { home: true, shop: true, trackOrder: true, about: true, contact: true } },
+    trackOrder: { intro: 'Enter your order number and the phone number or email used at checkout.', seoTitle: 'Track Your Order', seoDescription: 'Track your order status, courier information, and delivery progress.' },
     home: { heroTitle: 'Products and craft from Gilgit-Baltistan', heroDescription: 'Discover regional food, artisan goods, and cultural products from across Gilgit-Baltistan.', heroButton: 'Shop all products', categoryTitle: 'Shop by category', featuredTitle: 'New arrivals', sectionOrder: ['hero','categories','featured','promises','regions'], visibility: { categories: true, featured: true, promises: true, regions: true } },
     about: { intro: 'Karakoram Store brings products and handmade goods from Gilgit-Baltistan to customers across Pakistan.', story: 'Gilgit-Baltistan is known for its valleys, local produce, and living craft traditions. Karakoram Store was created to make it easier to discover products connected to this region and order them from across Pakistan.', sections: [], founders: [{ name: 'Shayan Danish', role: 'Founder' }, { name: 'Inam Karim', role: 'Co-founder' }, { name: 'Saif Ullah Baig', role: 'Co-founder' }], seoTitle: 'Our Story', seoDescription: 'Learn about Karakoram Store and the team behind our Gilgit-Baltistan store.' },
     contact: { intro: 'Got a question, need a recommendation, or looking for a special gift? Send us a message and our team will get back to you.', responseText: 'We’re here. Reach out to us directly and our team will respond as soon as possible.', seoTitle: 'Contact Us', seoDescription: 'Get in touch with Karakoram Store about products, orders, or delivery.' },
@@ -73,6 +77,7 @@ export const DEFAULT_SETTINGS = {
   contactPhone: '+923495144486',
   contactEmail: 'hello@karakoramstore.com',
   enableCustomerWhatsApp: false,
+  enableCustomerEmail: true,
   enableCod: true,
   enableBankTransfer: false,
   enableEasypaisa: true,
@@ -91,6 +96,10 @@ export function useSiteSettings() {
 
   const data = { ...DEFAULT_SETTINGS, ...(query.data || {}) };
   data.pageContent = {
+    announcement: { ...DEFAULT_SETTINGS.pageContent.announcement, ...(query.data?.pageContent?.announcement || {}) },
+    promotion: { ...DEFAULT_SETTINGS.pageContent.promotion, ...(query.data?.pageContent?.promotion || {}) },
+    navigation: { ...DEFAULT_SETTINGS.pageContent.navigation, ...(query.data?.pageContent?.navigation || {}), order: query.data?.pageContent?.navigation?.order || DEFAULT_SETTINGS.pageContent.navigation.order, visibility: { ...DEFAULT_SETTINGS.pageContent.navigation.visibility, ...(query.data?.pageContent?.navigation?.visibility || {}) } },
+    trackOrder: { ...DEFAULT_SETTINGS.pageContent.trackOrder, ...(query.data?.pageContent?.trackOrder || {}) },
     home: { ...DEFAULT_SETTINGS.pageContent.home, ...(query.data?.pageContent?.home || {}), visibility: { ...DEFAULT_SETTINGS.pageContent.home.visibility, ...(query.data?.pageContent?.home?.visibility || {}) } },
     about: { ...DEFAULT_SETTINGS.pageContent.about, ...(query.data?.pageContent?.about || {}) },
     contact: { ...DEFAULT_SETTINGS.pageContent.contact, ...(query.data?.pageContent?.contact || {}) },

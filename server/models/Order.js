@@ -33,6 +33,7 @@ const shipmentSchema = new mongoose.Schema({
   trackingId: { type: String, default: '' },
   trackingUrl: { type: String, default: '' },
   shippedAt: { type: Date },
+  lastAdminUpdateAt: { type: Date },
   estimatedDelivery: { type: Date },
 }, { _id: false });
 
@@ -128,7 +129,7 @@ const orderSchema = new mongoose.Schema(
     notificationLog: [notificationLogSchema],
 
     // Customer communication preferences & WhatsApp consent
-    whatsappConsent: { type: Boolean, default: true },
+    whatsappConsent: { type: Boolean, default: false },
     whatsappPhone: { type: String, default: '' },
 
     // Automated 24-hour payment reminder tracking

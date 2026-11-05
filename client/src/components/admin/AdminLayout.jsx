@@ -120,6 +120,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    to: '/admin/contact-messages',
+    label: 'Contact Inbox',
+    permission: 'content',
+    icon: (
+      <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M4 5h16v12H8l-4 3V5zm4 4h8m-8 4h5" />
+      </svg>
+    ),
+  },
+  {
     to: '/admin/settings',
     label: 'Store Settings',
     permission: 'content',

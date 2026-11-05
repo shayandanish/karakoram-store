@@ -74,6 +74,11 @@ export default function HomePage() {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const { settings, paymentMethods, enableCod } = useSiteSettings();
   const pageCopy = settings.pageContent.home;
+  const promotion = settings.pageContent.promotion;
+  const now = Date.now();
+  const promotionStarts = promotion?.startsAt ? new Date(promotion.startsAt).getTime() : 0;
+  const promotionEnds = promotion?.endsAt ? new Date(promotion.endsAt).getTime() : Infinity;
+  const showPromotion = Boolean(promotion?.active && promotion.title?.trim() && now >= promotionStarts && now <= promotionEnds);
   const sectionOrder = pageCopy.sectionOrder || ['hero','categories','featured','promises','regions'];
   const orderOf = (section) => sectionOrder.indexOf(section) + 1;
 
@@ -196,6 +201,18 @@ export default function HomePage() {
         description="Browse dry fruits, natural honey, herbs, handicrafts, and more sourced from Gilgit-Baltistan, Pakistan."
         canonicalUrl="/"
       />
+
+      {showPromotion && <section aria-label="Store promotion" className="mx-auto w-full max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">
+        <div className="relative overflow-hidden rounded-2xl bg-mountain-900 text-white">
+          {promotion.imageUrl && <img src={cloudinaryImage(promotion.imageUrl, { width: 1440 })} alt="" className="absolute inset-0 h-full w-full object-cover opacity-35" />}
+          <div className="relative flex flex-col items-start gap-4 px-6 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-10 sm:py-10">
+            <div><h2 className="font-display text-2xl font-semibold sm:text-3xl">{promotion.title}</h2>{promotion.text && <p className="mt-2 max-w-2xl text-sm text-white/85">{promotion.text}</p>}</div>
+            {promotion.linkUrl && promotion.linkLabel && (promotion.linkUrl.startsWith('http')
+              ? <a href={promotion.linkUrl} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg bg-apricot-500 px-5 py-3 text-sm font-semibold text-white hover:bg-apricot-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">{promotion.linkLabel}</a>
+              : <Link to={promotion.linkUrl} className="shrink-0 rounded-lg bg-apricot-500 px-5 py-3 text-sm font-semibold text-white hover:bg-apricot-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">{promotion.linkLabel}</Link>)}
+          </div>
+        </div>
+      </section>}
 
       {/* ── Hero ─────────────────────────────────────────────── */}
       <section id="hero" style={{ order: orderOf('hero') }} className="border-b border-cream-200">
@@ -371,25 +388,49 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <ul className="grid grid-cols-2 border-l border-t border-cream-200 sm:grid-cols-3 lg:grid-cols-4">
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
               {categoryTiles.map((category) => (
                 <li key={category._id}>
                   <Link
                     to={`/shop?category=${encodeURIComponent(category.slug)}`}
-                    className="group flex h-full min-h-[9.5rem] flex-col justify-between border-b border-r border-cream-200 bg-white p-4 transition-colors hover:bg-cream-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-apricot-500 sm:p-5"
+                    className="group flex h-full flex-col overflow-hidden rounded-xl border border-cream-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-apricot-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2"
                   >
-                    <span className="font-display text-base leading-snug text-mountain-900 sm:text-lg">
-                      {category.name}
-                    </span>
-                    <span className="mt-4 flex items-end justify-between gap-3">
-                      {category.description ? (
-                        <span className="line-clamp-2 text-xs leading-relaxed text-mountain-500">
-                          {category.description}
-                        </span>
+                    <span className="relative block aspect-[4/3] overflow-hidden bg-gradient-to-br from-cream-100 via-apricot-50 to-cream-200">
+                      {category.image?.url ? (
+                        <img
+                          src={cloudinaryImage(category.image.url, {
+                            width: 720,
+                            height: 540,
+                            crop: 'fill',
+                            gravity: 'auto',
+                            quality: 'auto',
+                            format: 'auto',
+                          })}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
                       ) : (
-                        <span />
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-0 flex items-center justify-center font-display text-5xl text-apricot-700/70"
+                        >
+                          {category.icon || '✦'}
+                        </span>
                       )}
-                      <ArrowRightIcon className="h-4 w-4 shrink-0 text-mountain-400 transition-transform group-hover:translate-x-0.5 group-hover:text-apricot-600" />
+                      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-mountain-900/10 to-transparent" />
+                    </span>
+                    <span className="flex flex-1 flex-col p-3.5 sm:p-4">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="font-display text-base leading-snug text-mountain-900 sm:text-lg">
+                          {category.name}
+                        </span>
+                        <ArrowRightIcon className="mt-0.5 h-4 w-4 shrink-0 text-mountain-400 transition-transform group-hover:translate-x-0.5 group-hover:text-apricot-600" />
+                      </span>
+                      <span className="mt-2 line-clamp-2 min-h-9 text-xs leading-relaxed text-mountain-500">
+                        {category.description || 'Explore our collection'}
+                      </span>
                     </span>
                   </Link>
                 </li>

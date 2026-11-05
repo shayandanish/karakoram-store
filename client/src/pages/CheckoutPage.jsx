@@ -126,6 +126,7 @@ export default function CheckoutPage() {
     transactionId: '',
     notes: '',
     couponCode: '',
+    whatsappConsent: false,
   });
   const deliveryRate = getDeliveryRate(settings, form.city, form.province);
   const shippingFee = deliveryRate.shippingFee;
@@ -206,11 +207,13 @@ export default function CheckoutPage() {
       if (!valid) e.guestPhone = error;
     }
 
-    // Email — optional but validated when provided
-    if (form.guestEmail.trim()) {
-      const { valid, error, warning } = validateEmail(form.guestEmail);
+    // Email — required for order confirmation and tracking updates
+    if (!form.guestEmail.trim()) {
+      e.guestEmail = 'Email address is required for your order confirmation and tracking updates.';
+    } else {
+      const { valid, warning } = validateEmail(form.guestEmail);
       if (!valid) {
-        e.guestEmail = error;
+        e.guestEmail = 'Enter a valid email address to receive your order confirmation and tracking updates.';
       } else if (warning) {
         setEmailWarning(warning);
       }
@@ -285,6 +288,7 @@ export default function CheckoutPage() {
         country:    'Pakistan',
       },
       paymentMethod: selectedPaymentMethod?.id,
+      whatsappConsent: form.whatsappConsent,
       transactionId:
         selectedPaymentMethod?.id !== 'cod'
           ? form.transactionId?.trim() || undefined
@@ -463,19 +467,24 @@ export default function CheckoutPage() {
                 <div className="sm:col-span-2">
                   <Field
                     id="field-email"
-                    label="Email address (optional)"
+                    label="Email address"
+                    required
                     error={errors.guestEmail}
-                    hint="Used for your order confirmation and invoice."
+                    hint="Used for your order confirmation, invoice, and tracking updates. Invalid email addresses will stop checkout."
                   >
                     <input
                       {...controlProps('field-email', { error: errors.guestEmail, hint: true })}
                       type="email"
+                      required
                       value={form.guestEmail}
                       onChange={set('guestEmail')}
                       onBlur={() => {
-                        if (!form.guestEmail.trim()) return;
-                        const { valid, error, warning } = validateEmail(form.guestEmail);
-                        if (!valid) setErrors((er) => ({ ...er, guestEmail: error }));
+                        if (!form.guestEmail.trim()) {
+                          setErrors((er) => ({ ...er, guestEmail: 'Email address is required for your order confirmation and tracking updates.' }));
+                          return;
+                        }
+                        const { valid, warning } = validateEmail(form.guestEmail);
+                        if (!valid) setErrors((er) => ({ ...er, guestEmail: 'Enter a valid email address to receive your order confirmation and tracking updates.' }));
                         else setEmailWarning(warning || '');
                       }}
                       aria-describedby={
@@ -503,6 +512,7 @@ export default function CheckoutPage() {
                     )}
                   </Field>
                 </div>
+                {settings.enableCustomerWhatsApp && <label className="sm:col-span-2 flex items-start gap-2.5 text-xs leading-relaxed text-mountain-600"><input type="checkbox" checked={form.whatsappConsent} onChange={(event) => setForm((current) => ({ ...current, whatsappConsent: event.target.checked }))} className="mt-0.5 h-4 w-4 rounded border-cream-400 text-apricot-600 focus:ring-apricot-500" /><span>Send me order and delivery updates on WhatsApp. I can still place my order without opting in.</span></label>}
               </div>
             </section>
 

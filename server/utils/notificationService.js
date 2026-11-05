@@ -36,6 +36,7 @@ function isDuplicateNotification(order, type, event, cooldownMs = 15 * 60 * 1000
  */
 export async function dispatchOrderNotifications(orderInput, event, options = {}) {
   const { force = false, channel = 'all' } = options;
+  const siteSettings = await SiteSettings.getSingleton();
 
   // Ensure we have a Mongoose document or find it
   let order = orderInput;
@@ -67,29 +68,56 @@ export async function dispatchOrderNotifications(orderInput, event, options = {}
   const recipientPhone = order.whatsappPhone || order.shippingAddress?.phone || order.guestPhone;
 
   // ── 1. Email Notification ──────────────────────────────────────────
-  if ((channel === 'all' || channel === 'email') && recipientEmail) {
-    const alreadySent = !force && isDuplicateNotification(order, 'email', event);
-    if (alreadySent) {
+  if (channel === 'all' || channel === 'email') {
+    if (!siteSettings.enableCustomerEmail) {
+      results.emailResult = { skipped: true, reason: 'Customer order emails are disabled in store settings' };
+    } else if (!recipientEmail) {
+      results.emailResult = { skipped: true, reason: 'No customer email address is available' };
+    } else {
+      const alreadySent = !force && isDuplicateNotification(order, 'email', event);
+      if (alreadySent) {
       console.log(`[NotificationService] Skipping duplicate email for order ${order._id} (${event})`);
       results.emailResult = { skipped: true, reason: 'Duplicate prevention' };
-    } else {
-      const emailRes = await sendOrderNotificationEmail(order, event, { email: recipientEmail });
-      results.emailResult = emailRes;
-      logsToPush.push({
-        type: 'email',
-        event,
-        recipient: recipientEmail,
-        sentAt: new Date(),
-        success: emailRes.success,
-        error: emailRes.error || '',
-        messageId: emailRes.messageId || '',
-      });
+      } else {
+        const emailRes = await sendOrderNotificationEmail(order, event, { email: recipientEmail });
+        results.emailResult = emailRes;
+        logsToPush.push({
+          type: 'email',
+          event,
+          recipient: recipientEmail,
+          sentAt: new Date(),
+          success: emailRes.success,
+          error: emailRes.error || '',
+          messageId: emailRes.messageId || '',
+        });
+      }
     }
   }
 
-  // ── 2. WhatsApp Notification (Disabled for customers; order communication handled via Email) ──
-  if (channel === 'whatsapp') {
-    results.whatsappResult = { skipped: true, reason: 'Customer WhatsApp order messaging disabled' };
+  // ── 2. WhatsApp Notification ─────────────────────────────────────────
+  if (channel === 'all' || channel === 'whatsapp') {
+    if (!siteSettings.enableCustomerWhatsApp) {
+      results.whatsappResult = { skipped: true, reason: 'Customer WhatsApp notifications are disabled in store settings' };
+    } else if (order.whatsappConsent !== true) {
+      results.whatsappResult = { skipped: true, reason: 'Customer did not opt in to WhatsApp notifications' };
+    } else {
+      const alreadySent = !force && isDuplicateNotification(order, 'whatsapp', event);
+      if (alreadySent) {
+        results.whatsappResult = { skipped: true, reason: 'Duplicate prevention' };
+      } else {
+        const whatsappRes = await sendWhatsAppNotification(order, event);
+        results.whatsappResult = whatsappRes;
+        logsToPush.push({
+          type: 'whatsapp',
+          event,
+          recipient: recipientPhone || '',
+          sentAt: new Date(),
+          success: whatsappRes.success === true,
+          error: whatsappRes.error || '',
+          messageId: whatsappRes.messageId || '',
+        });
+      }
+    }
   }
 
   // Persist notification log into the order document

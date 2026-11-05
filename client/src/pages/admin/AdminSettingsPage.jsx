@@ -32,6 +32,8 @@ const createStoreForm = (settings) => ({
   whatsappNumber: settings.whatsappNumber,
   contactPhone: settings.contactPhone,
   contactEmail: settings.contactEmail,
+  enableCustomerWhatsApp: settings.enableCustomerWhatsApp,
+  enableCustomerEmail: settings.enableCustomerEmail,
 });
 
 const DEFAULT_SOCIAL_LABELS = ['Instagram', 'Facebook', 'YouTube', 'TikTok'];
@@ -194,7 +196,7 @@ export default function AdminSettingsPage() {
   const updateStoreField = (field) => (event) => {
     setStoreForm((current) => ({
       ...(current || createStoreForm(settings)),
-      [field]: event.target.value,
+      [field]: event.target.type === 'checkbox' ? event.target.checked : event.target.value,
     }));
   };
 
@@ -234,6 +236,13 @@ export default function AdminSettingsPage() {
   });
 
   const toggleHomeSection = (key) => setPageForm((current) => ({ ...current, home: { ...current.home, visibility: { ...current.home.visibility, [key]: !current.home.visibility[key] } } }));
+  const moveNavigationLink = (index, delta) => setPageForm((current) => {
+    const order = [...current.navigation.order];
+    const next = index + delta;
+    if (next < 0 || next >= order.length) return current;
+    [order[index], order[next]] = [order[next], order[index]];
+    return { ...current, navigation: { ...current.navigation, order } };
+  });
 
   const updateContentField = (section, field) => (event) => setPageForm((current) => ({ ...current, [section]: { ...current[section], [field]: event.target.value } }));
 
@@ -579,6 +588,8 @@ export default function AdminSettingsPage() {
               />
             </label>
           ))}
+          <label className="flex items-start gap-2.5 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700 sm:col-span-2"><input type="checkbox" checked={Boolean(formValues.enableCustomerWhatsApp)} onChange={updateStoreField('enableCustomerWhatsApp')} disabled={isLoading || isError || savingSettings} className="mt-0.5 h-4 w-4 rounded border-stone-300 text-apricot-600 focus:ring-apricot-500" /><span><span className="block font-semibold text-mountain-900">Enable customer WhatsApp order updates</span><span className="mt-1 block text-xs text-stone-500">Only sends when the customer also opts in at checkout. Requires Meta WhatsApp Cloud API credentials on the server.</span></span></label>
+          <label className="flex items-start gap-2.5 rounded-xl border border-stone-200 bg-stone-50 p-4 text-sm text-stone-700 sm:col-span-2"><input type="checkbox" checked={Boolean(formValues.enableCustomerEmail)} onChange={updateStoreField('enableCustomerEmail')} disabled={isLoading || isError || savingSettings} className="mt-0.5 h-4 w-4 rounded border-stone-300 text-apricot-600 focus:ring-apricot-500" /><span><span className="block font-semibold text-mountain-900">Enable customer order emails</span><span className="mt-1 block text-xs text-stone-500">Controls order confirmations, status updates, and payment reminders. Login verification and password reset emails are unaffected.</span></span></label>
           <label className="block text-sm font-medium text-stone-700 sm:col-span-2">
             Store description
             <textarea
@@ -850,6 +861,19 @@ export default function AdminSettingsPage() {
           <button type="submit" disabled={!hasUnsavedPageContent || savingPageContent || isLoading || isError} className="rounded-xl bg-apricot-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{savingPageContent ? 'Saving…' : 'Save page content'}</button>
         </div>
         <div className="grid gap-6 lg:grid-cols-2">
+          <fieldset className="space-y-3 rounded-xl border border-stone-200 p-4"><legend className="px-1 font-semibold text-mountain-900">Announcement bar</legend>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={pageValues.announcement.active} onChange={(event) => setPageForm((current) => ({ ...current, announcement: { ...current.announcement, active: event.target.checked } }))} />Show announcement when active</label>
+            <label className="block text-sm">Message<input maxLength={240} value={pageValues.announcement.text} onChange={updateContentField('announcement','text')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <div className="grid grid-cols-2 gap-3"><label className="block text-sm">Link label<input maxLength={60} value={pageValues.announcement.linkLabel} onChange={updateContentField('announcement','linkLabel')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label><label className="block text-sm">Link URL<input maxLength={500} value={pageValues.announcement.linkUrl} onChange={updateContentField('announcement','linkUrl')} placeholder="/shop" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label></div>
+            <div className="grid grid-cols-2 gap-3"><label className="block text-xs">Starts at<input type="datetime-local" value={pageValues.announcement.startsAt} onChange={updateContentField('announcement','startsAt')} className="mt-1 w-full rounded-lg border border-stone-200 px-2 py-2" /></label><label className="block text-xs">Ends at<input type="datetime-local" value={pageValues.announcement.endsAt} onChange={updateContentField('announcement','endsAt')} className="mt-1 w-full rounded-lg border border-stone-200 px-2 py-2" /></label></div>
+          </fieldset>
+          <fieldset className="space-y-3 rounded-xl border border-stone-200 p-4"><legend className="px-1 font-semibold text-mountain-900">Homepage promotion</legend>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={pageValues.promotion.active} onChange={(event) => setPageForm((current) => ({ ...current, promotion: { ...current.promotion, active: event.target.checked } }))} />Show promotion when active</label>
+            {[['title','Heading',120],['text','Description',300],['imageUrl','Image URL',2048],['linkLabel','Button label',60],['linkUrl','Button URL',500]].map(([field,label,maxLength]) => <label key={field} className="block text-sm">{label}<input maxLength={maxLength} value={pageValues.promotion[field]} onChange={updateContentField('promotion',field)} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>)}
+            <div className="grid grid-cols-2 gap-3"><label className="block text-xs">Starts at<input type="datetime-local" value={pageValues.promotion.startsAt} onChange={updateContentField('promotion','startsAt')} className="mt-1 w-full rounded-lg border border-stone-200 px-2 py-2" /></label><label className="block text-xs">Ends at<input type="datetime-local" value={pageValues.promotion.endsAt} onChange={updateContentField('promotion','endsAt')} className="mt-1 w-full rounded-lg border border-stone-200 px-2 py-2" /></label></div>
+          </fieldset>
+        </div>
+        <div className="grid gap-6 lg:grid-cols-2">
           <fieldset className="space-y-4"><legend className="mb-2 font-semibold text-mountain-900">Homepage</legend>
             {[['heroTitle','Hero heading',160],['heroDescription','Hero description',500],['heroButton','Main button label',80],['categoryTitle','Categories heading',100],['featuredTitle','Featured products heading',100]].map(([field,label,maxLength]) => <label key={field} className="block text-sm font-medium text-stone-700">{label}<textarea rows={field.includes('Description') ? 3 : 1} maxLength={maxLength} value={pageValues.home[field]} onChange={updatePageField('home',field)} className="mt-1.5 w-full rounded-xl border border-stone-200 bg-stone-50 px-3.5 py-2.5 text-sm" /></label>)}
             {isAdministrator && <div className="rounded-xl border border-stone-200 bg-stone-50 p-4"><p className="text-xs font-semibold text-stone-700">Update homepage images</p><p className="mt-1 text-xs text-stone-500">The hero carousel uses region images; category tiles and featured cards use their own records.</p><div className="mt-3 flex flex-wrap gap-2"><Link to="/admin/cities" className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-mountain-800">Region images</Link><Link to="/admin/categories" className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-mountain-800">Category images</Link><Link to="/admin/products" className="rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-mountain-800">Product images</Link></div></div>}
@@ -878,6 +902,19 @@ export default function AdminSettingsPage() {
             <label className="block text-sm text-stone-700">Store location<textarea maxLength={300} rows={3} value={pageValues.footer.location} onChange={updateContentField('footer','location')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
             <label className="block text-sm text-stone-700">Map link<input type="url" value={pageValues.footer.mapUrl} onChange={updateContentField('footer','mapUrl')} placeholder="https://maps.google.com/..." className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
             {socialLinks.map((link,index) => <label key={link.label} className="block text-xs font-medium text-stone-600">{link.label} URL<input type="url" value={link.url} onChange={(event) => updateSocialLink(index,event.target.value)} placeholder="https://…" className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2 text-sm" /></label>)}
+          </fieldset>
+        </div>
+        <div className="grid gap-6 border-t border-stone-200 pt-5 lg:grid-cols-2">
+          <fieldset className="space-y-3"><legend className="font-semibold text-mountain-900">Main navigation</legend><p className="text-xs text-stone-500">Reorder links or hide them from the header menu. Hidden pages remain accessible by direct URL.</p>
+            {pageValues.navigation.order.map((key,index) => {
+              const label = { home: 'Home', shop: 'Shop', trackOrder: 'Track Order', about: 'About', contact: 'Contact' }[key];
+              return <div key={key} className="flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2"><label className="flex items-center gap-2 text-sm text-stone-700"><input type="checkbox" checked={pageValues.navigation.visibility[key]} onChange={(event) => setPageForm((current) => ({ ...current, navigation: { ...current.navigation, visibility: { ...current.navigation.visibility, [key]: event.target.checked } } }))} />{label}</label><span className="flex gap-1"><button type="button" disabled={!index} onClick={() => moveNavigationLink(index,-1)} aria-label={`Move ${label} up`} className="rounded border px-2 disabled:opacity-40">↑</button><button type="button" disabled={index === pageValues.navigation.order.length - 1} onClick={() => moveNavigationLink(index,1)} aria-label={`Move ${label} down`} className="rounded border px-2 disabled:opacity-40">↓</button></span></div>;
+            })}
+          </fieldset>
+          <fieldset className="space-y-3"><legend className="font-semibold text-mountain-900">Track Order page</legend>
+            <label className="block text-sm text-stone-700">Instructions<textarea maxLength={500} rows={3} value={pageValues.trackOrder.intro} onChange={updateContentField('trackOrder','intro')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <label className="block text-sm text-stone-700">SEO title<input maxLength={120} value={pageValues.trackOrder.seoTitle} onChange={updateContentField('trackOrder','seoTitle')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
+            <label className="block text-sm text-stone-700">SEO description<textarea maxLength={300} value={pageValues.trackOrder.seoDescription} onChange={updateContentField('trackOrder','seoDescription')} className="mt-1 w-full rounded-lg border border-stone-200 px-3 py-2" /></label>
           </fieldset>
         </div>
         <aside aria-label="Page content preview" className="grid gap-4 border-t border-stone-200 pt-5 sm:grid-cols-2">

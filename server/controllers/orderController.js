@@ -115,11 +115,12 @@ export const createOrderSchema = z.object({
   // Guest fields (required when not logged in)
   guestName: z.string().max(100).optional(),
   guestEmail: z
-    .string()
-    .optional()
-    .or(z.literal(''))
+    .string({ required_error: 'Email address is required for your order confirmation and tracking updates' })
+    .trim()
+    .min(1, 'Email address is required for your order confirmation and tracking updates')
+    .max(254, 'Email address is too long')
     .refine(
-      (val) => !val || checkEmailDomain(val) === null,
+      (val) => checkEmailDomain(val) === null,
       (val) => ({ message: checkEmailDomain(val) || 'Invalid email address' })
     ),
   guestPhone: z.string().min(7, 'Phone number is too short').max(20).optional(),
@@ -132,7 +133,7 @@ export const createOrderSchema = z.object({
   notes: z.string().max(500).optional(),
 
   // Communication & WhatsApp preferences
-  whatsappConsent: z.boolean().optional().default(true),
+  whatsappConsent: z.boolean().optional().default(false),
   whatsappPhone: z.string().max(20).optional(),
 });
 
@@ -336,7 +337,7 @@ export const createOrder = async (req, res, next) => {
               statusHistory: initialHistory,
               couponCode: data.couponCode ? data.couponCode.trim().toUpperCase() : '',
               notes: data.notes || '',
-              whatsappConsent: data.whatsappConsent !== false,
+              whatsappConsent: data.whatsappConsent === true,
               whatsappPhone: data.whatsappPhone || data.shippingAddress.phone || data.guestPhone || '',
               subtotal,
               shippingCost,

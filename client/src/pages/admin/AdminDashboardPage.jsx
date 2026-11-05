@@ -7,6 +7,15 @@ import SEO from '../../components/ui/SEO';
 import { useAuth } from '../../context/AuthContext';
 import { hasAdminPermission } from '../../lib/adminAccess';
 
+const formatWaitingTime = (timestamp) => {
+  if (!timestamp) return 'No overdue items';
+  const elapsedHours = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 3_600_000));
+  if (elapsedHours < 24) return `Oldest: ${elapsedHours}h`;
+  const days = Math.floor(elapsedHours / 24);
+  const hours = elapsedHours % 24;
+  return `Oldest: ${days}d ${hours}h`;
+};
+
 export default function AdminDashboardPage() {
   const { user } = useAuth();
   const canViewOrders = hasAdminPermission(user?.role, 'orders');
@@ -139,6 +148,26 @@ export default function AdminDashboardPage() {
           ))}
         </div> : <div className="p-5"><Link to={canViewAccounts ? '/admin/accounts' : '/admin/settings'} className="inline-flex rounded-xl bg-mountain-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-mountain-800">{canViewAccounts ? 'Open Accounts' : 'Edit storefront content'}</Link></div>}
       </section>
+
+      {canViewOrders && <section className="overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-xs" aria-labelledby="overdue-tasks-heading">
+        <div className="border-b border-rose-100 bg-rose-50/70 px-5 py-4">
+          <h2 id="overdue-tasks-heading" className="text-base font-bold font-display text-mountain-900">Overdue tasks</h2>
+          <p className="text-xs text-stone-600">Orders and proofs waiting over 24 hours; shipped orders without a staff update for 72 hours.</p>
+        </div>
+        <div className="grid divide-y divide-stone-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          {[
+            { key: 'pending', label: 'Pending orders', threshold: 'Over 24 hours', link: '/admin/orders?overdue=pending' },
+            { key: 'proof', label: 'Payment proofs', threshold: 'Review over 24 hours', link: '/admin/orders?overdue=proof&proof=uploaded' },
+            { key: 'shipment', label: 'Shipment updates', threshold: 'No staff update in 72 hours', link: '/admin/orders?overdue=shipment' },
+          ].map((task) => {
+            const item = stats?.overdueTasks?.[task.key];
+            return <Link key={task.key} to={task.link} className="flex items-center justify-between gap-3 px-5 py-4 transition hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-apricot-500">
+              <span className="min-w-0"><span className="block text-sm font-semibold text-mountain-900">{task.label}</span><span className="mt-0.5 block text-[11px] text-stone-500">{task.threshold}</span><span className="mt-1 block text-[11px] text-rose-700">{isLoading ? 'Checking age…' : formatWaitingTime(item?.oldestAt)}</span></span>
+              <span className="shrink-0 rounded-xl bg-rose-100 px-3 py-1.5 text-lg font-bold tabular-nums text-rose-800">{isLoading ? '…' : item?.count ?? 0}</span>
+            </Link>;
+          })}
+        </div>
+      </section>}
 
       {/* ── Sales Overview ──────────────────────────────────────── */}
       {canViewAccounts && <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-xs" aria-labelledby="sales-overview-heading">

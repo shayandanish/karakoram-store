@@ -50,12 +50,12 @@ export default function LoginPage() {
   const hasCustomLogo = Boolean(logo?.url);
 
   const [email, setEmail] = useState('');
-  const [staffLoginMode, setStaffLoginMode] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const [notice, setNotice] = useState('');
   const [needsMfa, setNeedsMfa] = useState(false);
   const [mfaCode, setMfaCode] = useState('');
@@ -93,31 +93,25 @@ export default function LoginPage() {
   }, [user, navigate, redirectParam]);
 
   const displayError = error || googleRedirectError;
+  const credential = email.trim();
+  const emailOrUsernameError = submitted && !credential
+    ? 'Enter your email address or username.'
+    : submitted && credential.includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(credential)
+      ? 'Enter a valid email address.'
+      : '';
+  const passwordError = submitted && !password ? 'Enter your password.' : '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (googleLoading) return;
-
-    if (staffLoginMode) {
-      if (!email.trim() || !password) {
-        setError('Enter your staff username and password.');
-        return;
-      }
-      setLoading(true);
-      setError('');
-      try {
-        const staffUser = await staffLogin(email.trim(), password);
-        navigate(getLoginDestination(staffUser, redirectParam), { replace: true });
-      } catch (err) {
-        setError(err?.response?.data?.message || 'Could not sign in with these staff credentials.');
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
+    if (loading || googleLoading) return;
+    setSubmitted(true);
 
     if (!email.trim() || !password) {
-      setError('Please provide both your email and password.');
+      setError('Check the highlighted fields and try again.');
+      return;
+    }
+    if (email.trim().includes('@') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Enter a valid email address.');
       return;
     }
 
@@ -128,6 +122,20 @@ export default function LoginPage() {
     clearGoogleRedirectError();
 
     try {
+      // Staff accounts use admin-created usernames; customers and admins use email.
+      // Detect the credential type from its shape so the login page never exposes roles.
+      if (!email.trim().includes('@')) {
+        try {
+          const staffUser = await staffLogin(email.trim(), password);
+          navigate(getLoginDestination(staffUser, redirectParam), { replace: true });
+        } catch (staffError) {
+          setError(staffError?.response?.data?.message || (!staffError?.response
+            ? 'Could not reach the store server. Check your connection and try again.'
+            : 'Could not sign in with these credentials. Check them and try again.'));
+        }
+        return;
+      }
+
       const loggedUser = await login(email.trim(), password);
       if (loggedUser?.requiresMfa) {
         setNeedsMfa(true);
@@ -246,7 +254,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 sm:px-6 py-16">
+    <div className="relative isolate min-h-[calc(100vh-5rem)] overflow-hidden bg-gradient-to-b from-cream-50 via-white to-cream-100 px-4 py-10 sm:px-6 sm:py-16">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 -z-10 h-72 w-72 rounded-full bg-mountain-100/70 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-24 -z-10 h-80 w-80 rounded-full bg-apricot-100/60 blur-3xl" />
+      <div className="relative mx-auto max-w-md">
       <SEO
         title="Sign In"
         description={`Sign in to your ${settings.storeName} account to manage your orders and shipping details.`}
@@ -266,7 +277,7 @@ export default function LoginPage() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm p-8 border border-cream-200">
+      <div className="rounded-3xl border border-cream-200 bg-white/95 p-6 shadow-xl shadow-mountain-900/5 backdrop-blur sm:p-8">
         <div className="text-center mb-8">
           <SiteLogoMark
             size={hasCustomLogo ? '5xl' : '3xl'}
@@ -279,7 +290,7 @@ export default function LoginPage() {
             Welcome Back
           </h1>
           <p className="text-xs text-mountain-500">
-            Sign in to view your orders and saved details
+            Your mountain finds are just a sign in away
           </p>
         </div>
 
@@ -334,7 +345,7 @@ export default function LoginPage() {
               <h2 className="text-sm font-bold text-mountain-900">Administrator verification</h2>
               <p className="mt-1 text-xs text-stone-600">Enter the 6-digit code from your enrolled authenticator app.</p>
             </div>
-            <input
+          <input
               aria-label="Authenticator code"
               autoComplete="one-time-code"
               inputMode="numeric"
@@ -351,12 +362,7 @@ export default function LoginPage() {
           </form>
         ) : (
         <>
-        <div className="mb-5 grid grid-cols-2 rounded-xl bg-cream-100 p-1">
-          <button type="button" onClick={() => { setStaffLoginMode(false); setError(''); }} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${staffLoginMode ? 'text-stone-500' : 'bg-white text-mountain-900 shadow-xs'}`}>Customer / Admin</button>
-          <button type="button" onClick={() => { setStaffLoginMode(true); setError(''); setNeedsVerification(false); }} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${staffLoginMode ? 'bg-white text-mountain-900 shadow-xs' : 'text-stone-500'}`}>Staff sign in</button>
-        </div>
-
-        {!staffLoginMode && <GoogleAuthButton
+        <GoogleAuthButton
           disabled={loading}
           onStart={() => {
             setError('');
@@ -367,24 +373,26 @@ export default function LoginPage() {
           onError={setError}
           onMfaRequired={() => setNeedsMfa(true)}
           onLoadingChange={setGoogleLoading}
-        />}
+        />
 
-        {!staffLoginMode && <div className="my-5 flex items-center gap-3" aria-hidden="true">
+        <div className="my-5 flex items-center gap-3" aria-hidden="true">
           <span className="h-px flex-1 bg-cream-200" />
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-mountain-400">
             or sign in with email
           </span>
           <span className="h-px flex-1 bg-cream-200" />
-        </div>}
+        </div>
 
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wider text-mountain-700 mb-1">
-              {staffLoginMode ? 'Staff username' : 'Email Address'} <span className="text-apricot-500">*</span>
+              {email.includes('@') ? 'Email Address' : 'Email or Username'} <span className="text-apricot-500">*</span>
             </label>
             <input
               id="login-email"
-              type={staffLoginMode ? 'text' : 'email'}
+              type="text"
+              aria-invalid={Boolean(emailOrUsernameError)}
+              aria-describedby={emailOrUsernameError ? 'login-email-error' : undefined}
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
@@ -392,11 +400,13 @@ export default function LoginPage() {
                 setNotice('');
                 clearGoogleRedirectError();
               }}
-              placeholder={staffLoginMode ? 'username' : 'you@example.com'}
+              placeholder="you@example.com or username"
               required
-              autoComplete={staffLoginMode ? 'username' : 'email'}
-              className="w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 placeholder-mountain-300"
+              autoComplete="username"
+              className="w-full border border-cream-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-mountain-600 focus-visible:ring-offset-2 bg-white text-mountain-800 placeholder-mountain-300 disabled:opacity-60"
+              disabled={loading || googleLoading}
             />
+            {emailOrUsernameError && <p id="login-email-error" className="mt-1.5 text-xs text-red-700" role="status">{emailOrUsernameError}</p>}
           </div>
 
           <div>
@@ -404,18 +414,13 @@ export default function LoginPage() {
               <label htmlFor="login-password" className="block text-xs font-semibold uppercase tracking-wider text-mountain-700">
                 Password <span className="text-apricot-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="text-[11px] text-apricot-600 hover:text-apricot-700 font-medium select-none"
-              >
-                {showPassword ? 'Hide Password' : 'Show Password'}
-              </button>
             </div>
             <div className="relative">
               <input
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
+                aria-invalid={Boolean(passwordError)}
+                aria-describedby={passwordError ? 'login-password-error' : undefined}
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
@@ -426,13 +431,16 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 required
                 autoComplete="current-password"
-                className="w-full border border-cream-300 rounded-xl pl-4 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-apricot-400 bg-white text-mountain-800 placeholder-mountain-300 font-mono"
+                className="w-full border border-cream-300 rounded-xl pl-4 pr-12 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-mountain-600 focus-visible:ring-offset-2 bg-white text-mountain-800 placeholder-mountain-300 font-mono disabled:opacity-60"
+                disabled={loading || googleLoading}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                disabled={loading || googleLoading}
               >
                 {showPassword ? (
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -446,16 +454,17 @@ export default function LoginPage() {
                 )}
               </button>
             </div>
-            {!staffLoginMode && <div className="text-right mt-1.5">
+            {passwordError && <p id="login-password-error" className="mt-1.5 text-xs text-red-700" role="status">{passwordError}</p>}
+            <div className="text-right mt-1.5">
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                disabled={resetLoading}
-                className="text-[11px] text-mountain-500 hover:text-apricot-600 font-medium disabled:opacity-50"
+                disabled={resetLoading || loading || googleLoading}
+                className="text-[11px] text-mountain-700 hover:text-apricot-700 font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mountain-600 rounded disabled:opacity-50"
               >
                 {resetLoading ? 'Sending reset email…' : 'Forgot password?'}
               </button>
-            </div>}
+            </div>
           </div>
 
           <button
@@ -468,9 +477,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-3 text-[11px] text-mountain-400 text-center">
-          {staffLoginMode ? 'Use the username and password provided by your administrator.' : 'Store admins can also sign in with their existing admin password.'}
-        </p>
         </>
         )}
 
@@ -485,6 +491,7 @@ export default function LoginPage() {
             Just want to buy? Guest checkout is always available on our Cart page.
           </p>
         </div>
+      </div>
       </div>
     </div>
   );

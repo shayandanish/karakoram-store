@@ -19,6 +19,7 @@ import {
 } from '../controllers/cityController.js';
 import { adminUpdateSettings } from '../controllers/settingsController.js';
 import { adminGetActivity } from '../controllers/adminAuditController.js';
+import { adminGetContactMessages, adminUpdateContactMessage, adminReplyToContactMessage } from '../controllers/contactMessageController.js';
 import { adminGetStaff, adminCreateStaff, adminSetStaffStatus, adminSetStaffRole, adminResetStaffPassword } from '../controllers/adminStaffController.js';
 import {
   adminGetSuppliers, adminCreateSupplier, adminUpdateSupplier,
@@ -71,6 +72,9 @@ router.put('/staff/:id/password', adminOnly, adminResetStaffPassword);
 
 // Site settings / branding
 router.put('/settings', requireAdminPermission('content'), adminUpdateSettings);
+router.get('/contact-messages', requireAdminPermission('content'), adminGetContactMessages);
+router.patch('/contact-messages/:id', requireAdminPermission('content'), adminUpdateContactMessage);
+router.post('/contact-messages/:id/replies', requireAdminPermission('content'), adminReplyToContactMessage);
 
 // Products
 router.get('/products', requireAdminPermission('catalog'), adminGetProducts);

@@ -43,6 +43,7 @@ const AdminUsersPage = lazy(() => import('./pages/admin/AdminUsersPage'));
 const AdminActivityPage = lazy(() => import('./pages/admin/AdminActivityPage'));
 const AdminStaffPage = lazy(() => import('./pages/admin/AdminStaffPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
+const AdminContactMessagesPage = lazy(() => import('./pages/admin/AdminContactMessagesPage'));
 const AdminAccountsPage = lazy(() => import('./pages/admin/AdminAccountsPage'));
 
 const queryClient = new QueryClient({
@@ -85,6 +86,7 @@ export default function App() {
                       <Route path="coupons" element={<AdminCouponsPage />} />
                       <Route path="cities" element={<AdminCitiesPage />} />
                       <Route path="settings" element={<AdminSettingsPage />} />
+                      <Route path="contact-messages" element={<AdminContactMessagesPage />} />
                       <Route path="accounts" element={<AdminAccountsPage />} />
                     </Route>
                   </Route>

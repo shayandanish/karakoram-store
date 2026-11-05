@@ -113,6 +113,10 @@ const siteSettingsSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    enableCustomerEmail: {
+      type: Boolean,
+      default: true,
+    },
     enableCod: {
       type: Boolean,
       default: true,

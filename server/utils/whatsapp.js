@@ -180,35 +180,47 @@ export async function sendWhatsAppNotification(order, event) {
 
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v19.0';
+  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v27.0';
+  const apiBaseUrl = (process.env.WHATSAPP_API_URL || 'https://graph.facebook.com').replace(/\/+$/, '');
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const templateName = process.env.WHATSAPP_TEMPLATE_NAME?.trim();
+  const templateLanguage = process.env.WHATSAPP_TEMPLATE_LANGUAGE || 'en';
 
   const messageText = buildWhatsAppMessage(order, event, clientUrl);
 
-  // If Meta API credentials are not provided, operate in dev/mock mode
+  // Do not claim delivery in development when the Cloud API is not configured.
   if (!token || !phoneId) {
-    console.log(
-      `[WhatsApp] (Dev/Simulation) Message to +${normalizedPhone} for event "${event}":\n${messageText}`
-    );
     return {
-      success: true,
-      simulated: true,
-      messageId: `sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      success: false,
+      error: 'WhatsApp Cloud API is not configured. Set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID.',
     };
   }
 
   // Real Meta Cloud API Call
   try {
-    const url = `https://graph.facebook.com/${apiVersion}/${phoneId}/messages`;
+    const url = `${apiBaseUrl}/${apiVersion}/${phoneId}/messages`;
+    const customerName = order.shippingAddress?.name || order.guestName || 'Customer';
+    const displayOrderId = order.orderId || String(order._id || '');
+    const trackingUrl = `${clientUrl}/track-order?orderId=${encodeURIComponent(displayOrderId)}&phone=${encodeURIComponent(phone)}`;
     const payload = {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: normalizedPhone,
-      type: 'text',
-      text: {
-        preview_url: true,
-        body: messageText,
-      },
+      ...(templateName ? {
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: templateLanguage },
+          components: [{
+            type: 'body',
+            parameters: [customerName, displayOrderId, event.replaceAll('_', ' '), trackingUrl]
+              .map((text) => ({ type: 'text', text })),
+          }],
+        },
+      } : {
+        type: 'text',
+        text: { preview_url: true, body: messageText },
+      }),
     };
 
     const response = await fetch(url, {

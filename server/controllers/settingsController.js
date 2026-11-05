@@ -43,6 +43,10 @@ const settingsSchema = z.object({
   storeTagline: z.string().trim().max(160).optional(),
   storeDescription: z.string().trim().max(500).optional(),
   pageContent: z.object({
+    announcement: z.object({ active: z.boolean(), text: z.string().trim().max(240), linkLabel: z.string().trim().max(60), linkUrl: z.string().trim().max(500), startsAt: z.string().trim().max(40), endsAt: z.string().trim().max(40) }).optional(),
+    promotion: z.object({ active: z.boolean(), title: z.string().trim().max(120), text: z.string().trim().max(300), imageUrl: z.string().trim().max(2048), linkLabel: z.string().trim().max(60), linkUrl: z.string().trim().max(500), startsAt: z.string().trim().max(40), endsAt: z.string().trim().max(40) }).optional(),
+    navigation: z.object({ order: z.array(z.enum(['home','shop','trackOrder','about','contact'])).length(5).optional(), visibility: z.object({ home: z.boolean(), shop: z.boolean(), trackOrder: z.boolean(), about: z.boolean(), contact: z.boolean() }).optional() }).optional(),
+    trackOrder: z.object({ intro: z.string().trim().max(500), seoTitle: z.string().trim().max(120), seoDescription: z.string().trim().max(300) }).optional(),
     home: z.object({ heroTitle: z.string().trim().max(160), heroDescription: z.string().trim().max(500), heroButton: z.string().trim().min(1).max(80), categoryTitle: z.string().trim().max(100), featuredTitle: z.string().trim().max(100), sectionOrder: z.array(z.enum(['hero','categories','featured','promises','regions'])).length(5).optional(), visibility: z.object({ categories: z.boolean(), featured: z.boolean(), promises: z.boolean(), regions: z.boolean() }).optional() }).optional(),
     about: z.object({ intro: z.string().trim().max(500), story: z.string().trim().max(3000), sections: z.array(z.object({ heading: z.string().trim().min(1).max(120), body: z.string().trim().min(1).max(3000), imageUrl: z.string().trim().max(2048).optional().default(''), imageAlt: z.string().trim().max(160).optional().default('') })).max(8).optional(), founders: z.array(z.object({ name: z.string().trim().min(1).max(100), role: z.string().trim().min(1).max(60) })).max(10), seoTitle: z.string().trim().max(120).optional(), seoDescription: z.string().trim().max(300).optional() }).optional(),
     contact: z.object({ intro: z.string().trim().max(500), responseText: z.string().trim().max(300), seoTitle: z.string().trim().max(120), seoDescription: z.string().trim().max(300) }).optional(),
@@ -70,6 +74,7 @@ const settingsSchema = z.object({
   contactPhone: z.string().trim().max(40).optional(),
   contactEmail: z.string().trim().email().max(160).or(z.literal('')).optional(),
   enableCustomerWhatsApp: z.boolean().optional(),
+  enableCustomerEmail: z.boolean().optional(),
   enableEasypaisa: z.boolean().optional(),
   enableCod: z.boolean().optional(),
   enableBankTransfer: z.boolean().optional(),
@@ -121,6 +126,7 @@ export const serializeSettings = (settings) => ({
   contactPhone: settings.contactPhone || '+923495144486',
   contactEmail: settings.contactEmail || 'hello@karakoramstore.com',
   enableCustomerWhatsApp: Boolean(settings.enableCustomerWhatsApp),
+  enableCustomerEmail: settings.enableCustomerEmail !== false,
   enableEasypaisa: resolvePaymentMethods(settings).find((method) => method.id === 'easypaisa').enabled,
   enableCod: resolvePaymentMethods(settings).find((method) => method.id === 'cod').enabled,
   enableBankTransfer: resolvePaymentMethods(settings).find((method) => method.id === 'bank_transfer').enabled,
@@ -218,6 +224,7 @@ export const adminUpdateSettings = async (req, res, next) => {
       'contactPhone',
       'contactEmail',
       'enableCustomerWhatsApp',
+      'enableCustomerEmail',
       'enableEasypaisa',
     ];
 

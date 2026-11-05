@@ -1,5 +1,6 @@
 // ── Contact Page ───────────────────────────────────────────────
 import { useState } from 'react';
+import api from '../lib/axios';
 import { getCleanWhatsAppNumber } from '../lib/utils';
 import { validatePhoneNumber, COUNTRY_CODES } from '../lib/phoneUtils';
 import SEO from '../components/ui/SEO';
@@ -11,13 +12,14 @@ export default function ContactPage() {
   const pageCopy = settings.pageContent.contact;
   const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [dialCode, setDialCode] = useState('+92');
 
   const selectedCountry = COUNTRY_CODES.find((country) => country.code === dialCode) ?? COUNTRY_CODES[0];
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setFormError('');
     setPhoneError('');
@@ -40,16 +42,32 @@ export default function ContactPage() {
       }
     }
 
-    if (wa) {
+    const whatsAppUrl = wa ? (() => {
       const message =
         `*Customer Inquiry - ${settings.storeName}*\n\n` +
         `• Name: ${form.name.trim()}\n` +
         `• Email: ${form.email.trim()}\n` +
         `• Phone: ${form.phone.trim() ? `${dialCode} ${form.phone.trim()}` : 'Not provided'}\n` +
         `• Message: ${form.message.trim()}`;
-      window.open(`https://wa.me/${wa}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+      return `https://wa.me/${wa}?text=${encodeURIComponent(message)}`;
+    })() : '';
+    const whatsAppWindow = whatsAppUrl ? window.open('about:blank', '_blank') : null;
+    setSubmitting(true);
+    try {
+      await api.post('/contact', {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() ? `${dialCode} ${form.phone.trim()}` : '',
+        message: form.message.trim(),
+      });
+      setSent(true);
+      if (whatsAppWindow && !whatsAppWindow.closed) whatsAppWindow.location.href = whatsAppUrl;
+    } catch (error) {
+      if (whatsAppWindow && !whatsAppWindow.closed) whatsAppWindow.close();
+      setFormError(error?.response?.data?.message || 'Could not send your message. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
-    setSent(true);
   };
 
   const inputClass =
@@ -88,7 +106,7 @@ export default function ContactPage() {
 
             {sent && (
               <div className="mb-6 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
-                Your WhatsApp message is ready. Send it in WhatsApp to reach our team.
+                Your message has been sent to our team. {wa ? 'A WhatsApp draft is also ready if you want to send it there.' : ''}
               </div>
             )}
 
@@ -180,9 +198,10 @@ export default function ContactPage() {
               <button
                 id="contact-submit-btn"
                 type="submit"
-                className="inline-flex min-h-12 items-center justify-center border border-mountain-900 bg-mountain-900 px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-mountain-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2"
+                disabled={submitting}
+                className="inline-flex min-h-12 items-center justify-center border border-mountain-900 bg-mountain-900 px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-mountain-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apricot-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
               >
-                Send
+                {submitting ? 'Sending…' : 'Send'}
               </button>
             </form>
           </section>

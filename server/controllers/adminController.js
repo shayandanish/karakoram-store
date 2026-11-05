@@ -12,6 +12,7 @@ import { deleteFirebaseUser, getFirebaseAuth } from '../utils/firebaseAdmin.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
 import { delCacheByPrefix } from '../utils/cache.js';
 import { getRevenueStartDate } from '../utils/dashboardStats.js';
+import { getOverdueOrderFilters } from '../utils/orderAging.js';
 
 /* ─────────────────────────────────────────────
    PRODUCTS
@@ -457,6 +458,7 @@ export const adminGetOrders = async (req, res, next) => {
       paymentStatus,
       paymentMethod,
       proof,
+      overdue,
       search,
       page = 1,
       limit = 20,
@@ -482,6 +484,15 @@ export const adminGetOrders = async (req, res, next) => {
     if (proof === 'uploaded') {
       filter.paymentStatus = 'pending';
       filter.paymentScreenshot = { $exists: true, $nin: ['', null] };
+    }
+
+    if (overdue) {
+      const overdueFilters = getOverdueOrderFilters();
+      if (!Object.hasOwn(overdueFilters, overdue)) {
+        res.status(400);
+        throw new Error('Invalid overdue order filter');
+      }
+      filter.$and = [...(filter.$and || []), overdueFilters[overdue]];
     }
 
     if (paymentMethod && paymentMethod !== 'all') {
@@ -550,15 +561,10 @@ export const adminGetOrders = async (req, res, next) => {
         searchConditions.push({ _id: q });
       }
 
-      if (Object.keys(filter).length > 0) {
-        filter.$and = [{ ...filter }, { $or: searchConditions }];
-        // clear top-level filters that are now in $and
-        delete filter.orderStatus;
-        delete filter.paymentStatus;
-        delete filter.createdAt;
-      } else {
-        filter.$or = searchConditions;
-      }
+      const baseFilter = { ...filter };
+      Object.keys(filter).forEach((key) => delete filter[key]);
+      if (Object.keys(baseFilter).length > 0) filter.$and = [baseFilter, { $or: searchConditions }];
+      else filter.$or = searchConditions;
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -638,6 +644,11 @@ export const adminUpdateOrder = async (req, res, next) => {
 
     const previousStatus = order.orderStatus;
     const previousTracking = order.shipment?.trackingId || '';
+    const previousCourierName = order.shipment?.courierName || '';
+    const previousTrackingUrl = order.shipment?.trackingUrl || '';
+    const dateOnly = (value) => value ? new Date(value).toISOString().slice(0, 10) : '';
+    const previousShippedAt = dateOnly(order.shipment?.shippedAt);
+    const previousEstimatedDelivery = dateOnly(order.shipment?.estimatedDelivery);
 
     // Handle status change
     let statusChanged = false;
@@ -674,22 +685,38 @@ export const adminUpdateOrder = async (req, res, next) => {
     let shipmentChanged = false;
     if (data.shipment) {
       if (!order.shipment) order.shipment = {};
-      if (data.shipment.courierName !== undefined) order.shipment.courierName = data.shipment.courierName;
+      if (data.shipment.courierName !== undefined) {
+        if (data.shipment.courierName !== previousCourierName) shipmentChanged = true;
+        order.shipment.courierName = data.shipment.courierName;
+      }
       if (data.shipment.trackingId !== undefined) {
         if (data.shipment.trackingId !== previousTracking) shipmentChanged = true;
         order.shipment.trackingId = data.shipment.trackingId;
       }
-      if (data.shipment.trackingUrl !== undefined) order.shipment.trackingUrl = data.shipment.trackingUrl;
+      if (data.shipment.trackingUrl !== undefined) {
+        if (data.shipment.trackingUrl !== previousTrackingUrl) shipmentChanged = true;
+        order.shipment.trackingUrl = data.shipment.trackingUrl;
+      }
 
       if (data.shipment.shippedAt) {
+        if (dateOnly(data.shipment.shippedAt) !== previousShippedAt) shipmentChanged = true;
         order.shipment.shippedAt = new Date(data.shipment.shippedAt);
       } else if (order.orderStatus === 'shipped' && !order.shipment.shippedAt) {
         order.shipment.shippedAt = new Date();
+        shipmentChanged = true;
       }
 
       if (data.shipment.estimatedDelivery) {
+        if (dateOnly(data.shipment.estimatedDelivery) !== previousEstimatedDelivery) shipmentChanged = true;
         order.shipment.estimatedDelivery = new Date(data.shipment.estimatedDelivery);
       }
+    }
+
+    if (
+      (statusChanged || shipmentChanged) &&
+      ['shipped', 'out_for_delivery'].includes(order.orderStatus)
+    ) {
+      order.shipment.lastAdminUpdateAt = new Date();
     }
 
     // Handle payment status
@@ -803,6 +830,7 @@ export const adminGetStats = async (req, res, next) => {
       paymentStatus: 'pending',
       paymentScreenshot: { $exists: true, $nin: ['', null] },
     };
+    const overdueFilters = getOverdueOrderFilters();
     const analyticsStartDate = new Date();
     analyticsStartDate.setUTCHours(0, 0, 0, 0);
     analyticsStartDate.setUTCDate(analyticsStartDate.getUTCDate() - (analyticsPeriod === '7d' ? 6 : 29));
@@ -822,6 +850,12 @@ export const adminGetStats = async (req, res, next) => {
       dailySales,
       topProducts,
       newCustomers,
+      overduePendingCount,
+      overduePendingOldest,
+      overdueProofCount,
+      overdueProofOldest,
+      overdueShipmentCount,
+      overdueShipmentOldest,
     ] = await Promise.all([
       Order.countDocuments(),
       Order.aggregate([
@@ -866,6 +900,18 @@ export const adminGetStats = async (req, res, next) => {
         { $project: { _id: 0, productId: '$_id.product', name: '$_id.name', units: 1, revenue: 1 } },
       ]),
       User.countDocuments({ role: 'customer', createdAt: { $gte: analyticsStartDate } }),
+      Order.countDocuments(overdueFilters.pending),
+      Order.findOne(overdueFilters.pending).sort({ createdAt: 1 }).select('createdAt').lean(),
+      Order.countDocuments(overdueFilters.proof),
+      Order.aggregate([
+        { $match: overdueFilters.proof },
+        { $addFields: { overdueSince: { $ifNull: ['$paymentScreenshotUploadedAt', '$createdAt'] } } },
+        { $sort: { overdueSince: 1 } },
+        { $limit: 1 },
+        { $project: { _id: 0, overdueSince: 1 } },
+      ]),
+      Order.countDocuments(overdueFilters.shipment),
+      Order.findOne(overdueFilters.shipment).sort({ 'shipment.lastAdminUpdateAt': 1, 'shipment.shippedAt': 1 }).select('shipment.lastAdminUpdateAt shipment.shippedAt').lean(),
     ]);
 
     const isAdministrator = req.user?.role === 'admin';
@@ -890,7 +936,16 @@ export const adminGetStats = async (req, res, next) => {
         newCustomers,
         },
       } : {}),
-      ...(canViewOrders ? { pendingOrders, recentOrders, paymentProofReviewCount } : {}),
+      ...(canViewOrders ? {
+        pendingOrders,
+        recentOrders,
+        paymentProofReviewCount,
+        overdueTasks: {
+          pending: { count: overduePendingCount, oldestAt: overduePendingOldest?.createdAt || null },
+          proof: { count: overdueProofCount, oldestAt: overdueProofOldest?.[0]?.overdueSince || null },
+          shipment: { count: overdueShipmentCount, oldestAt: overdueShipmentOldest?.shipment?.lastAdminUpdateAt || overdueShipmentOldest?.shipment?.shippedAt || null },
+        },
+      } : {}),
       ...(canViewCatalog ? { lowStockProducts, lowStockCount, outOfStockCount } : {}),
     });
   } catch (err) { next(err); }
