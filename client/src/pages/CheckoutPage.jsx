@@ -75,12 +75,14 @@ const MOBILE_WALLET_LOGOS = {
   easypaisa: {
     src: '/easypaisa-logo.png',
     alt: 'Easypaisa',
-    className: 'h-7 w-auto max-w-[96px]',
+    className: 'h-6 max-h-full w-auto max-w-full',
+    containerClassName: 'w-24',
   },
   jazzcash: {
     src: '/jazzcash-logo.svg',
     alt: 'JazzCash',
-    className: 'h-8 w-auto max-w-[56px]',
+    className: 'h-7 max-h-full w-auto max-w-full',
+    containerClassName: 'w-16',
   },
 };
 
@@ -680,7 +682,11 @@ export default function CheckoutPage() {
                   <div className="rounded-xl border border-cream-300 bg-cream-50/60 p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-cream-300 pb-4">
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-11 w-16 shrink-0 items-center justify-center rounded-md border border-cream-300 bg-white p-1.5">
+                        <div
+                          className={`flex h-11 ${
+                            walletLogo.containerClassName || 'w-20'
+                          } shrink-0 items-center justify-center overflow-hidden rounded-md border border-cream-300 bg-white p-1.5`}
+                        >
                           <img
                             src={walletLogo.src}
                             alt={walletLogo.alt}
