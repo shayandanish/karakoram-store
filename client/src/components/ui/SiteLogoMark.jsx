@@ -1,4 +1,4 @@
-// ── SiteLogoMark – admin-managed logo with the default K mark as fallback ─────
+// ── SiteLogoMark – admin-managed logo with the default store initial as fallback ─────
 import { useState } from 'react';
 import { useSiteSettings } from '../../hooks/useSiteSettings';
 import { cloudinaryImage, cloudinarySrcSet } from '../../lib/utils';
@@ -73,7 +73,7 @@ export default function SiteLogoMark({
         className={`text-white font-display leading-none ${dimensions.text}`}
         aria-hidden="true"
       >
-        K
+        {(settings?.storeName || 'H')[0]?.toUpperCase() || 'H'}
       </span>
     </div>
   );

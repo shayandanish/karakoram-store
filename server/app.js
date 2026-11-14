@@ -151,7 +151,7 @@ app.use(csrfProtection({ skip: isPublicStateChanging }));
 app.get('/', (req, res) => {
   res.json({
     status: 'success',
-    message: 'Welcome to Karakoram Store API',
+    message: 'Welcome to Hunzora API',
     endpoints: {
       health: '/api/health',
       products: '/api/products',
@@ -162,7 +162,7 @@ app.get('/', (req, res) => {
 });
 
 app.get(['/api/health', '/app/health'], (req, res) => {
-  res.json({ status: 'success', message: 'Karakoram Store API is running' });
+  res.json({ status: 'success', message: 'Hunzora API is running' });
 });
 
 // ── API Routes (Support both /api and /app) ──

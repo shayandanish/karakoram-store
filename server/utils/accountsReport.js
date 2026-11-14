@@ -392,7 +392,7 @@ export async function buildAccountsXlsx({
   ]));
 
   const summaryRows = [
-    [cell('Karakoram Store | Accounts Report', titleStyle), cell('', titleStyle)],
+    [cell('Hunzora | Accounts Report', titleStyle), cell('', titleStyle)],
     [cell('Report period'), cell(`${range.startDate} to ${range.endDate}`)],
     [cell('Timezone'), cell(range.timeZone)],
     [cell('Currency'), cell('PKR')],

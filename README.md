@@ -1,4 +1,4 @@
-# Karakoram Store
+# Hunzora
 
 A Pakistan-focused artisan storefront for products from Hunza and Gilgit-Baltistan. The app includes a React storefront, an Express API, MongoDB persistence, Firebase-backed authentication, manual Easypaisa checkout, order tracking, and an admin workspace.
 

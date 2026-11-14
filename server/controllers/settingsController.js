@@ -3,7 +3,7 @@ import SiteSettings from '../models/SiteSettings.js';
 import { deleteStoredImage } from './uploadController.js';
 import { PAYMENT_METHOD_DEFAULTS, resolvePaymentMethods } from '../utils/paymentMethods.js';
 
-const DEFAULT_LOGO_ALT = 'Karakoram Store';
+const DEFAULT_LOGO_ALT = 'Hunzora';
 
 const logoSchema = z.object({
   url: z.string().trim().max(2048).optional().default(''),
@@ -89,7 +89,7 @@ export const serializeSettings = (settings) => ({
         ? settings.logo.alt
         : settings.storeName || DEFAULT_LOGO_ALT,
   },
-  storeName: settings.storeName || 'Karakoram Store',
+  storeName: settings.storeName || 'Hunzora',
   storeTagline:
     typeof settings.storeTagline === 'string'
       ? settings.storeTagline

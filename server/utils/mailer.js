@@ -102,7 +102,7 @@ export const generateOtp = () => {
  */
 export const sendOtpEmail = async ({ to, otp, userName = 'Customer' }) => {
   const settings = await SiteSettings.getSingleton();
-  const storeName = settings.storeName || 'Karakoram Store';
+  const storeName = settings.storeName || 'Hunzora';
   const from =
     process.env.EMAIL_FROM ||
     (process.env.SMTP_USER
@@ -187,7 +187,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#b45309',
         heading: 'Action Required: Pending Payment for Order',
         subtitle: `Your items are safely reserved for Order #${orderId}. Please complete your transfer so our team can pack and dispatch your parcel.`,
-        subject: `Payment Reminder: Pending Payment for #${orderId} - Karakoram Store`,
+        subject: `Payment Reminder: Pending Payment for #${orderId} - Hunzora`,
       };
     case 'order_placed':
     case 'pending':
@@ -197,7 +197,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#92400e',
         heading: 'Thank You! Your Order has been Placed',
         subtitle: `We received your order #${orderId} and our team in Gilgit-Baltistan is preparing it.`,
-        subject: `Order Confirmation: #${orderId} - Karakoram Store`,
+        subject: `Order Confirmation: #${orderId} - Hunzora`,
       };
     case 'confirmed':
       return {
@@ -206,7 +206,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#1e40af',
         heading: 'Your Order is Confirmed',
         subtitle: `We have verified order #${orderId}. It is now moving to our packing queue.`,
-        subject: `Order Confirmed: #${orderId} - Karakoram Store`,
+        subject: `Order Confirmed: #${orderId} - Hunzora`,
       };
     case 'processing':
       return {
@@ -215,7 +215,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#3730a3',
         heading: 'Your Order is in Processing',
         subtitle: `Our artisans and fulfillment team are putting together your authentic Hunza products.`,
-        subject: `Order in Processing: #${orderId} - Karakoram Store`,
+        subject: `Order in Processing: #${orderId} - Hunzora`,
       };
     case 'packed':
       return {
@@ -224,7 +224,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#6b21a8',
         heading: 'Your Parcel is Securely Packed',
         subtitle: `Order #${orderId} has passed quality inspection and is waiting for courier pickup.`,
-        subject: `Order Packed: #${orderId} - Karakoram Store`,
+        subject: `Order Packed: #${orderId} - Hunzora`,
       };
     case 'shipped':
     case 'shipment_updated':
@@ -234,7 +234,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#86198f',
         heading: 'Your Package is on the Way',
         subtitle: `Your parcel has been handed over to the courier. Tracking details are below.`,
-        subject: `Order Dispatched: #${orderId} - Tracking Information - Karakoram Store`,
+        subject: `Order Dispatched: #${orderId} - Tracking Information - Hunzora`,
       };
     case 'out_for_delivery':
       return {
@@ -243,7 +243,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#9a3412',
         heading: 'Your Package is Out for Delivery Today',
         subtitle: `The courier rider is out to deliver your package to your doorstep today.`,
-        subject: `Out for Delivery: #${orderId} - Karakoram Store`,
+        subject: `Out for Delivery: #${orderId} - Hunzora`,
       };
     case 'delivered':
       return {
@@ -251,8 +251,8 @@ function getEventMeta(event, orderId) {
         badgeBg: '#dcfce7',
         badgeColor: '#166534',
         heading: 'Package Delivered Successfully',
-        subtitle: `Order #${orderId} has been delivered. We hope you enjoy your Karakoram treasures!`,
-        subject: `Order Delivered: #${orderId} - Karakoram Store`,
+        subtitle: `Order #${orderId} has been delivered. We hope you enjoy your Hunzora treasures!`,
+        subject: `Order Delivered: #${orderId} - Hunzora`,
       };
     case 'cancelled':
       return {
@@ -261,7 +261,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#9f1239',
         heading: 'Order Cancelled',
         subtitle: `Order #${orderId} has been cancelled.`,
-        subject: `Order Cancelled: #${orderId} - Karakoram Store`,
+        subject: `Order Cancelled: #${orderId} - Hunzora`,
       };
     case 'returned':
       return {
@@ -270,7 +270,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#334155',
         heading: 'Order Return Processed',
         subtitle: `Your return request for order #${orderId} has been recorded.`,
-        subject: `Return Processed: #${orderId} - Karakoram Store`,
+        subject: `Return Processed: #${orderId} - Hunzora`,
       };
     default:
       return {
@@ -279,7 +279,7 @@ function getEventMeta(event, orderId) {
         badgeColor: '#1e293b',
         heading: `Order Status Update: ${event}`,
         subtitle: `Your order #${orderId} status has been updated.`,
-        subject: `Order Update: #${orderId} - Karakoram Store`,
+        subject: `Order Update: #${orderId} - Hunzora`,
       };
   }
 }
@@ -334,7 +334,7 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
     }
 
     const paymentSettings = await SiteSettings.getSingleton();
-    const storeName = paymentSettings.storeName || 'Karakoram Store';
+    const storeName = paymentSettings.storeName || 'Hunzora';
     const fromAddress = (process.env.SMTP_USER || process.env.EMAIL_USER || 'inamkarim348@gmail.com').trim();
     const from = {
       name: storeName,
@@ -366,8 +366,8 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
       : configuredPaymentMethod?.instructions || '';
     const contactWhatsApp = paymentSettings.whatsappNumber || '923495144486';
     const meta = getEventMeta(event, displayOrderId);
-    meta.subject = meta.subject.replace(/Karakoram Store/g, storeName);
-    meta.subtitle = meta.subtitle.replace(/Karakoram Store/g, storeName);
+    meta.subject = meta.subject.replace(/Karakoram Store|Hunzora/g, storeName);
+    meta.subtitle = meta.subtitle.replace(/Karakoram Store|Hunzora/g, storeName);
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const trackUrl = `${clientUrl}/track-order?orderId=${encodeURIComponent(order.orderId || order._id)}&phone=${encodeURIComponent(order.shippingAddress?.phone || order.guestPhone || '')}`;
 
@@ -694,7 +694,7 @@ export async function sendOrderNotificationEmail(order, event, recipient = null)
 
 export const sendContactReplyEmail = async ({ to, customerName, body }) => {
   const settings = await SiteSettings.getSingleton();
-  const storeName = settings.storeName || 'Karakoram Store';
+  const storeName = settings.storeName || 'Hunzora';
   const from = process.env.EMAIL_FROM || (process.env.SMTP_USER
     ? `${storeName} <${process.env.SMTP_USER}>`
     : `${storeName} <onboarding@resend.dev>`);

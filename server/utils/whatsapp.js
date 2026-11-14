@@ -62,7 +62,7 @@ export function buildWhatsAppMessage(order, event, trackingBaseUrl) {
       }
 
       return (
-        '🏔️ *Karakoram Store — Order Received!*\n\n' +
+        '🏔️ *Hunzora — Order Received!*\n\n' +
         'Assalam o Alaikum ' + customerName + ',\n' +
         'Thank you for your order! Your Order ID is *' + displayId + '*.\n\n' +
         '*Order Total:* ' + fmtPKR(order.total) + '\n' +
@@ -109,7 +109,7 @@ export function buildWhatsAppMessage(order, event, trackingBaseUrl) {
         (trackingId ? `*Tracking / CN:* ${trackingId}\n` : '') +
         (estDelivery ? `*Estimated Delivery:* ${estDelivery}\n` : '') +
         (trackingUrl ? `*Courier Link:* ${trackingUrl}\n` : '') +
-        `\nTrack live updates on Karakoram Store:\n${trackUrl}`
+        `\nTrack live updates on Hunzora:\n${trackUrl}`
       );
 
     case 'shipment_updated':

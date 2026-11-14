@@ -57,7 +57,7 @@ export default async function handler(req, res) {
     return res.status(502).send('Product preview returned incomplete data');
   }
 
-  const title = `${product.name} | Karakoram Store`;
+  const title = `${product.name} | Hunzora`;
   const description = String(product.description || 'Authentic products from the Karakoram mountains.').slice(0, 300);
   const canonicalUrl = new URL(`/products/${encodeURIComponent(product.slug)}`, siteUrl).href;
   const image = resolveImageUrl(product.images?.[0]?.url, siteUrl) ||
@@ -78,7 +78,7 @@ export default async function handler(req, res) {
 <meta name="description" content="${escapedDescription}">
 <link rel="canonical" href="${escapedCanonical}">
 <meta property="og:type" content="product">
-<meta property="og:site_name" content="Karakoram Store">
+<meta property="og:site_name" content="Hunzora">
 <meta property="og:title" content="${escapedTitle}">
 <meta property="og:description" content="${escapedDescription}">
 <meta property="og:url" content="${escapedCanonical}">

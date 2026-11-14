@@ -42,11 +42,11 @@ const siteSettingsSchema = new mongoose.Schema(
     logo: {
       url: { type: String, default: '', trim: true },
       publicId: { type: String, default: '', trim: true },
-      alt: { type: String, default: 'Karakoram Store', trim: true },
+      alt: { type: String, default: 'Hunzora', trim: true },
     },
     storeName: {
       type: String,
-      default: 'Karakoram Store',
+      default: 'Hunzora',
       trim: true,
       maxlength: 120,
     },

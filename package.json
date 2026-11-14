@@ -2,7 +2,7 @@
   "name": "karakoram-store",
   "version": "1.0.0",
   "private": true,
-  "description": "Karakoram Store monorepo — React (Vite) storefront + Express/MongoDB API",
+  "description": "Hunzora monorepo — React (Vite) storefront + Express/MongoDB API",
   "scripts": {
     "dev": "concurrently -k -n server,client -c green,cyan \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm --prefix server run dev",

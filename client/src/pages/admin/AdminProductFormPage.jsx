@@ -446,7 +446,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
           {isEditMode ? `Edit "${name || 'Product'}"` : 'Create New Product'}
         </h1>
         <p className="text-xs sm:text-sm text-stone-500 mt-1">
-          Fill in the information below to {isEditMode ? 'update' : 'publish'} this Karakoram product.
+          Fill in the information below to {isEditMode ? 'update' : 'publish'} this Hunzora product.
         </p>
       </div>
 
