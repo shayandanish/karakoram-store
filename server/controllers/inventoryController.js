@@ -327,3 +327,15 @@ export const adminGetReorderAlerts = async (req, res, next) => {
     next(error);
   }
 };
+
+export const adminGetSuppliersList = async (req, res, next) => {
+  try {
+    const suppliers = await Supplier.find({ isActive: true })
+      .select('name contactName phone email')
+      .sort({ name: 1 })
+      .lean();
+    res.json({ suppliers });
+  } catch (error) {
+    next(error);
+  }
+};

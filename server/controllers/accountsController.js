@@ -7,6 +7,7 @@ import AccountExpense from '../models/AccountExpense.js';
 import AccountAuditLog from '../models/AccountAuditLog.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
+import StockMovement from '../models/StockMovement.js';
 import { getAccountsDateRange, calculateAccountsReport, buildAccountsXlsx } from '../utils/accountsReport.js';
 import { fromMinorUnits, toMinorUnits } from '../utils/money.js';
 
@@ -145,6 +146,22 @@ export const adminReversePurchase = async (req, res, next) => {
         totalCostMinor: original.totalCostMinor,
         reason: data.reason,
       }, session);
+
+      // Audit stock reversal in warehouse StockMovement log
+      const reversalMovements = original.lines.map((line) => ({
+        product: line.product,
+        productName: line.productName,
+        variantLabel: line.variantLabel,
+        type: 'damage_loss',
+        quantityChange: -line.quantity,
+        stockBefore: line.stockAfter,
+        stockAfter: line.stockBefore,
+        reason: `Purchase Reversal #${original.reference || original._id}: ${data.reason}`,
+        reference: String(reversal._id),
+        actor: req.user._id,
+        actorName: req.user.name || 'Accountant',
+      }));
+      await StockMovement.insertMany(reversalMovements, { session });
     });
     res.status(201).json({ purchase: reversal });
   } catch (error) {
@@ -557,6 +574,23 @@ export const adminCreatePurchase = async (req, res, next) => {
         lineCount: lines.length,
         kind: data.kind,
       }, session);
+
+      // Audit in warehouse StockMovement log
+      const purchaseMovements = lines.map((line) => ({
+        product: line.product,
+        productName: line.productName,
+        variantLabel: line.variantLabel,
+        type: data.kind === 'opening_stock' ? 'goods_received' : 'purchase_bill',
+        quantityChange: line.quantity,
+        stockBefore: line.stockBefore,
+        stockAfter: line.stockAfter,
+        reason: `Purchase Bill #${data.reference || purchase._id} (${supplierName})`,
+        reference: data.reference || String(purchase._id),
+        actor: req.user._id,
+        actorName: req.user.name || 'Accountant',
+      }));
+      await StockMovement.insertMany(purchaseMovements, { session });
+
       req.createdPurchase = purchase;
     });
 

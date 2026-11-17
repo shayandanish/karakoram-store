@@ -99,11 +99,9 @@ export default function AdminInventoryPage() {
   const { data: suppliersData } = useQuery({
     queryKey: ['suppliers-list'],
     queryFn: async () => {
-      const res = await api.get('/admin/accounts/suppliers');
+      const res = await api.get('/admin/suppliers');
       return res.data?.suppliers || [];
     },
-    // Optional fallback if staff doesn't have accounts permission
-    retry: false,
   });
   const suppliers = suppliersData || [];
 

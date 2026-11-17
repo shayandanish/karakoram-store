@@ -413,11 +413,10 @@ export default function AdminAccountsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 py-3 px-4 border-b-2 font-semibold whitespace-nowrap transition-colors ${
-                isActive
-                  ? 'border-apricot-600 text-mountain-900 bg-apricot-50/40 rounded-t-lg'
-                  : 'border-transparent text-stone-500 hover:text-stone-800 hover:border-stone-300'
-              }`}
+              className={`flex items-center gap-2 py-3 px-4 border-b-2 font-semibold whitespace-nowrap transition-colors ${isActive
+                ? 'border-apricot-600 text-mountain-900 bg-apricot-50/40 rounded-t-lg'
+                : 'border-transparent text-stone-500 hover:text-stone-800 hover:border-stone-300'
+                }`}
             >
               <span>{tab.label}</span>
               {tab.id === 'purchases' && unpaidPurchasesCount > 0 && (
@@ -965,7 +964,7 @@ export default function AdminAccountsPage() {
                               type="number"
                               min="0"
                               step="0.01"
-                              placeholder="e.g. 10"
+                              placeholder="20"
                               value={line.unitCost}
                               onChange={(event) => updatePurchaseLine(index, 'unitCost', event.target.value)}
                             />
@@ -1150,15 +1149,14 @@ export default function AdminAccountsPage() {
                               )}
                             </td>
                             <td className="py-3 px-3">
-                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold capitalize ${
-                                purchase.paymentStatus === 'paid'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : purchase.paymentStatus === 'partial'
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold capitalize ${purchase.paymentStatus === 'paid'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : purchase.paymentStatus === 'partial'
                                   ? 'bg-amber-100 text-amber-800'
                                   : purchase.paymentStatus === 'reversed'
-                                  ? 'bg-stone-100 text-stone-600'
-                                  : 'bg-rose-100 text-rose-800'
-                              }`}>
+                                    ? 'bg-stone-100 text-stone-600'
+                                    : 'bg-rose-100 text-rose-800'
+                                }`}>
                                 {purchase.paymentStatus}
                               </span>
                             </td>
@@ -1304,11 +1302,10 @@ export default function AdminAccountsPage() {
                         key={cat}
                         type="button"
                         onClick={() => setExpenseForm((form) => ({ ...form, category: cat }))}
-                        className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition ${
-                          expenseForm.category === cat
-                            ? 'bg-mountain-900 text-white border-mountain-900 shadow-2xs'
-                            : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
-                        }`}
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition ${expenseForm.category === cat
+                          ? 'bg-mountain-900 text-white border-mountain-900 shadow-2xs'
+                          : 'bg-stone-50 text-stone-600 border-stone-200 hover:bg-stone-100'
+                          }`}
                       >
                         {cat}
                       </button>
@@ -1335,11 +1332,10 @@ export default function AdminAccountsPage() {
                         key={method.id}
                         type="button"
                         onClick={() => setExpenseForm((form) => ({ ...form, paymentMethod: method.id }))}
-                        className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition ${
-                          expenseForm.paymentMethod === method.id
-                            ? 'bg-mountain-900 text-white border-mountain-900 shadow-2xs'
-                            : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
-                        }`}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-semibold border transition ${expenseForm.paymentMethod === method.id
+                          ? 'bg-mountain-900 text-white border-mountain-900 shadow-2xs'
+                          : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-50'
+                          }`}
                       >
                         {method.label}
                       </button>

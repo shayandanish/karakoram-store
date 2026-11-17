@@ -1326,7 +1326,7 @@ export default function AdminProductFormPage() {
   const { data: suppliers = [] } = useQuery({
     queryKey: ['admin-suppliers'],
     queryFn: async () => {
-      const res = await api.get('/admin/accounts/suppliers');
+      const res = await api.get('/admin/suppliers');
       return res.data?.suppliers || [];
     },
   });

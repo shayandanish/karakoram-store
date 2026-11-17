@@ -34,6 +34,7 @@ import {
   adminAdjustStock,
   adminGetStockMovements,
   adminGetReorderAlerts,
+  adminGetSuppliersList,
 } from '../controllers/inventoryController.js';
 import { accountsExportLimiter, accountsLimiter } from '../utils/rateLimiters.js';
 import { requireTrustedAccountsOrigin } from '../middlewares/accountsSecurity.js';
@@ -97,6 +98,7 @@ router.get('/inventory/stock', requireAnyAdminPermission('catalog', 'orders'), a
 router.post('/inventory/adjust', requireAnyAdminPermission('catalog', 'orders'), adminAdjustStock);
 router.get('/inventory/movements', requireAnyAdminPermission('catalog', 'orders'), adminGetStockMovements);
 router.get('/inventory/reorder-alerts', requireAnyAdminPermission('catalog', 'orders'), adminGetReorderAlerts);
+router.get('/suppliers', requireAnyAdminPermission('catalog', 'accounts', 'orders'), adminGetSuppliersList);
 
 // Categories
 router.post('/categories', requireAdminPermission('catalog'), adminCreateCategory);
