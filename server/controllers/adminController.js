@@ -5,6 +5,7 @@ import Category from '../models/Category.js';
 import Artisan from '../models/Artisan.js';
 import Coupon from '../models/Coupon.js';
 import Order from '../models/Order.js';
+import StockMovement from '../models/StockMovement.js';
 import User from '../models/User.js';
 import Review from '../models/Review.js';
 import cloudinary from '../config/cloudinary.js';
@@ -141,14 +142,29 @@ export const adminGetProductById = async (req, res, next) => {
 export const adminCreateProduct = async (req, res, next) => {
   try {
     const data = productSchema.parse(req.body);
-    if (data.variants.some((variant) => variant.stock !== 0)) {
-      res.status(400);
-      throw new Error('Record initial and received stock from Accounts > Purchases');
-    }
     if (data.images) {
       data.images = normalizeProductImages(data.images);
     }
     const product = await Product.create(data);
+
+    // If any variants have initial stock, log stock movement
+    const initialMovements = data.variants
+      .filter((v) => v.stock > 0)
+      .map((v) => ({
+        product: product._id,
+        productName: product.name,
+        variantLabel: v.label,
+        type: 'goods_received',
+        quantityChange: v.stock,
+        stockBefore: 0,
+        stockAfter: v.stock,
+        reason: 'Initial stock on product creation',
+        actor: req.user?._id || null,
+        actorName: req.user?.name || 'Staff Member',
+      }));
+    if (initialMovements.length > 0) {
+      StockMovement.insertMany(initialMovements).catch(() => {});
+    }
 
     // Invalidate product list caches
     await delCacheByPrefix('products:list:').catch(() => {});
@@ -165,17 +181,42 @@ export const adminUpdateProduct = async (req, res, next) => {
       if (!currentProduct) { res.status(404); throw new Error('Product not found'); }
       const currentVariants = new Map(currentProduct.variants.map((variant) => [variant.label, variant]));
       const incomingLabels = new Set(data.variants.map((variant) => variant.label));
+      const stockMovementsToLog = [];
       for (const variant of data.variants) {
         const existing = currentVariants.get(variant.label);
-        if (existing && variant.stock !== existing.stock) {
-          res.status(400);
-          throw new Error('Update inventory quantities from Accounts > Purchases');
+        if (existing) {
+          variant.averageCostMinor = existing.averageCostMinor;
+          if (variant.stock !== existing.stock) {
+            stockMovementsToLog.push({
+              product: currentProduct._id,
+              productName: currentProduct.name,
+              variantLabel: variant.label,
+              type: 'physical_count_correction',
+              quantityChange: variant.stock - existing.stock,
+              stockBefore: existing.stock,
+              stockAfter: variant.stock,
+              reason: 'Product variant edit adjustment',
+              actor: req.user?._id || null,
+              actorName: req.user?.name || 'Staff Member',
+            });
+          }
+        } else if (variant.stock > 0) {
+          stockMovementsToLog.push({
+            product: currentProduct._id,
+            productName: currentProduct.name,
+            variantLabel: variant.label,
+            type: 'physical_count_correction',
+            quantityChange: variant.stock,
+            stockBefore: 0,
+            stockAfter: variant.stock,
+            reason: 'Initial stock on new variant creation',
+            actor: req.user?._id || null,
+            actorName: req.user?.name || 'Staff Member',
+          });
         }
-        if (!existing && variant.stock !== 0) {
-          res.status(400);
-          throw new Error('New variants must start with zero stock; record inventory from Accounts > Purchases');
-        }
-        if (existing) variant.averageCostMinor = existing.averageCostMinor;
+      }
+      if (stockMovementsToLog.length > 0) {
+        StockMovement.insertMany(stockMovementsToLog).catch(() => {});
       }
       if (currentProduct.variants.some((variant) => variant.stock > 0 && !incomingLabels.has(variant.label))) {
         res.status(400);
@@ -674,6 +715,20 @@ export const adminUpdateOrder = async (req, res, next) => {
               { _id: item.product, 'variants.label': item.variantLabel },
               { $inc: { 'variants.$.stock': item.quantity, totalSold: -item.quantity } }
             ).catch((err) => console.error(`Failed to restore stock for product ${item.product}:`, err.message));
+
+            StockMovement.create({
+              product: item.product,
+              productName: item.name || 'Product',
+              variantLabel: item.variantLabel,
+              type: 'order_cancelled',
+              quantityChange: item.quantity,
+              stockBefore: 0,
+              stockAfter: item.quantity,
+              reason: `Order #${order.orderId || order._id} cancellation restock`,
+              reference: order.orderId || String(order._id),
+              actor: req.user?._id || null,
+              actorName: req.user?.name || 'Admin',
+            }).catch(() => {});
           }
         }
         if (order.couponCode) {
@@ -931,6 +986,21 @@ export const adminCreatePosOrder = async (req, res, next) => {
       );
 
       createdOrder = order;
+
+      const posMovements = orderItems.map((item) => ({
+        product: item.product,
+        productName: item.name,
+        variantLabel: item.variantLabel,
+        type: 'order_sale',
+        quantityChange: -item.quantity,
+        stockBefore: 0,
+        stockAfter: 0,
+        reason: `POS Counter Order #${order.orderId}`,
+        reference: order.orderId,
+        actor: req.user?._id || null,
+        actorName: req.user?.name || 'Cashier',
+      }));
+      await StockMovement.insertMany(posMovements, { session });
     });
 
     delCacheByPrefix('products:');

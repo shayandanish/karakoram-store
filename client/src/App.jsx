@@ -34,6 +34,7 @@ import AdminLayout from './components/admin/AdminLayout';
 const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage'));
 const AdminProductsPage = lazy(() => import('./pages/admin/AdminProductsPage'));
 const AdminProductFormPage = lazy(() => import('./pages/admin/AdminProductFormPage'));
+const AdminInventoryPage = lazy(() => import('./pages/admin/AdminInventoryPage'));
 const AdminCategoriesPage = lazy(() => import('./pages/admin/AdminCategoriesPage'));
 const AdminArtisansPage = lazy(() => import('./pages/admin/AdminArtisansPage'));
 const AdminOrdersPage = lazy(() => import('./pages/admin/AdminOrdersPage'));
@@ -78,6 +79,7 @@ export default function App() {
                       <Route path="products" element={<AdminProductsPage />} />
                       <Route path="products/new" element={<AdminProductFormPage />} />
                       <Route path="products/:id/edit" element={<AdminProductFormPage />} />
+                      <Route path="inventory" element={<AdminInventoryPage />} />
                       <Route path="categories" element={<AdminCategoriesPage />} />
                       <Route path="artisans" element={<AdminArtisansPage />} />
                       <Route path="orders" element={<AdminOrdersPage />} />

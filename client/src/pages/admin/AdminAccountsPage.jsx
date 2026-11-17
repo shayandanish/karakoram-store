@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../lib/axios';
 import { fmtDate, fmtPKR } from '../../lib/utils';
 import { useToast } from '../../context/ToastContext';
@@ -76,8 +76,8 @@ function renderPurchaseDueBadge(purchase) {
 
 const TABS = [
   { id: 'report', label: 'Financial Reports', desc: 'P&L, margins, and sales analytics' },
-  { id: 'purchases', label: 'Purchases & Payables', desc: 'Supplier bills, inventory costs & payments' },
-  { id: 'expenses', label: 'Operating Expenses', desc: 'Overhead costs & adjustments' },
+  { id: 'purchases', label: 'Supplier Bills & Payables', desc: 'Supplier bills, payments, vouchers & debts' },
+  { id: 'expenses', label: 'Operating Expenses', desc: 'Overhead costs & cash outflows' },
   { id: 'suppliers', label: 'Suppliers Directory', desc: 'Partner ledger, balances & statements' },
   { id: 'audit', label: 'Audit Trail', desc: 'Historical accounting log' },
 ];
@@ -629,6 +629,26 @@ export default function AdminAccountsPage() {
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'purchases' && (
         <div className="space-y-6">
+          {/* Warehouse Stock vs Financial Bills Notice */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-blue-900">
+            <div className="flex items-center gap-2">
+              <span className="text-base">📦</span>
+              <span>
+                <strong>Physical floor stock, damage write-offs, and count audits</strong> are managed under{' '}
+                <Link to="/admin/inventory" className="font-bold underline hover:text-blue-950">
+                  Inventory & Stock
+                </Link>
+                . Use this section to record supplier purchase bills, payment vouchers, and track outstanding debts.
+              </span>
+            </div>
+            <Link
+              to="/admin/inventory"
+              className="shrink-0 inline-flex items-center gap-1 px-3 py-1 bg-white border border-blue-300 rounded-md font-semibold text-blue-800 hover:bg-blue-50 transition shadow-2xs"
+            >
+              Open Inventory & Stock →
+            </Link>
+          </div>
+
           {/* Outstanding banner */}
           <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>

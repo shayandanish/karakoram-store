@@ -20,6 +20,7 @@ export const getAdminPermissionForPath = (pathname) => {
   if (pathname.startsWith('/admin/activity')) return 'users';
   if (
     pathname.startsWith('/admin/products') ||
+    pathname.startsWith('/admin/inventory') ||
     pathname.startsWith('/admin/categories') ||
     pathname.startsWith('/admin/artisans') ||
     pathname.startsWith('/admin/cities') ||

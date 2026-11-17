@@ -29,6 +29,12 @@ import {
   adminGetExpenses, adminCreateExpense, adminReverseExpense,
   adminGetAccountReport, adminExportAccountReport, adminGetAccountAudit,
 } from '../controllers/accountsController.js';
+import {
+  adminGetStockOverview,
+  adminAdjustStock,
+  adminGetStockMovements,
+  adminGetReorderAlerts,
+} from '../controllers/inventoryController.js';
 import { accountsExportLimiter, accountsLimiter } from '../utils/rateLimiters.js';
 import { requireTrustedAccountsOrigin } from '../middlewares/accountsSecurity.js';
 
@@ -85,6 +91,12 @@ router.post('/products', requireAdminPermission('catalog'), adminCreateProduct);
 router.put('/products/:id', requireAdminPermission('catalog'), adminUpdateProduct);
 router.delete('/products/:id', requireAdminPermission('catalog'), adminDeleteProduct);
 router.post('/products/bulk-update', requireAdminPermission('catalog'), adminBulkUpdateProducts);
+
+// Inventory & Warehouse Stock Operations (Floor Staff Access)
+router.get('/inventory/stock', requireAnyAdminPermission('catalog', 'orders'), adminGetStockOverview);
+router.post('/inventory/adjust', requireAnyAdminPermission('catalog', 'orders'), adminAdjustStock);
+router.get('/inventory/movements', requireAnyAdminPermission('catalog', 'orders'), adminGetStockMovements);
+router.get('/inventory/reorder-alerts', requireAnyAdminPermission('catalog', 'orders'), adminGetReorderAlerts);
 
 // Categories
 router.post('/categories', requireAdminPermission('catalog'), adminCreateCategory);
