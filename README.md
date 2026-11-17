@@ -1,5 +1,12 @@
 # Hunzora
 
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Express](https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white)](https://expressjs.com)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose_9-47A248?logo=mongodb&logoColor=white)](https://mongoosejs.com)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
+
 A Pakistan-focused artisan storefront for dry fruits, raw honey, cold-pressed oils, herbs,
 handmade crafts, and gifts from Hunza and Gilgit-Baltistan. Hunzora combines a modern React
 storefront with an Express API, MongoDB persistence, Firebase-backed authentication, manual
@@ -21,10 +28,13 @@ inventory and accounts management.
 9. [Managing stock and inventory](#managing-stock-and-inventory)
 10. [Managing accounts and finance](#managing-accounts-and-finance)
 11. [Admin roles and permissions](#admin-roles-and-permissions)
-12. [Available scripts](#available-scripts)
-13. [Testing](#testing)
-14. [Deployment](#deployment)
-15. [Secrets and security](#secrets-and-security)
+12. [API overview](#api-overview)
+13. [Available scripts](#available-scripts)
+14. [Testing](#testing)
+15. [Troubleshooting & FAQ](#troubleshooting--faq)
+16. [Deployment](#deployment)
+17. [Secrets and security](#secrets-and-security)
+18. [Contributing](#contributing)
 
 ---
 
@@ -480,6 +490,75 @@ Notes:
 
 ---
 
+## API overview
+
+The API is served under `/api` (and `/app`, for compatibility with serverless deployments).
+Health check: `GET /api/health`.
+
+### Public endpoints
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/api/health` | Service health check. |
+| `GET` | `/api/products` | List products. Supports `search`, `category`, `region`, `minPrice`, `maxPrice`, `inStock`, `sale`, `sort`, `page`, and `limit`. |
+| `GET` | `/api/products/:slug` | Product detail. |
+| `GET` | `/api/products/:slug/reviews` | Product reviews. |
+| `POST` | `/api/products/:slug/reviews` | Submit a review (signed-in customers). |
+| `GET` | `/api/categories` | List categories. |
+| `GET` | `/api/categories/:slug` | Category detail. |
+| `GET` | `/api/cities` | List cities/regions. |
+| `GET` | `/api/cities/:slug` | City detail. |
+| `GET` | `/api/settings` | Public store settings. |
+| `POST` | `/api/contact` | Submit a contact message. |
+| `POST` | `/api/orders` | Create an order (guest or signed in). |
+| `GET` | `/api/orders/track` | Track an order by ID plus phone/email. |
+| `POST` | `/api/orders/:id/payment-screenshot` | Upload payment proof. |
+| `GET` | `/api/orders/my` | Signed-in customer's orders. |
+| `GET` | `/api/orders/:id` | Single order (owner, admin, or with verification). |
+| `POST` | `/api/auth/register` | OTP-based registration. |
+| `POST` | `/api/auth/send-otp` | Send a registration OTP. |
+| `POST` | `/api/auth/verify-otp` | Verify a registration OTP. |
+| `POST` | `/api/auth/firebase-register` | Register with a Firebase token. |
+| `POST` | `/api/auth/firebase-login` | Sign in with a Firebase token. |
+| `POST` | `/api/auth/login` | Legacy admin password login. |
+| `POST` | `/api/auth/staff-login` | Staff username/password login. |
+| `GET` | `/api/auth/me` | Current session. |
+
+### Admin endpoints
+
+All admin endpoints live under `/api/admin` and require an authenticated administrator or an
+active staff account with the relevant permission (`dashboard`, `orders`, `catalog`,
+`accounts`, `content`, or `users`).
+
+| Area | Endpoints |
+|------|-----------|
+| Dashboard | `GET /stats`, `GET /audit` (admin only) |
+| Staff | `GET/POST /staff`, `PATCH /staff/:id/status`, `PATCH /staff/:id/role`, `PUT /staff/:id/password` (admin only) |
+| Products | `GET/POST /products`, `GET/PUT/DELETE /products/:id`, `POST /products/bulk-update` |
+| Inventory | `GET /inventory/stock`, `POST /inventory/adjust`, `GET /inventory/movements`, `GET /inventory/reorder-alerts` |
+| Orders | `GET /orders`, `GET/PUT/DELETE /orders/:id`, `POST /orders/:id/resend-notification`, `POST /pos/checkout` |
+| Categories | `POST /categories`, `PUT/DELETE /categories/:id` |
+| Artisans | `GET/POST /artisans`, `PUT/DELETE /artisans/:id` |
+| Coupons | `GET/POST /coupons`, `PUT/DELETE /coupons/:id` |
+| Cities | `GET/POST /cities`, `PUT/DELETE /cities/:id` |
+| Users | `GET /users`, `POST /users/:id/verify`, `DELETE /users/:id` (admin only) |
+| Settings | `PUT /settings` |
+| Contact | `GET /contact-messages`, `PATCH /contact-messages/:id`, `POST /contact-messages/:id/replies` |
+| Accounts | `/accounts/suppliers`, `/accounts/purchases`, `/accounts/payments`, `/accounts/expenses`, `/accounts/report`, `/accounts/report.xlsx`, `/accounts/audit` |
+| Uploads | `POST /upload`, `DELETE /upload` |
+| Suppliers list | `GET /suppliers` |
+
+> Admin requests must include the auth cookie/JWT and pass CSRF protection. Accounts routes
+> additionally require a trusted origin and the `accounts` permission.
+
+### Cron
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `ALL` | `/api/cron/payment-reminders` | Send pending payment reminders. Requires `Authorization: Bearer <CRON_SECRET>` when configured. |
+
+---
+
 ## Available scripts
 
 ### Root
@@ -539,6 +618,74 @@ default; set the GitHub Actions variable `RUN_E2E` to `true` only after configur
 
 ---
 
+## Troubleshooting & FAQ
+
+### The API exits at startup or cannot reach MongoDB
+
+- Confirm `MONGODB_URI` is set in `server/.env`.
+- If you use Atlas, allow your current IP under **Network Access** and verify the cluster is
+  running.
+- A local MongoDB server must be running on the expected host and port.
+
+### The browser shows a CORS error
+
+- Set `CLIENT_URL` to the exact storefront origin, without a trailing slash (for example
+  `http://localhost:5173`).
+- `localhost` and `127.0.0.1` are allowed automatically only outside production.
+
+### Firebase sign-in does not work
+
+- Fill `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` on the server.
+- Fill `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and
+  `VITE_FIREBASE_APP_ID` on the client.
+- Enable **Email/Password** and **Google** under Firebase Authentication → Sign-in method.
+- Keep the `\n` escapes in `FIREBASE_PRIVATE_KEY` intact.
+
+### Images will not upload in production
+
+- Configure Cloudinary. Vercel's filesystem is ephemeral, so local uploads do not persist.
+- Set `VITE_CLOUDINARY_CLOUD_NAME` on the client for optimized image delivery.
+
+### Emails are not delivered
+
+- Set `RESEND_API_KEY` and a verified `EMAIL_FROM`, or configure SMTP.
+- In development, the API falls back to an Ethereal test inbox.
+- Check the recipient's spam folder and the order's notification log under **Admin → Orders**.
+
+### I cannot open an admin page
+
+- Your staff role may not include that permission. See
+  [Admin roles and permissions](#admin-roles-and-permissions).
+- Customers, staff, and the activity log are administrator-only.
+
+### Stock is not changing
+
+- Product forms and bulk actions intentionally do not change stock.
+- Use **Admin → Inventory** for adjustments or **Admin → Accounts → Purchases** for received
+  goods. Every change is recorded in the stock-movement log.
+
+### An order cannot be found on the tracking page
+
+- Enter the exact order ID together with the phone or email used at checkout.
+- Tracking lookups are rate-limited to prevent enumeration.
+
+### I get "Too many requests" (HTTP 429)
+
+- Auth, OTP, checkout, tracking, and accounts endpoints are rate-limited. Wait a few minutes, or
+  review the limits in `server/utils/rateLimiters.js` and `server/routes/authRoutes.js`.
+
+### Refreshing a route returns 404 in production
+
+- The client `vercel.json` rewrites unknown paths to `index.html`. Make sure the client project
+  is deployed with `client/` as its project root.
+
+### Node version or install errors
+
+- Use Node 20+ (CI uses Node 24). If dependencies are corrupted, remove `node_modules` and the
+  lockfile only when necessary, then run `npm ci` again.
+
+---
+
 ## Deployment
 
 Deploy `client/` and `server/` as **separate Vercel projects**, with each directory set as its
@@ -585,3 +732,13 @@ cron limit. More frequent runs require a Vercel plan that supports them.
 - Use HTTPS in production and restrict `CLIENT_URL` to your real storefront origin.
 - Staff and admin passwords are hashed with bcrypt; customer passwords handled by Firebase are
   never stored in MongoDB.
+
+---
+
+## Contributing
+
+1. Create a branch from `develop` or `main`.
+2. Keep changes focused and follow the existing structure, naming, and styling.
+3. Run `npm run lint` and the relevant unit tests before opening a pull request.
+4. Never commit `.env` files, credentials, uploads, or database dumps.
+5. Describe any schema, API, or admin-permission changes in the pull request.
