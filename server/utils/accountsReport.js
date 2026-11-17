@@ -247,6 +247,111 @@ export function calculateAccountsReport(orders, expenses) {
   const cashOutflow = fromMinor(cashOutflowMinor);
   const expectedDrawerCash = fromMinor(cashInflowMinor - cashOutflowMinor);
 
+  // ── Daily P&L Breakdown ──────────────────────────────────────────
+  // Groups every row by its Pakistan date (YYYY-MM-DD) and sums sales, cogs, expenses
+  const dailyPnLMap = new Map();
+
+  const ensureDay = (key) => {
+    if (!dailyPnLMap.has(key)) {
+      dailyPnLMap.set(key, {
+        date: key,
+        orders: 0,
+        salesMinor: 0,
+        cogsMinor: 0,
+        expensesMinor: 0,
+        refundsMinor: 0,
+      });
+    }
+    return dailyPnLMap.get(key);
+  };
+
+  for (const order of orders) {
+    if (order.paymentStatus !== 'paid') continue;
+    if (['cancelled', 'returned'].includes(order.orderStatus)) continue;
+    const dateKey = dateInPakistan(new Date(order.createdAt));
+    const day = ensureDay(dateKey);
+    const orderSalesMinor = Math.max(0, toMinor(order.subtotal) - toMinor(order.discount));
+    const hasCost = order.items?.every((item) => Number.isSafeInteger(item.unitCostMinor) && item.unitCostMinor >= 0);
+    const orderCogsMinor = hasCost
+      ? order.items.reduce((sum, item) => sum + item.unitCostMinor * item.quantity, 0)
+      : 0;
+    day.orders += 1;
+    day.salesMinor += orderSalesMinor;
+    day.cogsMinor += orderCogsMinor;
+  }
+
+  for (const expense of expenses) {
+    const amountMinor = safeMinor(expense.amountMinor);
+    const signed = expense.kind === 'reversal' ? -amountMinor : amountMinor;
+    const dateKey = dateInPakistan(new Date(expense.expenseDate));
+    const day = ensureDay(dateKey);
+    day.expensesMinor += signed;
+  }
+
+  const dailyPnL = Array.from(dailyPnLMap.entries())
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([, d]) => {
+      const grossProfitMinor = d.salesMinor - d.cogsMinor;
+      const netProfitMinor = grossProfitMinor - d.expensesMinor - d.refundsMinor;
+      return {
+        date: d.date,
+        orders: d.orders,
+        sales: fromMinor(d.salesMinor),
+        cogs: fromMinor(d.cogsMinor),
+        grossProfit: fromMinor(grossProfitMinor),
+        expenses: fromMinor(d.expensesMinor),
+        netProfit: fromMinor(netProfitMinor),
+        marginPercent: d.salesMinor > 0
+          ? Number((grossProfitMinor / d.salesMinor * 100).toFixed(1))
+          : 0,
+      };
+    });
+
+  // ── Monthly P&L Breakdown ─────────────────────────────────────────
+  const monthlyPnLMap = new Map();
+
+  const ensureMonth = (monthKey) => {
+    if (!monthlyPnLMap.has(monthKey)) {
+      monthlyPnLMap.set(monthKey, {
+        month: monthKey,
+        orders: 0,
+        salesMinor: 0,
+        cogsMinor: 0,
+        expensesMinor: 0,
+        refundsMinor: 0,
+      });
+    }
+    return monthlyPnLMap.get(monthKey);
+  };
+
+  for (const d of dailyPnL) {
+    const monthKey = d.date.slice(0, 7); // YYYY-MM
+    const m = ensureMonth(monthKey);
+    m.orders += d.orders;
+    m.salesMinor += toMinor(d.sales);
+    m.cogsMinor += toMinor(d.cogs);
+    m.expensesMinor += toMinor(d.expenses);
+  }
+
+  const monthlyPnL = Array.from(monthlyPnLMap.entries())
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([, m]) => {
+      const grossProfitMinor = m.salesMinor - m.cogsMinor;
+      const netProfitMinor = grossProfitMinor - m.expensesMinor;
+      return {
+        month: m.month,
+        orders: m.orders,
+        sales: fromMinor(m.salesMinor),
+        cogs: fromMinor(m.cogsMinor),
+        grossProfit: fromMinor(grossProfitMinor),
+        expenses: fromMinor(m.expensesMinor),
+        netProfit: fromMinor(netProfitMinor),
+        marginPercent: m.salesMinor > 0
+          ? Number((grossProfitMinor / m.salesMinor * 100).toFixed(1))
+          : 0,
+      };
+    });
+
   return {
     summary: {
       sales,
@@ -272,6 +377,8 @@ export function calculateAccountsReport(orders, expenses) {
       },
     },
     productProfitability,
+    dailyPnL,
+    monthlyPnL,
     rows,
   };
 }
@@ -507,6 +614,58 @@ export async function buildAccountsXlsx({
     { name: 'Purchases', rows: purchaseRows, widths: [22, 20, 24, 16, 30, 18, 12, 18, 22, 18, 21, 23], filterEndColumn: 'L' },
     { name: 'Supplier Payments', rows: paymentRows, widths: [22, 28, 14, 18, 18, 24, 36], filterEndColumn: 'G' },
   ];
+
+  // Add Daily P&L sheet if report has dailyPnL
+  if (report.dailyPnL && report.dailyPnL.length > 0) {
+    const dailyRows = [[
+      'Date', 'Orders', 'Revenue (PKR)', 'COGS (PKR)', 'Gross Profit (PKR)',
+      'Expenses (PKR)', 'Net Profit (PKR)', 'Gross Margin %',
+    ].map((v) => cell(v, headerStyle))];
+    report.dailyPnL.forEach((d) => {
+      dailyRows.push([
+        cell(d.date),
+        cell(d.orders),
+        cell(d.sales, currencyStyle),
+        cell(d.cogs, currencyStyle),
+        cell(d.grossProfit, currencyStyle),
+        cell(d.expenses, currencyStyle),
+        cell(d.netProfit, currencyStyle),
+        cell(d.marginPercent, percentStyle),
+      ]);
+    });
+    sheetDefinitions.push({
+      name: 'Daily P&L',
+      rows: dailyRows,
+      widths: [14, 10, 18, 16, 20, 16, 18, 16],
+      filterEndColumn: 'H',
+    });
+  }
+
+  // Add Monthly P&L sheet if more than 1 month
+  if (report.monthlyPnL && report.monthlyPnL.length > 0) {
+    const monthlyRows = [[
+      'Month', 'Orders', 'Revenue (PKR)', 'COGS (PKR)', 'Gross Profit (PKR)',
+      'Expenses (PKR)', 'Net Profit (PKR)', 'Gross Margin %',
+    ].map((v) => cell(v, headerStyle))];
+    report.monthlyPnL.forEach((m) => {
+      monthlyRows.push([
+        cell(m.month),
+        cell(m.orders),
+        cell(m.sales, currencyStyle),
+        cell(m.cogs, currencyStyle),
+        cell(m.grossProfit, currencyStyle),
+        cell(m.expenses, currencyStyle),
+        cell(m.netProfit, currencyStyle),
+        cell(m.marginPercent, percentStyle),
+      ]);
+    });
+    sheetDefinitions.push({
+      name: 'Monthly P&L',
+      rows: monthlyRows,
+      widths: [14, 10, 18, 16, 20, 16, 18, 16],
+      filterEndColumn: 'H',
+    });
+  }
 
   const files = {
     '[Content_Types].xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

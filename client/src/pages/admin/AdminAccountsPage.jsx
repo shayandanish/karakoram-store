@@ -35,7 +35,8 @@ const newPurchaseLine = () => ({
   variantLabel: '',
   quantity: '1',
   unitCost: '',
-  additionalCost: '0',
+  transportCost: '0',
+  packagingCost: '0',
 });
 
 const inputClass = 'w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 focus:outline-hidden focus:ring-2 focus:ring-apricot-500';
@@ -354,7 +355,8 @@ export default function AdminAccountsPage() {
         ...line,
         quantity: Number(line.quantity),
         unitCost: moneyInput(line.unitCost),
-        additionalCost: moneyInput(line.additionalCost),
+        // additionalCost = transport + packaging (sent to backend as combined)
+        additionalCost: moneyInput(line.transportCost) + moneyInput(line.packagingCost),
       })),
     });
   };
@@ -618,6 +620,137 @@ export default function AdminAccountsPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* ── Daily P&L Breakdown ── */}
+                {report.dailyPnL && report.dailyPnL.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="mb-3 font-semibold text-mountain-900 flex items-center gap-2">
+                      📅 Daily Profit & Loss Breakdown
+                      <span className="text-xs font-normal text-stone-500 ml-1">
+                        (Sales − Cost of Goods − Expenses = Net Profit per day)
+                      </span>
+                    </h3>
+                    <div className="overflow-x-auto rounded-xl border border-stone-200">
+                      <table className="w-full min-w-[700px] text-left text-xs">
+                        <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider font-semibold">
+                          <tr>
+                            <th className="py-2.5 px-3">Date</th>
+                            <th className="py-2.5 px-3 text-center">Orders</th>
+                            <th className="py-2.5 px-3 text-right">Revenue</th>
+                            <th className="py-2.5 px-3 text-right">Cost (COGS)</th>
+                            <th className="py-2.5 px-3 text-right">Gross Profit</th>
+                            <th className="py-2.5 px-3 text-right">Expenses</th>
+                            <th className="py-2.5 px-3 text-right">Net Profit</th>
+                            <th className="py-2.5 px-3 text-center">Margin</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100">
+                          {report.dailyPnL.map((day) => {
+                            const isProfit = day.netProfit >= 0;
+                            const marginBadge = getMarginBadgeClass(day.marginPercent);
+                            return (
+                              <tr key={day.date} className="hover:bg-stone-50/60">
+                                <td className="py-2.5 px-3 font-mono font-semibold text-stone-700">{day.date}</td>
+                                <td className="py-2.5 px-3 text-center text-stone-600">{day.orders}</td>
+                                <td className="py-2.5 px-3 text-right font-medium text-mountain-900">{fmtPKR(day.sales)}</td>
+                                <td className="py-2.5 px-3 text-right text-stone-600">{fmtPKR(day.cogs)}</td>
+                                <td className="py-2.5 px-3 text-right font-semibold text-emerald-700">{fmtPKR(day.grossProfit)}</td>
+                                <td className="py-2.5 px-3 text-right text-rose-600">{day.expenses > 0 ? `− ${fmtPKR(day.expenses)}` : '—'}</td>
+                                <td className={`py-2.5 px-3 text-right font-bold ${isProfit ? 'text-emerald-800' : 'text-rose-700'}`}>
+                                  {fmtPKR(day.netProfit)}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {day.sales > 0 ? (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${marginBadge}`}>
+                                      {day.marginPercent}%
+                                    </span>
+                                  ) : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-stone-50 border-t-2 border-stone-300 font-bold text-xs text-mountain-900">
+                          <tr>
+                            <td className="py-2.5 px-3">TOTAL</td>
+                            <td className="py-2.5 px-3 text-center">
+                              {report.dailyPnL.reduce((s, d) => s + d.orders, 0)}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {fmtPKR(report.dailyPnL.reduce((s, d) => s + d.sales, 0))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {fmtPKR(report.dailyPnL.reduce((s, d) => s + d.cogs, 0))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-emerald-700">
+                              {fmtPKR(report.dailyPnL.reduce((s, d) => s + d.grossProfit, 0))}
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-rose-700">
+                              {fmtPKR(report.dailyPnL.reduce((s, d) => s + d.expenses, 0))}
+                            </td>
+                            <td className={`py-2.5 px-3 text-right ${report.summary.netProfit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
+                              {fmtPKR(report.summary.netProfit)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">{report.summary.grossMarginPercent}%</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Monthly P&L Summary ── */}
+                {report.monthlyPnL && report.monthlyPnL.length > 1 && (
+                  <div className="mt-8">
+                    <h3 className="mb-3 font-semibold text-mountain-900 flex items-center gap-2">
+                      🗓️ Monthly Profit & Loss Summary
+                    </h3>
+                    <div className="overflow-x-auto rounded-xl border border-stone-200">
+                      <table className="w-full min-w-[700px] text-left text-xs">
+                        <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase tracking-wider font-semibold">
+                          <tr>
+                            <th className="py-2.5 px-3">Month</th>
+                            <th className="py-2.5 px-3 text-center">Orders</th>
+                            <th className="py-2.5 px-3 text-right">Revenue</th>
+                            <th className="py-2.5 px-3 text-right">COGS</th>
+                            <th className="py-2.5 px-3 text-right">Gross Profit</th>
+                            <th className="py-2.5 px-3 text-right">Expenses</th>
+                            <th className="py-2.5 px-3 text-right">Net Profit</th>
+                            <th className="py-2.5 px-3 text-center">Margin</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100">
+                          {report.monthlyPnL.map((m) => {
+                            const isProfit = m.netProfit >= 0;
+                            const marginBadge = getMarginBadgeClass(m.marginPercent);
+                            return (
+                              <tr key={m.month} className="hover:bg-stone-50/60">
+                                <td className="py-2.5 px-3 font-semibold text-stone-700">
+                                  {new Date(`${m.month}-15`).toLocaleDateString('en-PK', { year: 'numeric', month: 'long' })}
+                                </td>
+                                <td className="py-2.5 px-3 text-center text-stone-600">{m.orders}</td>
+                                <td className="py-2.5 px-3 text-right font-medium text-mountain-900">{fmtPKR(m.sales)}</td>
+                                <td className="py-2.5 px-3 text-right text-stone-600">{fmtPKR(m.cogs)}</td>
+                                <td className="py-2.5 px-3 text-right font-semibold text-emerald-700">{fmtPKR(m.grossProfit)}</td>
+                                <td className="py-2.5 px-3 text-right text-rose-600">{m.expenses > 0 ? fmtPKR(m.expenses) : '—'}</td>
+                                <td className={`py-2.5 px-3 text-right font-bold ${isProfit ? 'text-emerald-800' : 'text-rose-700'}`}>
+                                  {fmtPKR(m.netProfit)}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {m.sales > 0 ? (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${marginBadge}`}>
+                                      {m.marginPercent}%
+                                    </span>
+                                  ) : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </section>
@@ -825,31 +958,112 @@ export default function AdminAccountsPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <label>
-                            <span className={labelClass}>Unit Cost (PKR)</span>
+                            <span className={labelClass}>Unit Cost (PKR) *</span>
                             <input
                               className={inputClass}
                               required
                               type="number"
                               min="0"
                               step="0.01"
-                              placeholder="20"
+                              placeholder="e.g. 10"
                               value={line.unitCost}
                               onChange={(event) => updatePurchaseLine(index, 'unitCost', event.target.value)}
                             />
                           </label>
                           <label>
-                            <span className={labelClass}>Landed Cost</span>
+                            <span className={labelClass}>Qty</span>
+                            <input
+                              className={inputClass}
+                              required
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={line.quantity}
+                              onChange={(event) => updatePurchaseLine(index, 'quantity', event.target.value)}
+                            />
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label>
+                            <span className={labelClass}>🚚 Transport Cost (PKR)</span>
                             <input
                               className={inputClass}
                               type="number"
                               min="0"
                               step="0.01"
                               placeholder="0"
-                              value={line.additionalCost}
-                              onChange={(event) => updatePurchaseLine(index, 'additionalCost', event.target.value)}
+                              value={line.transportCost}
+                              onChange={(event) => updatePurchaseLine(index, 'transportCost', event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            <span className={labelClass}>📦 Packaging Cost (PKR)</span>
+                            <input
+                              className={inputClass}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0"
+                              value={line.packagingCost}
+                              onChange={(event) => updatePurchaseLine(index, 'packagingCost', event.target.value)}
                             />
                           </label>
                         </div>
+
+                        {/* ── Live Profit Calculator ── */}
+                        {(() => {
+                          const qty = Math.max(1, Number(line.quantity) || 1);
+                          const unitC = moneyInput(line.unitCost);
+                          const transport = moneyInput(line.transportCost);
+                          const packaging = moneyInput(line.packagingCost);
+                          const additionalTotal = transport + packaging;
+                          const landedPerUnit = unitC + (qty > 0 ? additionalTotal / qty : 0);
+                          const sellingPrice = selectedProduct?.variants?.find((v) => v.label === line.variantLabel)?.price || 0;
+                          const profitPerUnit = sellingPrice - landedPerUnit;
+                          const margin = sellingPrice > 0 ? (profitPerUnit / sellingPrice) * 100 : 0;
+                          const marginColor = margin >= 25 ? 'text-emerald-700' : margin >= 10 ? 'text-amber-700' : 'text-rose-700';
+
+                          if (!unitC && !transport && !packaging) return null;
+                          return (
+                            <div className="mt-1 rounded-lg bg-gradient-to-r from-stone-100 to-stone-50 border border-stone-200 p-3 text-xs space-y-1.5">
+                              <div className="font-bold text-stone-700 mb-2">📊 Cost & Profit Calculator</div>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                <span className="text-stone-500">Supplier / Farmer Price</span>
+                                <span className="font-semibold text-stone-900 text-right">
+                                  Rs. {unitC.toFixed(2)} / unit
+                                </span>
+                                <span className="text-stone-500">Transport Cost</span>
+                                <span className="font-semibold text-stone-900 text-right">
+                                  Rs. {transport.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (transport / qty).toFixed(2) : '0.00'}/unit)
+                                </span>
+                                <span className="text-stone-500">Packaging Cost</span>
+                                <span className="font-semibold text-stone-900 text-right">
+                                  Rs. {packaging.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (packaging / qty).toFixed(2) : '0.00'}/unit)
+                                </span>
+                                <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1">
+                                  Total Landed Cost
+                                </span>
+                                <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1 text-right">
+                                  Rs. {landedPerUnit.toFixed(2)} / unit
+                                </span>
+                                {sellingPrice > 0 && (
+                                  <>
+                                    <span className="text-stone-500">Current Selling Price</span>
+                                    <span className="font-semibold text-stone-900 text-right">
+                                      Rs. {sellingPrice.toFixed(2)}
+                                    </span>
+                                    <span className="font-bold border-t border-stone-300 pt-1">
+                                      Profit Per Unit
+                                    </span>
+                                    <span className={`font-bold border-t border-stone-300 pt-1 text-right ${marginColor}`}>
+                                      Rs. {profitPerUnit.toFixed(2)} ({margin.toFixed(1)}% margin)
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                         {purchaseForm.lines.length > 1 && (
                           <button
                             type="button"
