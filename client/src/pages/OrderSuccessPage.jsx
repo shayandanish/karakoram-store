@@ -5,6 +5,7 @@ import SEO from '../components/ui/SEO';
 import OrderTimeline from '../components/ui/OrderTimeline';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import { getOrderPaymentDetails } from '../lib/paymentMethods';
+import OrderInvoiceModal from '../components/admin/OrderInvoiceModal';
 
 export default function OrderSuccessPage() {
   const { state } = useLocation();
@@ -12,6 +13,7 @@ export default function OrderSuccessPage() {
   const { settings } = useSiteSettings();
   const [copiedNumber, setCopiedNumber] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
   const paymentDetails = getOrderPaymentDetails(order, settings);
 
   const handleCopyNumber = () => {
@@ -399,6 +401,15 @@ export default function OrderSuccessPage() {
 
             {/* Quick Actions Panel */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowInvoice(true)}
+                className="w-full py-3.5 px-6 bg-mountain-900 hover:bg-mountain-800 active:scale-98 text-white font-bold rounded-2xl text-center text-sm transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>🖨️</span>
+                <span>Print / Download Invoice</span>
+              </button>
+
               <Link
                 to={`/track-order?orderId=${encodeURIComponent(order.orderId || order._id)}&phone=${encodeURIComponent(phoneParam)}`}
                 className="w-full py-3.5 px-6 bg-apricot-500 hover:bg-apricot-600 active:scale-98 text-white font-bold rounded-2xl text-center text-sm transition shadow-sm flex items-center justify-center gap-2"
@@ -409,7 +420,7 @@ export default function OrderSuccessPage() {
 
               <Link
                 to="/my-orders"
-                className="w-full py-3.5 px-6 bg-slate-900 hover:bg-slate-800 active:scale-98 text-white font-bold rounded-2xl text-center text-sm transition shadow-sm flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-6 bg-slate-100 hover:bg-slate-200 active:scale-98 text-slate-800 font-bold rounded-2xl text-center text-sm transition flex items-center justify-center gap-2"
               >
                 <span>📦</span>
                 <span>View in My Orders</span>
@@ -428,6 +439,14 @@ export default function OrderSuccessPage() {
         </div>
 
       </div>
+
+      {/* Printable Invoice Modal */}
+      {showInvoice && (
+        <OrderInvoiceModal
+          order={order}
+          onClose={() => setShowInvoice(false)}
+        />
+      )}
     </div>
   );
 }

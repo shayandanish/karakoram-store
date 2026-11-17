@@ -98,7 +98,7 @@ function normalizeWeightVariants(variants = []) {
   });
 }
 
-function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
+function ProductForm({ initialData, categories, artisans, suppliers = [], isEditMode, id }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -112,6 +112,9 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
   const [artisan, setArtisan] = useState(
     initialData?.artisan?._id || initialData?.artisan || ''
   );
+  const [primarySupplier, setPrimarySupplier] = useState(
+    initialData?.primarySupplier?._id || initialData?.primarySupplier || ''
+  );
   const [description, setDescription] = useState(initialData?.description || '');
   const [origin, setOrigin] = useState(initialData?.origin || 'Hunza, Gilgit-Baltistan');
   const [isFeatured, setIsFeatured] = useState(Boolean(initialData?.isFeatured));
@@ -119,6 +122,8 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
   const [isActive, setIsActive] = useState(
     initialData?.isActive !== undefined ? initialData.isActive : true
   );
+  const [seoTitle, setSeoTitle] = useState(initialData?.seoTitle || '');
+  const [seoDescription, setSeoDescription] = useState(initialData?.seoDescription || '');
 
   // Variants state (at least 1 row required)
   const [variants, setVariants] = useState(() => {
@@ -411,11 +416,14 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
       slug: slug.trim().toLowerCase(),
       category,
       artisan: artisan && artisan.trim() ? artisan.trim() : null,
+      primarySupplier: primarySupplier && primarySupplier.trim() ? primarySupplier.trim() : null,
       description: description.trim(),
       origin: origin.trim() || 'Hunza, Gilgit-Baltistan',
       isFeatured,
       isSeasonal,
       isActive,
+      seoTitle: seoTitle.trim(),
+      seoDescription: seoDescription.trim(),
       variants: variants.map((v) => ({
         label:          v.label.trim(),
         price:          Number(v.price),
@@ -498,7 +506,7 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label htmlFor="prod-cat" className="block text-xs font-semibold text-stone-700 mb-1.5">
                 Category <span className="text-rose-500">*</span>
@@ -535,6 +543,25 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
                 {artisans.map((a) => (
                   <option key={a._id} value={a._id}>
                     {a.name} {a.village ? `(${a.village})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="prod-supplier" className="block text-xs font-semibold text-stone-700 mb-1.5">
+                Primary Supplier <span className="text-stone-400 font-normal">(Purchasing)</span>
+              </label>
+              <select
+                id="prod-supplier"
+                value={primarySupplier}
+                onChange={(e) => setPrimarySupplier(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden transition"
+              >
+                <option value="">None / Direct Sourcing</option>
+                {suppliers.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.name} {s.contactName ? `(${s.contactName})` : ''}
                   </option>
                 ))}
               </select>
@@ -644,22 +671,116 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
                   )}
                 </div>
 
+                <div className="w-full sm:w-28">
+                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
+                    Cost Price (PKR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={v.costPrice || ''}
+                    onChange={(e) => {
+                      const costVal = e.target.value;
+                      const costNum = Number(costVal);
+                      const marginNum = Number(v.profitMargin || 0);
+                      const newPrice = costVal !== '' && !isNaN(costNum) && marginNum >= 0
+                        ? String(costNum + marginNum)
+                        : v.price;
+                      setVariants((prev) =>
+                        prev.map((row, i) =>
+                          i === idx ? { ...row, costPrice: costVal, price: newPrice } : row
+                        )
+                      );
+                    }}
+                    placeholder="e.g. 20"
+                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-stone-400 block mt-0.5">Supplier cost</span>
+                </div>
+
+                <div className="w-full sm:w-32">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-stone-600">
+                      Profit Margin
+                    </label>
+                    {v.costPrice !== '' && Number(v.costPrice) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const costNum = Number(v.costPrice);
+                          setVariants((prev) =>
+                            prev.map((row, i) =>
+                              i === idx ? { ...row, profitMargin: '0', price: String(costNum) } : row
+                            )
+                          );
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline"
+                        title="Sell at original purchase cost with 0 profit margin"
+                      >
+                        At Cost
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={v.profitMargin || ''}
+                    onChange={(e) => {
+                      const marginVal = e.target.value;
+                      const marginNum = Number(marginVal);
+                      const costNum = Number(v.costPrice || 0);
+                      const newPrice = v.costPrice !== '' && !isNaN(marginNum)
+                        ? String(costNum + marginNum)
+                        : v.price;
+                      setVariants((prev) =>
+                        prev.map((row, i) =>
+                          i === idx ? { ...row, profitMargin: marginVal, price: newPrice } : row
+                        )
+                      );
+                    }}
+                    placeholder="+5"
+                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-stone-400 block mt-0.5">Added markup</span>
+                </div>
+
                 <div className="w-full sm:w-36">
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Price (PKR)
+                    Selling Price (PKR) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
                     min="1"
                     step="1"
                     value={v.price}
-                    onChange={(e) => updateVariantRow(idx, 'price', e.target.value)}
-                    placeholder="1200"
-                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                    onChange={(e) => {
+                      const pVal = e.target.value;
+                      const pNum = Number(pVal);
+                      const costNum = Number(v.costPrice || 0);
+                      const newMargin = v.costPrice !== '' && pNum >= costNum
+                        ? String(pNum - costNum)
+                        : v.profitMargin;
+                      setVariants((prev) =>
+                        prev.map((row, i) =>
+                          i === idx ? { ...row, price: pVal, profitMargin: newMargin } : row
+                        )
+                      );
+                    }}
+                    placeholder="25"
+                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden font-semibold text-mountain-900"
                   />
                   {errors[`variant_${idx}_price`] && (
                     <span className="text-rose-600 text-[11px] block mt-0.5">
                       {errors[`variant_${idx}_price`]}
+                    </span>
+                  )}
+                  {Number(v.costPrice) > 0 && Number(v.price) > 0 && (
+                    <span className={`text-[10px] font-bold block mt-0.5 ${Number(v.price) >= Number(v.costPrice) ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {Number(v.price) === Number(v.costPrice)
+                        ? 'At cost (0% margin)'
+                        : `+${fmtPKR(Number(v.price) - Number(v.costPrice))} (${Math.round(((Number(v.price) - Number(v.costPrice)) / Number(v.price)) * 100)}%)`}
                     </span>
                   )}
                 </div>
@@ -1088,6 +1209,75 @@ function ProductForm({ initialData, categories, artisans, isEditMode, id }) {
           </div>
         </div>
 
+        {/* 5. Search Engine Optimization (SEO) */}
+        <div className="space-y-4 pt-6 border-t border-stone-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold font-display text-mountain-900 uppercase tracking-wider text-apricot-700">
+                5. Search Engine Optimization (SEO)
+              </h2>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Customize how this product appears in Google search engine results (independent of internal rankings).
+              </p>
+            </div>
+            <span className="text-xs bg-stone-100 text-stone-600 px-2 py-0.5 rounded font-medium">Google Preview</span>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label htmlFor="seo-title" className="block text-xs font-semibold text-stone-700">
+                  Meta Title
+                </label>
+                <span className="text-[11px] text-stone-400">{seoTitle.length} / 120 chars</span>
+              </div>
+              <input
+                id="seo-title"
+                type="text"
+                maxLength={120}
+                value={seoTitle}
+                onChange={(e) => setSeoTitle(e.target.value)}
+                placeholder={name ? `${name} | Pure Karakoram Mountain Harvest` : 'Custom search title...'}
+                className="w-full px-3.5 py-2.5 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden transition"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label htmlFor="seo-desc" className="block text-xs font-semibold text-stone-700">
+                  Meta Description
+                </label>
+                <span className="text-[11px] text-stone-400">{seoDescription.length} / 320 chars</span>
+              </div>
+              <textarea
+                id="seo-desc"
+                rows={2}
+                maxLength={320}
+                value={seoDescription}
+                onChange={(e) => setSeoDescription(e.target.value)}
+                placeholder={description ? description.slice(0, 160) : 'Concise summary for Google search results...'}
+                className="w-full px-3.5 py-2.5 text-sm bg-stone-50 border border-stone-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-apricot-500 focus:outline-hidden transition"
+              />
+            </div>
+
+            {/* Google Search Result Preview Card */}
+            <div className="rounded-xl border border-stone-200 bg-stone-50/70 p-4 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400 block mb-1">
+                Google Search Appearance Preview
+              </span>
+              <p className="text-xs text-emerald-800 font-mono truncate">
+                https://karakoramstore.com/products/{slug || 'product-slug'}
+              </p>
+              <h4 className="text-base text-blue-700 hover:underline font-medium cursor-pointer truncate">
+                {seoTitle || (name ? `${name} — Karakoram Store` : 'Product Name — Karakoram Store')}
+              </h4>
+              <p className="text-xs text-stone-600 line-clamp-2">
+                {seoDescription || (description ? description.slice(0, 155) : 'Discover authentic Himalayan and Karakoram products harvested sustainably...')}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="pt-6 border-t border-stone-200 flex items-center justify-end gap-3">
           <Link
@@ -1133,6 +1323,14 @@ export default function AdminProductFormPage() {
     },
   });
 
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['admin-suppliers'],
+    queryFn: async () => {
+      const res = await api.get('/admin/accounts/suppliers');
+      return res.data?.suppliers || [];
+    },
+  });
+
   const { data: existingProduct, isLoading: isLoadingProduct } = useQuery({
     queryKey: ['admin-product', id],
     queryFn: async () => {
@@ -1172,6 +1370,7 @@ export default function AdminProductFormPage() {
         initialData={existingProduct}
         categories={categories}
         artisans={artisans}
+        suppliers={suppliers}
         isEditMode={isEditMode}
         id={id}
       />

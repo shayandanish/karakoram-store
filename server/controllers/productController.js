@@ -122,11 +122,16 @@ export const getProducts = async (req, res, next) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
+    let sortQuery = sort;
+    if (sort === 'best-selling') {
+      sortQuery = { totalSold: -1, ratingAverage: -1, createdAt: -1 };
+    }
+
     const [products, total] = await Promise.all([
       Product.find(filter)
         .populate('category', 'name slug')
         .populate('artisan', 'name village')
-        .sort(sort)
+        .sort(sortQuery)
         .skip(skip)
         .limit(Number(limit)),
       Product.countDocuments(filter),

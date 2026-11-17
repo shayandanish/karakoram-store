@@ -185,7 +185,7 @@ export const createOrder = async (req, res, next) => {
             throw new Error(`Insufficient stock for ${product.name} (${input.variantLabel})`);
           }
 
-          // Reduce stock atomically with guard against overselling / race conditions
+          // Reduce stock atomically with guard against overselling / race conditions, and increment totalSold
           const stockUpdateResult = await Product.updateOne(
             {
               _id: product._id,
@@ -196,7 +196,7 @@ export const createOrder = async (req, res, next) => {
                 },
               },
             },
-            { $inc: { 'variants.$.stock': -input.quantity } },
+            { $inc: { 'variants.$.stock': -input.quantity, totalSold: input.quantity } },
             { session }
           );
 

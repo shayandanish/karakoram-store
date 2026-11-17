@@ -25,6 +25,7 @@ const productSchema = new mongoose.Schema(
     slug: { type: String, required: true, unique: true, lowercase: true },
     category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
     artisan: { type: mongoose.Schema.Types.ObjectId, ref: 'Artisan', default: null },
+    primarySupplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', default: null },
     description: { type: String, required: true },
     images: [imageSchema],
     video: {
@@ -38,19 +39,25 @@ const productSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     ratingAverage: { type: Number, default: 0, min: 0, max: 5 },
     ratingCount: { type: Number, default: 0 },
+    totalSold: { type: Number, default: 0, min: 0 },
+    seoTitle: { type: String, default: '', trim: true, maxlength: 120 },
+    seoDescription: { type: String, default: '', trim: true, maxlength: 320 },
   },
   { timestamps: true }
 );
 
 // Indexes for performance and text search (slug is already indexed via unique:true)
 productSchema.index({ category: 1 });
+productSchema.index({ primarySupplier: 1 });
 productSchema.index({ name: 'text', description: 'text' });
 productSchema.index({ isActive: 1 });
 productSchema.index({ createdAt: -1 });
+productSchema.index({ totalSold: -1 });
 productSchema.index({ ratingAverage: -1 });
 productSchema.index({ origin: 1 });
 productSchema.index({ isFeatured: 1 });
 productSchema.index({ isSeasonal: 1 });
+productSchema.index({ isActive: 1, totalSold: -1 });
 productSchema.index({ isActive: 1, category: 1, createdAt: -1 });
 productSchema.index({ isActive: 1, isFeatured: 1, createdAt: -1 });
 

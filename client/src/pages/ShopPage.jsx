@@ -10,6 +10,7 @@ import SEO from '../components/ui/SEO';
 import { REGIONS } from '../lib/regions';
 
 const SORT_OPTIONS = [
+  { value: 'best-selling', label: 'Best Selling' },
   { value: '-createdAt', label: 'Newest' },
   { value: 'createdAt',  label: 'Oldest' },
   { value: 'variants.price', label: 'Price: Low → High' },

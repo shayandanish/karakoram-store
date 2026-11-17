@@ -11,6 +11,7 @@ import {
   adminGetArtisans, adminCreateArtisan, adminUpdateArtisan, adminDeleteArtisan,
   adminGetCoupons, adminCreateCoupon, adminUpdateCoupon, adminDeleteCoupon,
   adminGetOrders, adminGetOrderById, adminUpdateOrder, adminResendNotification, adminDeleteOrder,
+  adminCreatePosOrder,
   adminGetUsers, adminDeleteUser, adminVerifyUser,
   adminGetStats,
 } from '../controllers/adminController.js';
@@ -22,7 +23,7 @@ import { adminGetActivity } from '../controllers/adminAuditController.js';
 import { adminGetContactMessages, adminUpdateContactMessage, adminReplyToContactMessage } from '../controllers/contactMessageController.js';
 import { adminGetStaff, adminCreateStaff, adminSetStaffStatus, adminSetStaffRole, adminResetStaffPassword } from '../controllers/adminStaffController.js';
 import {
-  adminGetSuppliers, adminCreateSupplier, adminUpdateSupplier,
+  adminGetSuppliers, adminCreateSupplier, adminUpdateSupplier, adminGetSupplierStatement,
   adminGetPurchases, adminCreatePurchase, adminReversePurchase,
   adminAddSupplierPayment, adminReverseSupplierPayment,
   adminGetExpenses, adminCreateExpense, adminReverseExpense,
@@ -50,6 +51,7 @@ router.get('/accounts/report.xlsx', accountsExportLimiter, requireAdminPermissio
 router.get('/accounts/report', requireAdminPermission('accounts'), adminGetAccountReport);
 router.get('/accounts/audit', requireAdminPermission('accounts'), adminGetAccountAudit);
 router.get('/accounts/suppliers', requireAdminPermission('accounts'), adminGetSuppliers);
+router.get('/accounts/suppliers/:id/statement', requireAdminPermission('accounts'), adminGetSupplierStatement);
 router.post('/accounts/suppliers', requireAdminPermission('accounts'), adminCreateSupplier);
 router.put('/accounts/suppliers/:id', requireAdminPermission('accounts'), adminUpdateSupplier);
 router.get('/accounts/purchases', requireAdminPermission('accounts'), adminGetPurchases);
@@ -103,6 +105,7 @@ router.delete('/coupons/:id', requireAdminPermission('catalog'), adminDeleteCoup
 
 // Orders & Shipment Logistics
 router.get('/orders', requireAdminPermission('orders'), adminGetOrders);
+router.post('/pos/checkout', requireAnyAdminPermission('orders', 'catalog'), adminCreatePosOrder);
 router.get('/orders/:id', requireAdminPermission('orders'), adminGetOrderById);
 router.put('/orders/:id', requireAdminPermission('orders'), adminUpdateOrder);
 router.post('/orders/:id/resend-notification', requireAdminPermission('orders'), adminResendNotification);

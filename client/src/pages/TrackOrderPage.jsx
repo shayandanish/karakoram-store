@@ -9,6 +9,7 @@ import OrderTimeline, { STATUS_MAP } from '../components/ui/OrderTimeline';
 import CourierInfoBlock from '../components/ui/CourierInfoBlock';
 import { useSiteSettings } from '../hooks/useSiteSettings';
 import { getOrderPaymentDetails } from '../lib/paymentMethods';
+import OrderInvoiceModal from '../components/admin/OrderInvoiceModal';
 
 export default function TrackOrderPage() {
   const { settings } = useSiteSettings();
@@ -20,6 +21,7 @@ export default function TrackOrderPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedId, setCopiedId] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
 
   // Payment proof upload states
   const [screenshotFile, setScreenshotFile] = useState(null);
@@ -724,7 +726,15 @@ export default function TrackOrderPage() {
 
             {/* WhatsApp Assistance Button */}
             {wa && (
-              <div className="pt-3 flex justify-end">
+              <div className="pt-3 flex justify-end gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowInvoice(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-mountain-800 hover:bg-mountain-900 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                >
+                  <span>🖨️</span>
+                  <span>Print Invoice</span>
+                </button>
                 <a
                   href={`https://wa.me/${wa}?text=${encodeURIComponent(
                     `Assalam o Alaikum! Tracking update inquiry for Order ${order.orderId || order._id}.`
@@ -736,6 +746,18 @@ export default function TrackOrderPage() {
                   <span>💬</span>
                   <span>Ask Support on WhatsApp</span>
                 </a>
+              </div>
+            )}
+            {!wa && (
+              <div className="pt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowInvoice(true)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-mountain-800 hover:bg-mountain-900 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                >
+                  <span>🖨️</span>
+                  <span>Print Invoice</span>
+                </button>
               </div>
             )}
           </div>
@@ -807,6 +829,11 @@ export default function TrackOrderPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Invoice Print Modal */}
+      {showInvoice && order && (
+        <OrderInvoiceModal order={order} onClose={() => setShowInvoice(false)} />
       )}
     </div>
   );

@@ -69,9 +69,16 @@ const orderSchema = new mongoose.Schema(
     items: [orderItemSchema],
     shippingAddress: { type: addressSchema, required: true },
 
+    source: {
+      type: String,
+      enum: ['online', 'pos'],
+      default: 'online',
+      index: true,
+    },
+
     paymentMethod: {
       type: String,
-      enum: ['easypaisa', 'COD', 'bank_transfer', 'jazzcash', 'other'],
+      enum: ['easypaisa', 'COD', 'bank_transfer', 'jazzcash', 'cash', 'card', 'other'],
       default: 'easypaisa',
       required: true,
     },

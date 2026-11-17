@@ -5,6 +5,7 @@ import api from '../../lib/axios';
 import { fmtPKR, fmtDate } from '../../lib/utils';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../components/ui/SEO';
+import OrderInvoiceModal from '../../components/admin/OrderInvoiceModal';
 
 const STATUS_TABS = [
   { id: '', label: 'All Orders' },
@@ -60,6 +61,7 @@ export default function AdminOrdersPage() {
   const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
   const [page, setPage] = useState(Number(searchParams.get('page')) || 1);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [invoiceOrder, setInvoiceOrder] = useState(null);
   const [modalTab, setModalTab] = useState('details'); // 'details' | 'history' | 'notifications'
 
   // Shipment & status update form state
@@ -543,17 +545,30 @@ export default function AdminOrdersPage() {
                           {fmtDate(o.createdAt)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => openOrderDetails(o)}
-                            className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold rounded-lg text-xs transition cursor-pointer"
-                          >
-                            {o.paymentScreenshot && o.paymentStatus === 'pending'
-                              ? 'Review payment'
-                              : ['confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery'].includes(o.orderStatus) && !o.shipment?.trackingId
-                              ? 'Add tracking'
-                              : 'Manage'}
-                            &rarr;
-                          </button>
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInvoiceOrder(o);
+                              }}
+                              title="Print Invoice / Packing Slip"
+                              className="px-2.5 py-1.5 bg-white border border-stone-200 hover:border-apricot-500 hover:text-apricot-600 text-stone-700 font-semibold rounded-lg text-xs transition cursor-pointer shadow-2xs"
+                            >
+                              🖨️ Invoice
+                            </button>
+                            <button
+                              onClick={() => openOrderDetails(o)}
+                              className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold rounded-lg text-xs transition cursor-pointer"
+                            >
+                              {o.paymentScreenshot && o.paymentStatus === 'pending'
+                                ? 'Review payment'
+                                : ['confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery'].includes(o.orderStatus) && !o.shipment?.trackingId
+                                ? 'Add tracking'
+                                : 'Manage'}
+                              &rarr;
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -610,17 +625,26 @@ export default function AdminOrdersPage() {
 
                     <div className="flex items-center justify-between pt-2 border-t border-stone-100 text-xs">
                       <span className="text-stone-400 text-[11px]">{fmtDate(o.createdAt)}</span>
-                      <button
-                        onClick={() => openOrderDetails(o)}
-                        className="px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold rounded-lg transition"
-                      >
-                        {o.paymentScreenshot && o.paymentStatus === 'pending'
-                          ? 'Review payment'
-                          : ['confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery'].includes(o.orderStatus) && !o.shipment?.trackingId
-                          ? 'Add tracking'
-                          : 'Manage'}
-                        &rarr;
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setInvoiceOrder(o)}
+                          className="px-2.5 py-1 bg-white border border-stone-200 text-stone-700 font-semibold rounded-lg text-xs"
+                        >
+                          🖨️ Invoice
+                        </button>
+                        <button
+                          onClick={() => openOrderDetails(o)}
+                          className="px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold rounded-lg transition"
+                        >
+                          {o.paymentScreenshot && o.paymentStatus === 'pending'
+                            ? 'Review payment'
+                            : ['confirmed', 'processing', 'packed', 'shipped', 'out_for_delivery'].includes(o.orderStatus) && !o.shipment?.trackingId
+                            ? 'Add tracking'
+                            : 'Manage'}
+                          &rarr;
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -676,14 +700,23 @@ export default function AdminOrdersPage() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setSelectedOrder(null)}
-                className="p-1.5 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition cursor-pointer"
-                aria-label="Close modal"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInvoiceOrder(selectedOrder)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  🖨️ Print Invoice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-1.5 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition cursor-pointer"
+                  aria-label="Close modal"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* Modal Subtabs: Details vs Status History vs Notifications */}
@@ -1263,6 +1296,14 @@ export default function AdminOrdersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Printable Invoice & Packing Slip Modal ────────────────────── */}
+      {invoiceOrder && (
+        <OrderInvoiceModal
+          order={invoiceOrder}
+          onClose={() => setInvoiceOrder(null)}
+        />
       )}
     </div>
   );

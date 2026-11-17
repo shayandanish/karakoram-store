@@ -26,6 +26,7 @@ const purchaseInputSchema = z.object({
   supplierName: z.string().trim().max(120).optional().default(''),
   reference: z.string().trim().max(120).optional().default(''),
   purchaseDate: dateOnlySchema,
+  dueDate: dateOnlySchema.optional().or(z.literal('')).default(''),
   kind: z.enum(['purchase', 'opening_stock', 'adjustment']).default('purchase'),
   amountPaid: z.number().min(0).optional().default(0),
   notes: z.string().trim().max(1000).optional().default(''),
@@ -43,6 +44,7 @@ const expenseInputSchema = z.object({
   description: z.string().trim().min(3).max(300),
   amount: z.number().positive().max(100000000),
   expenseDate: dateOnlySchema,
+  paymentMethod: z.enum(['cash', 'bank', 'easypaisa', 'other']).optional().default('cash'),
   reference: z.string().trim().max(120).optional().default(''),
 });
 
@@ -180,8 +182,166 @@ const noStore = (res) => {
 export const adminGetSuppliers = async (req, res, next) => {
   try {
     noStore(res);
-    const suppliers = await Supplier.find().sort({ isActive: -1, name: 1 }).lean();
-    res.json({ suppliers });
+    const [suppliers, productCounts, purchaseStats] = await Promise.all([
+      Supplier.find().sort({ isActive: -1, name: 1 }).lean(),
+      Product.aggregate([
+        { $match: { primarySupplier: { $ne: null } } },
+        { $group: { _id: '$primarySupplier', count: { $sum: 1 } } },
+      ]),
+      InventoryPurchase.aggregate([
+        { $match: { supplier: { $ne: null } } },
+        {
+          $group: {
+            _id: '$supplier',
+            totalPurchasedMinor: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$kind', 'reversal'] },
+                  { $multiply: ['$totalCostMinor', -1] },
+                  '$totalCostMinor',
+                ],
+              },
+            },
+            amountPaidMinor: { $sum: '$amountPaidMinor' },
+          },
+        },
+      ]),
+    ]);
+
+    const productCountMap = new Map(productCounts.map((p) => [String(p._id), p.count]));
+    const purchaseMap = new Map(purchaseStats.map((p) => [String(p._id), p]));
+
+    const paymentStats = await SupplierPayment.aggregate([
+      {
+        $lookup: {
+          from: 'inventorypurchases',
+          localField: 'purchase',
+          foreignField: '_id',
+          as: 'purchaseDoc',
+        },
+      },
+      { $unwind: '$purchaseDoc' },
+      { $match: { 'purchaseDoc.supplier': { $ne: null } } },
+      {
+        $group: {
+          _id: '$purchaseDoc.supplier',
+          extraPaidMinor: {
+            $sum: {
+              $cond: [
+                { $eq: ['$kind', 'reversal'] },
+                { $multiply: ['$amountMinor', -1] },
+                '$amountMinor',
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    const extraPaymentMap = new Map(paymentStats.map((p) => [String(p._id), p.extraPaidMinor]));
+
+    const enrichedSuppliers = suppliers.map((supplier) => {
+      const stats = purchaseMap.get(String(supplier._id)) || { totalPurchasedMinor: 0, amountPaidMinor: 0 };
+      const extraPaid = extraPaymentMap.get(String(supplier._id)) || 0;
+      const totalPaidMinor = stats.amountPaidMinor + extraPaid;
+      const balanceMinor = Math.max(0, stats.totalPurchasedMinor - totalPaidMinor);
+
+      return {
+        ...supplier,
+        productCount: productCountMap.get(String(supplier._id)) || 0,
+        totalPurchased: fromMinorUnits(stats.totalPurchasedMinor),
+        totalPaid: fromMinorUnits(totalPaidMinor),
+        balance: fromMinorUnits(balanceMinor),
+      };
+    });
+
+    res.json({ suppliers: enrichedSuppliers });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminGetSupplierStatement = async (req, res, next) => {
+  try {
+    noStore(res);
+    const supplier = await Supplier.findById(req.params.id).lean();
+    if (!supplier) throw Object.assign(new Error('Supplier not found'), { statusCode: 404 });
+
+    const [purchases, products] = await Promise.all([
+      InventoryPurchase.find({ supplier: supplier._id })
+        .sort({ purchaseDate: -1, createdAt: -1 })
+        .populate('createdBy', 'name email')
+        .lean(),
+      Product.find({ primarySupplier: supplier._id })
+        .select('name slug variants images category isActive totalSold')
+        .populate('category', 'name')
+        .lean(),
+    ]);
+
+    const purchaseIds = purchases.map((p) => p._id);
+    const payments = await SupplierPayment.find({ purchase: { $in: purchaseIds } })
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .populate('createdBy', 'name email')
+      .lean();
+
+    const paymentTotals = await SupplierPayment.aggregate([
+      { $match: { purchase: { $in: purchaseIds } } },
+      {
+        $group: {
+          _id: '$purchase',
+          paidMinor: {
+            $sum: { $cond: [{ $eq: ['$kind', 'reversal'] }, { $multiply: ['$amountMinor', -1] }, '$amountMinor'] },
+          },
+        },
+      },
+    ]);
+    const paymentsByPurchase = new Map(paymentTotals.map((p) => [String(p._id), p.paidMinor]));
+
+    let totalPurchasedMinor = 0;
+    let totalPaidMinor = 0;
+
+    const formattedPurchases = purchases.map((purchase) => {
+      if (purchase.kind !== 'reversal') {
+        totalPurchasedMinor += purchase.totalCostMinor;
+      } else {
+        totalPurchasedMinor -= purchase.totalCostMinor;
+      }
+      const paidMinor = purchase.amountPaidMinor + (paymentsByPurchase.get(String(purchase._id)) || 0);
+      totalPaidMinor += paidMinor;
+
+      return {
+        ...purchase,
+        totalCost: fromMinorUnits(purchase.totalCostMinor),
+        amountPaid: fromMinorUnits(paidMinor),
+        balance: fromMinorUnits(Math.max(0, purchase.totalCostMinor - paidMinor)),
+        lines: purchase.lines.map((l) => ({
+          ...l,
+          unitCost: fromMinorUnits(l.unitCostMinor),
+          additionalCost: fromMinorUnits(l.additionalCostMinor),
+        })),
+      };
+    });
+
+    const formattedPayments = payments.map((payment) => ({
+      ...payment,
+      amount: fromMinorUnits(payment.amountMinor),
+    }));
+
+    const balanceMinor = Math.max(0, totalPurchasedMinor - totalPaidMinor);
+
+    res.json({
+      supplier,
+      products,
+      summary: {
+        totalPurchasesCount: purchases.length,
+        productsCount: products.length,
+        totalPurchased: fromMinorUnits(totalPurchasedMinor),
+        totalPaid: fromMinorUnits(totalPaidMinor),
+        outstandingBalance: fromMinorUnits(balanceMinor),
+      },
+      purchases: formattedPurchases,
+      payments: formattedPayments,
+    });
   } catch (error) {
     next(error);
   }
@@ -268,21 +428,21 @@ export const adminGetPurchases = async (req, res, next) => {
         const amountPaidMinor = purchase.amountPaidMinor + (paymentsByPurchase.get(String(purchase._id)) || 0);
         const reversed = purchase.kind === 'reversal' || reversedPurchaseIds.has(String(purchase._id));
         return ({
-        ...purchase,
-        totalCost: fromMinorUnits(purchase.totalCostMinor),
-        amountPaid: fromMinorUnits(amountPaidMinor),
-        paymentStatus: reversed
-          ? 'reversed'
-          : amountPaidMinor >= purchase.totalCostMinor
-            ? 'paid'
-            : amountPaidMinor > 0 ? 'partial' : 'unpaid',
-        canReverse: purchase.kind !== 'reversal' && !reversed && amountPaidMinor === 0,
-        lines: purchase.lines.map((line) => ({
-          ...line,
-          unitCost: fromMinorUnits(line.unitCostMinor),
-          additionalCost: fromMinorUnits(line.additionalCostMinor),
-        })),
-      });
+          ...purchase,
+          totalCost: fromMinorUnits(purchase.totalCostMinor),
+          amountPaid: fromMinorUnits(amountPaidMinor),
+          paymentStatus: reversed
+            ? 'reversed'
+            : amountPaidMinor >= purchase.totalCostMinor
+              ? 'paid'
+              : amountPaidMinor > 0 ? 'partial' : 'unpaid',
+          canReverse: purchase.kind !== 'reversal' && !reversed && amountPaidMinor === 0,
+          lines: purchase.lines.map((line) => ({
+            ...line,
+            unitCost: fromMinorUnits(line.unitCostMinor),
+            additionalCost: fromMinorUnits(line.additionalCostMinor),
+          })),
+        });
       }),
     });
   } catch (error) {
@@ -376,11 +536,13 @@ export const adminCreatePurchase = async (req, res, next) => {
       const paymentStatus = amountPaidMinor === totalCostMinor
         ? 'paid'
         : amountPaidMinor > 0 ? 'partial' : 'unpaid';
+      const dueDate = data.dueDate ? dateToUtc(data.dueDate) : null;
       const [purchase] = await InventoryPurchase.create([{
         supplier: supplierId,
         supplierName,
         reference: data.reference,
         purchaseDate,
+        dueDate,
         kind: data.kind,
         lines,
         totalCostMinor,
@@ -558,6 +720,7 @@ export const adminCreateExpense = async (req, res, next) => {
         description: data.description,
         amountMinor,
         expenseDate: dateToUtc(data.expenseDate),
+        paymentMethod: data.paymentMethod || 'cash',
         reference: data.reference,
         createdBy: req.user._id,
       }], { session });
@@ -742,6 +905,17 @@ export const adminGetAccountReport = async (req, res, next) => {
       + supplierPayments.reduce((sum, payment) => sum + (payment.kind === 'reversal' ? -payment.amountMinor : payment.amountMinor), 0);
     report.summary.inventoryPurchases = fromMinorUnits(inventoryPurchasesMinor);
     report.summary.supplierPayments = fromMinorUnits(supplierPaymentsMinor);
+
+    // Factor in cash payments to suppliers into drawer cashFlow
+    if (report.summary.cashFlow) {
+      const cashPaymentsToSuppliersMinor = purchases.reduce((sum, p) => p.amountPaidMinor || 0, 0)
+        + supplierPayments.reduce((sum, p) => ((p.method?.toLowerCase().includes('cash') || !p.method) ? (p.kind === 'reversal' ? -p.amountMinor : p.amountMinor) : 0), 0);
+      const totalCashOutflowMinor = Math.round((report.summary.cashFlow.cashOutflow || 0) * 100) + cashPaymentsToSuppliersMinor;
+      const totalCashInflowMinor = Math.round((report.summary.cashFlow.cashInflow || 0) * 100);
+      report.summary.cashFlow.cashSupplierPayments = fromMinorUnits(cashPaymentsToSuppliersMinor);
+      report.summary.cashFlow.cashOutflow = fromMinorUnits(totalCashOutflowMinor);
+      report.summary.cashFlow.expectedDrawerCash = fromMinorUnits(totalCashInflowMinor - totalCashOutflowMinor);
+    }
     res.json({
       range: {
         startDate: range.startDate,

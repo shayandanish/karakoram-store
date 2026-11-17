@@ -181,6 +181,72 @@ export function calculateAccountsReport(orders, expenses) {
   const sales = fromMinor(salesMinor);
   const costOfGoodsSold = fromMinor(costOfGoodsSoldMinor);
   const reportableGrossProfit = fromMinor(reportableGrossProfitMinor);
+
+  // Product-wise Profitability Breakdown
+  const productProfitMap = new Map();
+  let cashInflowMinor = 0;
+  let cashOutflowMinor = 0;
+
+  for (const order of orders) {
+    if (order.paymentStatus === 'paid' && !['cancelled', 'returned'].includes(order.orderStatus)) {
+      if (order.paymentMethod === 'cash' || (order.source === 'pos' && order.paymentMethod === 'cash')) {
+        cashInflowMinor += toMinor(order.total);
+      }
+
+      for (const item of (order.items || [])) {
+        const key = `${item.product || item.name}::${item.variantLabel}`;
+        const existing = productProfitMap.get(key) || {
+          productId: item.product || null,
+          productName: item.name,
+          variantLabel: item.variantLabel,
+          unitsSold: 0,
+          revenue: 0,
+          cogs: 0,
+          grossProfit: 0,
+          marginPercent: 0,
+        };
+
+        const lineRevenue = item.price * item.quantity;
+        const itemCost = Number.isSafeInteger(item.unitCostMinor) && item.unitCostMinor >= 0
+          ? (item.unitCostMinor * item.quantity) / 100
+          : null;
+
+        existing.unitsSold += item.quantity;
+        existing.revenue += lineRevenue;
+        if (itemCost !== null) {
+          existing.cogs += itemCost;
+        }
+
+        productProfitMap.set(key, existing);
+      }
+    }
+  }
+
+  for (const expense of expenses) {
+    const isCash = expense.paymentMethod === 'cash' || !expense.paymentMethod;
+    if (isCash) {
+      const amountMinor = safeMinor(expense.amountMinor);
+      const signedAmountMinor = expense.kind === 'reversal' ? -amountMinor : amountMinor;
+      cashOutflowMinor += signedAmountMinor;
+    }
+  }
+
+  const productProfitability = Array.from(productProfitMap.values()).map((p) => {
+    const grossProfit = Number((p.revenue - p.cogs).toFixed(2));
+    const marginPercent = p.revenue > 0 ? Number(((grossProfit / p.revenue) * 100).toFixed(1)) : 0;
+    return {
+      ...p,
+      revenue: Number(p.revenue.toFixed(2)),
+      cogs: Number(p.cogs.toFixed(2)),
+      grossProfit,
+      marginPercent,
+    };
+  }).sort((a, b) => b.grossProfit - a.grossProfit);
+
+  const cashInflow = fromMinor(cashInflowMinor);
+  const cashOutflow = fromMinor(cashOutflowMinor);
+  const expectedDrawerCash = fromMinor(cashInflowMinor - cashOutflowMinor);
+
   return {
     summary: {
       sales,
@@ -199,7 +265,13 @@ export function calculateAccountsReport(orders, expenses) {
       paidCancelledOrderCount,
       paidCancelledTotal: fromMinor(paidCancelledTotalMinor),
       profitExcludesOrdersWithMissingCost: ordersWithMissingCost > 0,
+      cashFlow: {
+        cashInflow,
+        cashOutflow,
+        expectedDrawerCash,
+      },
     },
+    productProfitability,
     rows,
   };
 }

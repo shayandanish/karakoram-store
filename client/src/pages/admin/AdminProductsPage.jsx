@@ -292,10 +292,20 @@ export default function AdminProductsPage() {
                               >
                                 {p.name}
                               </Link>
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                                 <span className="text-xs text-stone-500 font-mono">
                                   /{p.slug}
                                 </span>
+                                {p.primarySupplier && (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-xs bg-blue-50 text-blue-800 border border-blue-200">
+                                    Supplier: {p.primarySupplier.name}
+                                  </span>
+                                )}
+                                {p.totalSold > 0 && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-xs bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    {p.totalSold} sold
+                                  </span>
+                                )}
                                 {p.isFeatured && (
                                   <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-xs bg-amber-100 text-amber-800">
                                     Featured

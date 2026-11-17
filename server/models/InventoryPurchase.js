@@ -22,6 +22,7 @@ const inventoryPurchaseSchema = new mongoose.Schema(
     supplierName: { type: String, required: true, trim: true },
     reference: { type: String, default: '', trim: true, maxlength: 120 },
     purchaseDate: { type: Date, required: true },
+    dueDate: { type: Date, default: null },
     kind: { type: String, enum: ['purchase', 'opening_stock', 'adjustment', 'reversal'], default: 'purchase' },
     reversalOf: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryPurchase', default: null },
     lines: { type: [purchaseLineSchema], required: true, validate: [(lines) => lines.length > 0, 'At least one line is required'] },

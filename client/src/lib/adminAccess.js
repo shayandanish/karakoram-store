@@ -12,7 +12,7 @@ export const hasAdminPermission = (role, permission) =>
   Boolean(ROLE_PERMISSIONS[role]?.includes(permission));
 
 export const getAdminPermissionForPath = (pathname) => {
-  if (pathname.startsWith('/admin/orders')) return 'orders';
+  if (pathname.startsWith('/admin/orders') || pathname.startsWith('/admin/pos')) return 'orders';
   if (pathname.startsWith('/admin/accounts')) return 'accounts';
   if (pathname.startsWith('/admin/settings') || pathname.startsWith('/admin/contact-messages')) return 'content';
   if (pathname.startsWith('/admin/users')) return 'users';

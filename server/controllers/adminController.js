@@ -13,6 +13,7 @@ import { dispatchOrderNotifications } from '../utils/notificationService.js';
 import { delCacheByPrefix } from '../utils/cache.js';
 import { getRevenueStartDate } from '../utils/dashboardStats.js';
 import { getOverdueOrderFilters } from '../utils/orderAging.js';
+import { generateOrderId } from '../utils/orderIdGenerator.js';
 
 /* ─────────────────────────────────────────────
    PRODUCTS
@@ -73,6 +74,7 @@ const productSchema = z.object({
   shortDescription: z.string().optional().default(''),
   category: z.string().length(24),
   artisan: z.string().length(24).nullable().optional(),
+  primarySupplier: z.string().length(24).nullable().optional(),
   origin: z.string().optional().default('Hunza, Gilgit-Baltistan'),
   isSeasonal: z.boolean().optional().default(false),
   variants: z.array(variantSchema).min(1),
@@ -115,6 +117,7 @@ export const adminGetProducts = async (req, res, next) => {
       Product.find(filter)
         .populate('category', 'name slug')
         .populate('artisan', 'name village')
+        .populate('primarySupplier', 'name contactName phone email')
         .sort('-createdAt')
         .skip(skip)
         .limit(Number(limit)),
@@ -128,7 +131,8 @@ export const adminGetProductById = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id)
       .populate('category', 'name slug')
-      .populate('artisan', 'name village');
+      .populate('artisan', 'name village')
+      .populate('primarySupplier', 'name contactName phone email');
     if (!product) { res.status(404); throw new Error('Product not found'); }
     res.json(product);
   } catch (err) { next(err); }
@@ -662,13 +666,13 @@ export const adminUpdateOrder = async (req, res, next) => {
         changedBy: req.user?.name || 'Administrator',
       });
 
-      // Restore product stock and coupon count when an order is cancelled
+      // Restore product stock, decrease totalSold and restore coupon count when an order is cancelled
       if (data.orderStatus === 'cancelled') {
         for (const item of order.items || []) {
           if (item.product && item.variantLabel && item.quantity > 0) {
             await Product.updateOne(
               { _id: item.product, 'variants.label': item.variantLabel },
-              { $inc: { 'variants.$.stock': item.quantity } }
+              { $inc: { 'variants.$.stock': item.quantity, totalSold: -item.quantity } }
             ).catch((err) => console.error(`Failed to restore stock for product ${item.product}:`, err.message));
           }
         }
@@ -793,6 +797,149 @@ export const adminDeleteOrder = async (req, res, next) => {
 
     res.json({ message: 'Order deleted successfully' });
   } catch (err) { next(err); }
+};
+
+const posOrderSchema = z.object({
+  items: z.array(z.object({
+    productId: z.string().min(1),
+    variantLabel: z.string().min(1),
+    quantity: z.number().int().min(1).max(1000),
+    price: z.number().min(0).optional(),
+  })).min(1, 'At least one item is required'),
+  customerName: z.string().trim().max(100).optional().default('Walk-in Customer'),
+  customerPhone: z.string().trim().max(30).optional().default(''),
+  customerEmail: z.string().trim().email().optional().or(z.literal('')).default(''),
+  paymentMethod: z.enum(['cash', 'card', 'easypaisa', 'jazzcash', 'bank_transfer', 'other']).default('cash'),
+  discount: z.number().min(0).default(0),
+  notes: z.string().trim().max(500).optional().default(''),
+});
+
+export const adminCreatePosOrder = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  try {
+    const data = posOrderSchema.parse(req.body);
+    let createdOrder = null;
+
+    await session.withTransaction(async () => {
+      const orderItems = [];
+      let calculatedSubtotal = 0;
+
+      for (const itemInput of data.items) {
+        const product = await Product.findById(itemInput.productId)
+          .select('+variants.averageCostMinor')
+          .session(session);
+
+        if (!product || !product.isActive) {
+          throw Object.assign(new Error(`Product not found or inactive: ${itemInput.productId}`), { statusCode: 400 });
+        }
+
+        const variant = product.variants.find((v) => v.label === itemInput.variantLabel);
+        if (!variant) {
+          throw Object.assign(new Error(`Variant "${itemInput.variantLabel}" not found for ${product.name}`), { statusCode: 400 });
+        }
+
+        if (variant.stock < itemInput.quantity) {
+          throw Object.assign(new Error(`Insufficient stock for ${product.name} (${variant.label}). In stock: ${variant.stock}`), { statusCode: 400 });
+        }
+
+        // Deduct stock and increment totalSold atomically
+        const stockRes = await Product.updateOne(
+          {
+            _id: product._id,
+            variants: {
+              $elemMatch: {
+                label: itemInput.variantLabel,
+                stock: { $gte: itemInput.quantity },
+              },
+            },
+          },
+          {
+            $inc: {
+              'variants.$.stock': -itemInput.quantity,
+              totalSold: itemInput.quantity,
+            },
+          },
+          { session }
+        );
+
+        if (stockRes.modifiedCount === 0) {
+          throw Object.assign(new Error(`Insufficient stock for ${product.name} (${variant.label})`), { statusCode: 400 });
+        }
+
+        let itemPrice = variant.price;
+        if (typeof itemInput.price === 'number' && itemInput.price >= 0) {
+          itemPrice = itemInput.price;
+        } else if (variant.discountPercent && variant.discountPercent > 0) {
+          itemPrice = Math.max(1, Math.round(variant.price * (1 - variant.discountPercent / 100)));
+        }
+
+        calculatedSubtotal += itemPrice * itemInput.quantity;
+
+        orderItems.push({
+          product: product._id,
+          name: product.name,
+          variantLabel: variant.label,
+          price: itemPrice,
+          unitCostMinor: Number.isSafeInteger(variant.averageCostMinor) ? variant.averageCostMinor : null,
+          quantity: itemInput.quantity,
+          image: product.images?.[0]?.url || '',
+        });
+      }
+
+      const total = Math.max(0, calculatedSubtotal - (data.discount || 0));
+      const customOrderId = await generateOrderId(session);
+
+      const [order] = await Order.create(
+        [
+          {
+            orderId: customOrderId,
+            source: 'pos',
+            user: null,
+            guestName: data.customerName || 'Walk-in Customer',
+            guestPhone: data.customerPhone || '',
+            guestEmail: data.customerEmail || undefined,
+            items: orderItems,
+            shippingAddress: {
+              name: data.customerName || 'Walk-in Customer',
+              phone: data.customerPhone || '0000000000',
+              street: 'Store POS Counter',
+              city: 'Gilgit',
+              province: 'Gilgit-Baltistan',
+              postalCode: '15100',
+              country: 'Pakistan',
+            },
+            paymentMethod: data.paymentMethod,
+            paymentStatus: 'paid',
+            orderStatus: 'delivered',
+            subtotal: calculatedSubtotal,
+            discount: data.discount || 0,
+            shippingCost: 0,
+            total,
+            statusHistory: [
+              {
+                status: 'delivered',
+                note: `Walk-in POS Sale processed by ${req.user?.name || 'Staff'}. Payment received via ${data.paymentMethod}.`,
+                changedBy: req.user?.name || 'Staff',
+                changedAt: new Date(),
+              },
+            ],
+            notes: data.notes || '',
+            adminNotes: `POS Counter Order. Processed by staff: ${req.user?.name || req.user?._id || 'Staff'}`,
+          },
+        ],
+        { session }
+      );
+
+      createdOrder = order;
+    });
+
+    delCacheByPrefix('products:');
+    res.status(201).json(createdOrder);
+  } catch (err) {
+    next(err);
+  } finally {
+    session.endSession();
+  }
 };
 
 /* ─────────────────────────────────────────────

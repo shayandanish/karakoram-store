@@ -7,6 +7,7 @@ const accountExpenseSchema = new mongoose.Schema(
     description: { type: String, required: true, trim: true, maxlength: 300 },
     amountMinor: { type: Number, required: true, min: 1 },
     expenseDate: { type: Date, required: true },
+    paymentMethod: { type: String, enum: ['cash', 'bank', 'easypaisa', 'other'], default: 'cash' },
     reference: { type: String, default: '', trim: true, maxlength: 120 },
     reversalOf: { type: mongoose.Schema.Types.ObjectId, ref: 'AccountExpense', default: null },
     reversalRevision: { type: Number, default: 0, select: false },

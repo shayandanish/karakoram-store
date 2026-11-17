@@ -292,9 +292,11 @@ export default function ProductDetailPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <SEO
-        title={product ? product.name : 'Loading Product…'}
+        title={product ? (product.seoTitle || product.name) : 'Loading Product…'}
         description={
-          product?.description
+          product?.seoDescription
+            ? product.seoDescription
+            : product?.description
             ? product.description.slice(0, 160)
             : 'Authentic handcrafted goods and organic food from Hunza, Gilgit-Baltistan.'
         }

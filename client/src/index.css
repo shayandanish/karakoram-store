@@ -97,3 +97,33 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.2; letter-spacing:
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--color-cream-100); }
 ::-webkit-scrollbar-thumb { background: var(--color-apricot-400); border-radius: 3px; }
+
+/* ── Print: hide all UI chrome, show only invoice modal ─────── */
+@media print {
+  /* Hide everything on the page */
+  body > * {
+    display: none !important;
+  }
+  /* The React root (#root) contains the modal; bring it back */
+  body > #root {
+    display: block !important;
+  }
+  /* Hide everything inside #root except the invoice modal overlay */
+  #root > *:not(#invoice-print-root) {
+    display: none !important;
+  }
+  /* Make the invoice overlay fill the page naturally */
+  #invoice-print-root {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+  /* Strip modal backdrop */
+  #invoice-print-root > div:first-child {
+    background: transparent !important;
+  }
+}
