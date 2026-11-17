@@ -75,6 +75,63 @@ function renderPurchaseDueBadge(purchase) {
   );
 }
 
+function PurchaseLineProfitPreview({ line, selectedProduct }) {
+  const qty = Math.max(1, Number(line.quantity) || 1);
+  const unitC = moneyInput(line.unitCost);
+  const transport = moneyInput(line.transportCost);
+  const packaging = moneyInput(line.packagingCost);
+  const additionalTotal = transport + packaging;
+  const landedPerUnit = unitC + (qty > 0 ? additionalTotal / qty : 0);
+  const sellingPrice = selectedProduct?.variants?.find((v) => v.label === line.variantLabel)?.price || 0;
+  const profitPerUnit = sellingPrice - landedPerUnit;
+  const margin = sellingPrice > 0 ? (profitPerUnit / sellingPrice) * 100 : 0;
+  const marginColor = margin >= 25 ? 'text-emerald-700' : margin >= 10 ? 'text-amber-700' : 'text-rose-700';
+
+  if (!unitC && !transport && !packaging) return null;
+
+  return (
+    <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 p-3 text-xs space-y-1.5">
+      <div className="font-bold text-stone-700 mb-1 flex items-center gap-1.5">
+        <span>📊</span> Landed Cost &amp; Profit Calculator
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+        <span className="text-stone-500">Supplier / Farmer Price</span>
+        <span className="font-semibold text-stone-900 text-right">
+          Rs. {unitC.toFixed(2)} / unit
+        </span>
+        <span className="text-stone-500">Transport Cost</span>
+        <span className="font-semibold text-stone-900 text-right">
+          Rs. {transport.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (transport / qty).toFixed(2) : '0.00'}/unit)
+        </span>
+        <span className="text-stone-500">Packaging Cost</span>
+        <span className="font-semibold text-stone-900 text-right">
+          Rs. {packaging.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (packaging / qty).toFixed(2) : '0.00'}/unit)
+        </span>
+        <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1">
+          Total Landed Cost
+        </span>
+        <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1 text-right">
+          Rs. {landedPerUnit.toFixed(2)} / unit
+        </span>
+        {sellingPrice > 0 && (
+          <>
+            <span className="text-stone-500">Current Selling Price</span>
+            <span className="font-semibold text-stone-900 text-right">
+              Rs. {sellingPrice.toFixed(2)}
+            </span>
+            <span className="font-bold border-t border-stone-300 pt-1">
+              Profit Per Unit
+            </span>
+            <span className={`font-bold border-t border-stone-300 pt-1 text-right ${marginColor}`}>
+              Rs. {profitPerUnit.toFixed(2)} ({margin.toFixed(1)}% margin)
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const TABS = [
   { id: 'report', label: 'Financial Reports', desc: 'P&L, margins, and sales analytics' },
   { id: 'purchases', label: 'Supplier Bills & Payables', desc: 'Supplier bills, payments, vouchers & debts' },
@@ -875,9 +932,8 @@ export default function AdminAccountsPage() {
                       value={purchaseForm.kind}
                       onChange={(event) => setPurchaseForm((form) => ({ ...form, kind: event.target.value }))}
                     >
-                      <option value="purchase">New purchase</option>
-                      <option value="opening_stock">Opening stock</option>
-                      <option value="adjustment">Stock adjustment</option>
+                      <option value="purchase">Supplier Purchase Invoice</option>
+                      <option value="opening_stock">Opening Inventory Valuation</option>
                     </select>
                   </label>
                 </div>
@@ -955,7 +1011,7 @@ export default function AdminAccountsPage() {
                             />
                           </label>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           <label>
                             <span className={labelClass}>Unit Cost (PKR) *</span>
                             <input
@@ -964,27 +1020,13 @@ export default function AdminAccountsPage() {
                               type="number"
                               min="0"
                               step="0.01"
-                              placeholder="20"
+                              placeholder="e.g. 10"
                               value={line.unitCost}
                               onChange={(event) => updatePurchaseLine(index, 'unitCost', event.target.value)}
                             />
                           </label>
                           <label>
-                            <span className={labelClass}>Qty</span>
-                            <input
-                              className={inputClass}
-                              required
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={line.quantity}
-                              onChange={(event) => updatePurchaseLine(index, 'quantity', event.target.value)}
-                            />
-                          </label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label>
-                            <span className={labelClass}>🚚 Transport Cost (PKR)</span>
+                            <span className={labelClass}>🚚 Transport Cost</span>
                             <input
                               className={inputClass}
                               type="number"
@@ -996,7 +1038,7 @@ export default function AdminAccountsPage() {
                             />
                           </label>
                           <label>
-                            <span className={labelClass}>📦 Packaging Cost (PKR)</span>
+                            <span className={labelClass}>📦 Packaging Cost</span>
                             <input
                               className={inputClass}
                               type="number"
@@ -1009,60 +1051,7 @@ export default function AdminAccountsPage() {
                           </label>
                         </div>
 
-                        {/* ── Live Profit Calculator ── */}
-                        {(() => {
-                          const qty = Math.max(1, Number(line.quantity) || 1);
-                          const unitC = moneyInput(line.unitCost);
-                          const transport = moneyInput(line.transportCost);
-                          const packaging = moneyInput(line.packagingCost);
-                          const additionalTotal = transport + packaging;
-                          const landedPerUnit = unitC + (qty > 0 ? additionalTotal / qty : 0);
-                          const sellingPrice = selectedProduct?.variants?.find((v) => v.label === line.variantLabel)?.price || 0;
-                          const profitPerUnit = sellingPrice - landedPerUnit;
-                          const margin = sellingPrice > 0 ? (profitPerUnit / sellingPrice) * 100 : 0;
-                          const marginColor = margin >= 25 ? 'text-emerald-700' : margin >= 10 ? 'text-amber-700' : 'text-rose-700';
-
-                          if (!unitC && !transport && !packaging) return null;
-                          return (
-                            <div className="mt-1 rounded-lg bg-gradient-to-r from-stone-100 to-stone-50 border border-stone-200 p-3 text-xs space-y-1.5">
-                              <div className="font-bold text-stone-700 mb-2">📊 Cost & Profit Calculator</div>
-                              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                <span className="text-stone-500">Supplier / Farmer Price</span>
-                                <span className="font-semibold text-stone-900 text-right">
-                                  Rs. {unitC.toFixed(2)} / unit
-                                </span>
-                                <span className="text-stone-500">Transport Cost</span>
-                                <span className="font-semibold text-stone-900 text-right">
-                                  Rs. {transport.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (transport / qty).toFixed(2) : '0.00'}/unit)
-                                </span>
-                                <span className="text-stone-500">Packaging Cost</span>
-                                <span className="font-semibold text-stone-900 text-right">
-                                  Rs. {packaging.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (packaging / qty).toFixed(2) : '0.00'}/unit)
-                                </span>
-                                <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1">
-                                  Total Landed Cost
-                                </span>
-                                <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1 text-right">
-                                  Rs. {landedPerUnit.toFixed(2)} / unit
-                                </span>
-                                {sellingPrice > 0 && (
-                                  <>
-                                    <span className="text-stone-500">Current Selling Price</span>
-                                    <span className="font-semibold text-stone-900 text-right">
-                                      Rs. {sellingPrice.toFixed(2)}
-                                    </span>
-                                    <span className="font-bold border-t border-stone-300 pt-1">
-                                      Profit Per Unit
-                                    </span>
-                                    <span className={`font-bold border-t border-stone-300 pt-1 text-right ${marginColor}`}>
-                                      Rs. {profitPerUnit.toFixed(2)} ({margin.toFixed(1)}% margin)
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        <PurchaseLineProfitPreview line={line} selectedProduct={selectedProduct} />
                         {purchaseForm.lines.length > 1 && (
                           <button
                             type="button"

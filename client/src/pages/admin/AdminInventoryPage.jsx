@@ -542,13 +542,24 @@ export default function AdminInventoryPage() {
                             </td>
 
                             <td className="px-4 py-3 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenAdjust(product, variant.label)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
-                              >
-                                ⚡ Adjust
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                {variant.stock === 0 && (
+                                  <Link
+                                    to="/admin/accounts?tab=purchases"
+                                    title="Out of stock! Purchase from vendor and record in Accounts"
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 transition-colors"
+                                  >
+                                    🛒 Buy from Vendor
+                                  </Link>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenAdjust(product, variant.label)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+                                >
+                                  ⚡ Adjust
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -673,6 +684,27 @@ export default function AdminInventoryPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Zero stock alert & purchase guidance */}
+            {currentVariantObj && currentVariantObj.stock === 0 && (
+              <div className="rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-xl">⚠️</span>
+                  <div>
+                    <div className="font-bold">Zero Stock on Hand</div>
+                    <div className="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">
+                      Need fresh inventory from a vendor/farmer? Record an invoice in <strong>Finance &amp; Accounts &gt; Supplier Bills</strong> to track unit purchase price, transport, and packaging costs.
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  to="/admin/accounts?tab=purchases"
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition shadow-xs"
+                >
+                  <span>🧾</span> Record Vendor Bill →
+                </Link>
               </div>
             )}
 
@@ -1068,6 +1100,12 @@ export default function AdminInventoryPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <Link
+                          to="/admin/accounts?tab=purchases"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-100 transition-colors shadow-2xs"
+                        >
+                          <span>🧾</span> Record Vendor Bill
+                        </Link>
                         <a
                           href={whatsappUrl}
                           target="_blank"
