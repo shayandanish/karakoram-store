@@ -62,7 +62,7 @@ app.use(
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const defaultOrigins = [
-  'https://karakoram-store.vercel.app',
+  'https://Hunzora.vercel.app',
   'https://karakoramstore.vercel.app',
 ];
 

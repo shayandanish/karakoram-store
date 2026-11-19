@@ -1,4 +1,4 @@
-const DEFAULT_SITE_URL = 'https://karakoram-store.vercel.app';
+const DEFAULT_SITE_URL = 'https://Hunzora.vercel.app';
 
 const escapeHtml = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (character) => ({

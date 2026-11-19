@@ -6,6 +6,14 @@ import { verifyFirebaseIdToken } from '../utils/firebaseAdmin.js';
 import { sendTokenCookie, clearTokenCookie } from '../utils/jwt.js';
 import { generateOtp, sendOtpEmail } from '../utils/mailer.js';
 
+const strictEmailSchema = z
+  .string()
+  .trim()
+  .email('Please enter a valid email address')
+  .refine((val) => !val.includes('+'), {
+    message: 'Email aliases with "+" are not permitted. Please use your standard email address.',
+  });
+
 const loginSchema = z.object({
   email: z.string().trim().email('Please enter a valid email address'),
   password: z.string().min(1, 'Password required'),
@@ -17,7 +25,7 @@ const staffLoginSchema = z.object({
 });
 
 const registerSchema = z.object({
-  email: z.string().trim().email('Please enter a valid email address'),
+  email: strictEmailSchema,
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(80, 'Name is too long').optional(),
   password: z.string().min(6, 'Password must be at least 6 characters').optional(),
   phone: z.string().trim().max(30, 'Phone number is too long').optional(),
@@ -35,7 +43,7 @@ const firebaseLoginSchema = z.object({
 });
 
 const sendOtpSchema = z.object({
-  email: z.string().trim().email('Please enter a valid email address'),
+  email: strictEmailSchema,
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(80, 'Name is too long').optional(),
 });
 

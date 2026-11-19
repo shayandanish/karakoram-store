@@ -6,5 +6,5 @@ Disallow: /order-success
 Disallow: /checkout
 Disallow: /my-orders
 
-Sitemap: https://karakoram-store.vercel.app/sitemap.xml
+Sitemap: https://Hunzora.vercel.app/sitemap.xml
 

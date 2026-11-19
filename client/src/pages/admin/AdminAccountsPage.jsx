@@ -30,6 +30,12 @@ const todayInPakistan = () => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 
+/** Generate a unique invoice ref: HN + 8 random digits (e.g. HN48271936) */
+const generatePurchaseRef = () => {
+  const digits = Math.floor(10000000 + Math.random() * 90000000); // always 8 digits
+  return `HN${digits}`;
+};
+
 const newPurchaseLine = () => ({
   product: '',
   variantLabel: '',
@@ -38,6 +44,81 @@ const newPurchaseLine = () => ({
   transportCost: '0',
   packagingCost: '0',
 });
+
+const newAdditionalCost = () => ({
+  id: Math.random().toString(36).slice(2, 9),
+  category: 'Transportation',
+  amount: '',
+  allocationMethod: 'quantity', // 'quantity' | 'value' | 'equal'
+});
+
+function calculateLandedAllocations(lines, additionalCosts, products) {
+  const lineDetails = lines.map((l) => {
+    const qty = Math.max(1, Number(l.quantity) || 1);
+    const unitCost = moneyInput(l.unitCost);
+    const directExtra = moneyInput(l.transportCost) + moneyInput(l.packagingCost);
+    const baseTotal = unitCost * qty;
+    return {
+      line: l,
+      qty,
+      unitCost,
+      directExtra,
+      baseTotal,
+      allocatedBatchCost: 0,
+      breakdown: [
+        { category: 'Purchase Price', amountPerUnit: unitCost }
+      ]
+    };
+  });
+
+  const validCosts = (additionalCosts || []).filter((c) => Number(c.amount) > 0);
+
+  for (const cost of validCosts) {
+    const amt = Number(cost.amount);
+    let weights;
+    if (cost.allocationMethod === 'value') {
+      weights = lineDetails.map((d) => d.baseTotal);
+    } else if (cost.allocationMethod === 'equal') {
+      weights = lineDetails.map(() => 1);
+    } else {
+      // 'quantity'
+      weights = lineDetails.map((d) => d.qty);
+    }
+    const totalWeight = weights.reduce((s, w) => s + w, 0);
+    const effTotal = totalWeight > 0 ? totalWeight : lineDetails.length;
+
+    lineDetails.forEach((item, idx) => {
+      const share = effTotal > 0 ? (amt * (weights[idx] || 0)) / effTotal : 0;
+      item.allocatedBatchCost += share;
+      const sharePerUnit = item.qty > 0 ? share / item.qty : 0;
+      item.breakdown.push({
+        category: cost.category || 'Shared Cost',
+        amountPerUnit: sharePerUnit
+      });
+    });
+  }
+
+  return lineDetails.map((item) => {
+    const totalLineCost = item.baseTotal + item.directExtra + item.allocatedBatchCost;
+    const landedPerUnit = item.qty > 0 ? totalLineCost / item.qty : 0;
+    const selectedProd = products.find((p) => p._id === item.line.product);
+    const variant = selectedProd?.variants?.find((v) => v.label === item.line.variantLabel);
+    const sellingPrice = variant?.price || 0;
+    const profitPerUnit = sellingPrice - landedPerUnit;
+    const marginPercent = sellingPrice > 0 ? (profitPerUnit / sellingPrice) * 100 : 0;
+    const markupPercent = landedPerUnit > 0 ? (profitPerUnit / landedPerUnit) * 100 : 0;
+
+    return {
+      ...item,
+      totalLineCost,
+      landedPerUnit,
+      sellingPrice,
+      profitPerUnit,
+      marginPercent,
+      markupPercent,
+    };
+  });
+}
 
 const inputClass = 'w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 focus:outline-hidden focus:ring-2 focus:ring-apricot-500';
 const labelClass = 'mb-1 block text-xs font-semibold text-stone-600';
@@ -75,55 +156,106 @@ function renderPurchaseDueBadge(purchase) {
   );
 }
 
-function PurchaseLineProfitPreview({ line, selectedProduct }) {
+function PurchaseLineProfitPreview({ line, selectedProduct, allocation }) {
+  if (!line.unitCost && !line.transportCost && !line.packagingCost && (!allocation || allocation.allocatedBatchCost === 0)) {
+    return null;
+  }
   const qty = Math.max(1, Number(line.quantity) || 1);
   const unitC = moneyInput(line.unitCost);
-  const transport = moneyInput(line.transportCost);
-  const packaging = moneyInput(line.packagingCost);
-  const additionalTotal = transport + packaging;
-  const landedPerUnit = unitC + (qty > 0 ? additionalTotal / qty : 0);
-  const sellingPrice = selectedProduct?.variants?.find((v) => v.label === line.variantLabel)?.price || 0;
+  const directExtra = moneyInput(line.transportCost) + moneyInput(line.packagingCost);
+  const allocatedBatchExtra = allocation?.allocatedBatchCost || 0;
+  const totalExtra = directExtra + allocatedBatchExtra;
+  const landedPerUnit = unitC + (qty > 0 ? totalExtra / qty : 0);
+
+  const variant = selectedProduct?.variants?.find((v) => v.label === line.variantLabel);
+  const sellingPrice = variant?.price || 0;
   const profitPerUnit = sellingPrice - landedPerUnit;
   const margin = sellingPrice > 0 ? (profitPerUnit / sellingPrice) * 100 : 0;
-  const marginColor = margin >= 25 ? 'text-emerald-700' : margin >= 10 ? 'text-amber-700' : 'text-rose-700';
+  const markup = landedPerUnit > 0 ? (profitPerUnit / landedPerUnit) * 100 : 0;
+  const grossProfitLine = profitPerUnit * qty;
 
-  if (!unitC && !transport && !packaging) return null;
+  const targetMarkup = variant?.targetMarkupPercent ?? 25;
+  const suggestedSellingPrice = landedPerUnit * (1 + targetMarkup / 100);
+
+  const status = profitPerUnit < 0
+    ? { label: 'Loss Alert', color: 'bg-rose-100 text-rose-800 border-rose-300' }
+    : margin < 15
+      ? { label: 'Thin Margin', color: 'bg-amber-100 text-amber-800 border-amber-300' }
+      : { label: 'Healthy Profit', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
 
   return (
-    <div className="mt-2 rounded-lg bg-stone-50 border border-stone-200 p-3 text-xs space-y-1.5">
-      <div className="font-bold text-stone-700 mb-1 flex items-center gap-1.5">
-        <span>📊</span> Landed Cost &amp; Profit Calculator
+    <div className="mt-2 rounded-xl bg-stone-50 border border-stone-200 p-3 text-xs space-y-2">
+      <div className="flex items-center justify-between font-bold text-stone-700">
+        <div className="flex items-center gap-1.5">
+          <span>Landed Cost &amp; Profit Breakdown</span>
+        </div>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${status.color}`}>
+          {status.label}
+        </span>
       </div>
+
       <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-        <span className="text-stone-500">Supplier / Farmer Price</span>
-        <span className="font-semibold text-stone-900 text-right">
-          Rs. {unitC.toFixed(2)} / unit
-        </span>
-        <span className="text-stone-500">Transport Cost</span>
-        <span className="font-semibold text-stone-900 text-right">
-          Rs. {transport.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (transport / qty).toFixed(2) : '0.00'}/unit)
-        </span>
-        <span className="text-stone-500">Packaging Cost</span>
-        <span className="font-semibold text-stone-900 text-right">
-          Rs. {packaging.toFixed(2)} (÷{qty} = Rs. {qty > 0 ? (packaging / qty).toFixed(2) : '0.00'}/unit)
-        </span>
+        <span className="text-stone-500">Supplier Purchase Price:</span>
+        <span className="font-semibold text-stone-900 text-right">Rs. {unitC.toFixed(2)} / unit</span>
+
+        {moneyInput(line.transportCost) > 0 && (
+          <div className="contents">
+            <span className="text-stone-500">🚚 Direct Transport:</span>
+            <span className="font-medium text-stone-800 text-right">
+              Rs. {moneyInput(line.transportCost).toFixed(2)} (Rs. {(moneyInput(line.transportCost) / qty).toFixed(2)}/u)
+            </span>
+          </div>
+        )}
+
+        {moneyInput(line.packagingCost) > 0 && (
+          <div className="contents">
+            <span className="text-stone-500">📦 Direct Packaging:</span>
+            <span className="font-medium text-stone-800 text-right">
+              Rs. {moneyInput(line.packagingCost).toFixed(2)} (Rs. {(moneyInput(line.packagingCost) / qty).toFixed(2)}/u)
+            </span>
+          </div>
+        )}
+
+        {allocation?.breakdown?.filter((b) => b.category !== 'Purchase Price').map((b, bIdx) => (
+          <div key={bIdx} className="contents">
+            <span className="text-stone-500">🔹 Shared {b.category}:</span>
+            <span className="font-medium text-stone-800 text-right">Rs. {b.amountPerUnit.toFixed(2)} / unit</span>
+          </div>
+        ))}
+
         <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1">
-          Total Landed Cost
+          Actual Landed Cost:
         </span>
         <span className="font-bold text-mountain-900 border-t border-stone-300 pt-1 text-right">
           Rs. {landedPerUnit.toFixed(2)} / unit
         </span>
+
         {sellingPrice > 0 && (
           <>
-            <span className="text-stone-500">Current Selling Price</span>
-            <span className="font-semibold text-stone-900 text-right">
-              Rs. {sellingPrice.toFixed(2)}
+            <span className="text-stone-500">Current Selling Price:</span>
+            <span className="font-semibold text-stone-900 text-right">Rs. {sellingPrice.toFixed(2)}</span>
+
+            <span className="text-stone-500">Profit Per Unit:</span>
+            <span className={`font-bold text-right ${profitPerUnit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              Rs. {profitPerUnit.toFixed(2)}
             </span>
-            <span className="font-bold border-t border-stone-300 pt-1">
-              Profit Per Unit
+
+            <span className="text-stone-500">Profit Margin %:</span>
+            <span className="font-semibold text-stone-900 text-right">{margin.toFixed(1)}%</span>
+
+            <span className="text-stone-500">Markup %:</span>
+            <span className="font-semibold text-stone-900 text-right">{markup.toFixed(1)}%</span>
+
+            <span className="text-stone-500">Total Line Gross Profit ({qty}u):</span>
+            <span className={`font-bold text-right ${grossProfitLine >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+              Rs. {grossProfitLine.toFixed(2)}
             </span>
-            <span className={`font-bold border-t border-stone-300 pt-1 text-right ${marginColor}`}>
-              Rs. {profitPerUnit.toFixed(2)} ({margin.toFixed(1)}% margin)
+
+            <span className="text-stone-500 border-t border-stone-200 pt-1">
+              Suggested Price ({targetMarkup}% markup):
+            </span>
+            <span className="font-semibold text-apricot-800 border-t border-stone-200 pt-1 text-right">
+              Rs. {suggestedSellingPrice.toFixed(2)}
             </span>
           </>
         )}
@@ -159,12 +291,13 @@ export default function AdminAccountsPage() {
   const [purchaseForm, setPurchaseForm] = useState({
     supplier: '',
     supplierName: '',
-    reference: '',
+    reference: generatePurchaseRef(),
     purchaseDate: todayInPakistan(),
     dueDate: '',
     kind: 'purchase',
     amountPaid: '0',
     notes: '',
+    additionalCosts: [],
     lines: [newPurchaseLine()],
   });
   const [expenseForm, setExpenseForm] = useState({
@@ -194,6 +327,23 @@ export default function AdminAccountsPage() {
   const [statementSupplierId, setStatementSupplierId] = useState(null);
   // Printable payment voucher modal
   const [voucherData, setVoucherData] = useState(null);
+
+  // Accounts Audit Modal and Filters State
+  const [auditCheckModalOpen, setAuditCheckModalOpen] = useState(false);
+  const [auditCheckForm, setAuditCheckForm] = useState({
+    periodLabel: "Today's Accounts Reconciliation",
+    periodFrom: todayInPakistan(),
+    periodTo: todayInPakistan(),
+    physicalCashCount: '',
+    bankBalanceCount: '',
+    notes: '',
+    discrepancyReason: '',
+  });
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState('all');
+  const [auditVerifiedFilter, setAuditVerifiedFilter] = useState('all');
+  const [verifyTargetEntry, setVerifyTargetEntry] = useState(null);
+  const [verifyNotes, setVerifyNotes] = useState('');
 
   const accountsQuery = useQuery({
     queryKey: ['admin-accounts', 'records'],
@@ -274,15 +424,16 @@ export default function AdminAccountsPage() {
       setPurchaseForm({
         supplier: '',
         supplierName: '',
-        reference: '',
+        reference: generatePurchaseRef(),
         purchaseDate: todayInPakistan(),
         dueDate: '',
         kind: 'purchase',
         amountPaid: '0',
         notes: '',
+        additionalCosts: [],
         lines: [newPurchaseLine()],
       });
-      toast.success('Inventory purchase recorded & stock updated');
+      toast.success('Purchase recorded & added to Warehouse stock (Transfer to store shelf when ready)');
       invalidateAccounts();
     },
     onError: (error) => toast.error(error.response?.data?.message || 'Could not record purchase'),
@@ -338,6 +489,36 @@ export default function AdminAccountsPage() {
     onError: (error) => toast.error(error.response?.data?.message || 'Could not reverse expense'),
   });
 
+  const auditCheckMutation = useMutation({
+    mutationFn: (payload) => api.post('/admin/accounts/audit/check', payload),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Accounts audit recorded and verified by admin');
+      invalidateAccounts();
+      setAuditCheckModalOpen(false);
+      setAuditCheckForm({
+        periodLabel: "Today's Accounts Reconciliation",
+        periodFrom: todayInPakistan(),
+        periodTo: todayInPakistan(),
+        physicalCashCount: '',
+        bankBalanceCount: '',
+        notes: '',
+        discrepancyReason: '',
+      });
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not record accounts audit'),
+  });
+
+  const verifyAuditMutation = useMutation({
+    mutationFn: ({ id, notes }) => api.post(`/admin/accounts/audit/${id}/verify`, { notes }),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Audit entry verified and marked as checked by admin');
+      setVerifyTargetEntry(null);
+      setVerifyNotes('');
+      invalidateAccounts();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not verify audit entry'),
+  });
+
   const records = accountsQuery.data;
   const products = productsQuery.data ?? EMPTY_ARRAY;
   const report = reportQuery.data;
@@ -358,6 +539,41 @@ export default function AdminAccountsPage() {
     return purchases.filter((p) => p.paymentStatus === 'unpaid' || p.paymentStatus === 'partial').length;
   }, [purchases]);
 
+  const filteredAuditLogs = useMemo(() => {
+    return auditLogs.filter((entry) => {
+      // Category filter
+      if (auditCategoryFilter === 'check' && entry.action !== 'audit.check_completed') return false;
+      if (auditCategoryFilter === 'purchase' && !entry.action.startsWith('purchase.')) return false;
+      if (auditCategoryFilter === 'payment' && !entry.action.startsWith('supplier.payment')) return false;
+      if (auditCategoryFilter === 'expense' && !entry.action.startsWith('expense.')) return false;
+      if (auditCategoryFilter === 'supplier' && !entry.action.startsWith('supplier.')) return false;
+
+      // Verified status filter
+      if (auditVerifiedFilter === 'verified' && !entry.verified) return false;
+      if (auditVerifiedFilter === 'pending' && entry.verified) return false;
+
+      // Keyword search
+      if (auditSearch.trim()) {
+        const q = auditSearch.toLowerCase();
+        const actionMatch = entry.action?.toLowerCase().includes(q);
+        const entityMatch = entry.entity?.toLowerCase().includes(q) || entry.entityId?.toLowerCase().includes(q);
+        const actorMatch = entry.actor?.name?.toLowerCase().includes(q) || entry.actor?.email?.toLowerCase().includes(q);
+        const notesMatch = entry.verificationNotes?.toLowerCase().includes(q) || entry.details?.notes?.toLowerCase().includes(q);
+        const refMatch = String(entry.details?.reference || entry.details?.periodLabel || '').toLowerCase().includes(q);
+        if (!actionMatch && !entityMatch && !actorMatch && !notesMatch && !refMatch) return false;
+      }
+      return true;
+    });
+  }, [auditLogs, auditCategoryFilter, auditVerifiedFilter, auditSearch]);
+
+  const auditStats = useMemo(() => {
+    const total = auditLogs.length;
+    const verified = auditLogs.filter((l) => l.verified).length;
+    const pending = total - verified;
+    const auditChecks = auditLogs.filter((l) => l.action === 'audit.check_completed').length;
+    return { total, verified, pending, auditChecks };
+  }, [auditLogs]);
+
   const updatePurchaseLine = (index, key, value) => {
     setPurchaseForm((current) => ({
       ...current,
@@ -371,6 +587,26 @@ export default function AdminAccountsPage() {
       }),
     }));
   };
+
+  const updateAdditionalCost = (index, key, value) => {
+    setPurchaseForm((current) => ({
+      ...current,
+      additionalCosts: current.additionalCosts.map((cost, costIndex) => (
+        costIndex === index ? { ...cost, [key]: value } : cost
+      )),
+    }));
+  };
+
+  const removeAdditionalCost = (index) => {
+    setPurchaseForm((current) => ({
+      ...current,
+      additionalCosts: current.additionalCosts.filter((_, costIndex) => costIndex !== index),
+    }));
+  };
+
+  const purchaseAllocations = useMemo(() => {
+    return calculateLandedAllocations(purchaseForm.lines, purchaseForm.additionalCosts, products);
+  }, [purchaseForm.lines, purchaseForm.additionalCosts, products]);
 
   const downloadReport = async () => {
     try {
@@ -408,11 +644,17 @@ export default function AdminAccountsPage() {
     purchaseMutation.mutate({
       ...purchaseForm,
       amountPaid: moneyInput(purchaseForm.amountPaid),
+      additionalCosts: (purchaseForm.additionalCosts || [])
+        .filter((c) => Number(c.amount) > 0)
+        .map((c) => ({
+          category: c.category.trim() || 'Additional Cost',
+          amount: moneyInput(c.amount),
+          allocationMethod: c.allocationMethod || 'quantity',
+        })),
       lines: purchaseForm.lines.map((line) => ({
         ...line,
         quantity: Number(line.quantity),
         unitCost: moneyInput(line.unitCost),
-        // additionalCost = transport + packaging (sent to backend as combined)
         additionalCost: moneyInput(line.transportCost) + moneyInput(line.packagingCost),
       })),
     });
@@ -550,18 +792,28 @@ export default function AdminAccountsPage() {
                 </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {[
-                    ['Total Sales (Revenue)', report.summary.sales],
-                    ['COGS (Actual Cost)', report.summary.costOfGoodsSold],
-                    ['Gross Profit', report.summary.grossProfit],
-                    ['Gross Margin %', `${report.summary.grossMarginPercent}%`],
-                    ['Operating Expenses', report.summary.expenses],
-                    ['Customer Refunds', report.summary.refunds],
-                    ['Net Profit', report.summary.netProfit],
-                    ['Supplier Payments Paid', report.summary.supplierPayments],
-                  ].map(([label, value]) => (
-                    <div key={label} className="rounded-xl border border-stone-200 bg-stone-50/70 p-4">
+                    ['Total Sales (Revenue)', report.summary.sales, 'revenue'],
+                    ['COGS (Actual Cost)', report.summary.costOfGoodsSold, 'cost'],
+                    ['Gross Profit', report.summary.grossProfit, 'profit'],
+                    ['Gross Margin %', `${report.summary.grossMarginPercent ?? 0}%`, 'pct'],
+                    ['Operating Expenses', report.summary.expenses, 'expense'],
+                    ['Customer Refunds', report.summary.refunds, 'expense'],
+                    ['Net Profit', report.summary.netProfit, 'net'],
+                    ['Net Margin %', `${report.summary.netMarginPercent ?? 0}%`, 'pct'],
+                    ['Supplier Payments Paid', report.summary.supplierPayments, 'cost'],
+                    ['Net Realized Income', report.summary.earnedProfitIncome ?? report.summary.netProfit, 'net'],
+                  ].map(([label, value, kind]) => (
+                    <div key={label} className={`rounded-xl border p-4 ${kind === 'net' ? 'border-emerald-200 bg-emerald-50/60' :
+                      kind === 'profit' ? 'border-sky-200 bg-sky-50/50' :
+                        kind === 'expense' ? 'border-rose-100 bg-rose-50/40' :
+                          'border-stone-200 bg-stone-50/70'
+                      }`}>
                       <p className="text-xs font-semibold text-stone-500">{label}</p>
-                      <p className={`mt-1 text-lg font-bold ${label.includes('Net Profit') ? getNetProfitClass(value) : 'text-mountain-900'}`}>
+                      <p className={`mt-1 text-lg font-bold ${kind === 'net' ? getNetProfitClass(typeof value === 'string' ? parseFloat(value) : value) :
+                        kind === 'profit' ? 'text-sky-700' :
+                          kind === 'expense' ? 'text-rose-600' :
+                            'text-mountain-900'
+                        }`}>
                         {typeof value === 'number' ? fmtPKR(value) : value}
                       </p>
                     </div>
@@ -696,6 +948,7 @@ export default function AdminAccountsPage() {
                             <th className="py-2.5 px-3 text-right">Cost (COGS)</th>
                             <th className="py-2.5 px-3 text-right">Gross Profit</th>
                             <th className="py-2.5 px-3 text-right">Expenses</th>
+                            <th className="py-2.5 px-3 text-right">Refunds</th>
                             <th className="py-2.5 px-3 text-right">Net Profit</th>
                             <th className="py-2.5 px-3 text-center">Margin</th>
                           </tr>
@@ -712,6 +965,7 @@ export default function AdminAccountsPage() {
                                 <td className="py-2.5 px-3 text-right text-stone-600">{fmtPKR(day.cogs)}</td>
                                 <td className="py-2.5 px-3 text-right font-semibold text-emerald-700">{fmtPKR(day.grossProfit)}</td>
                                 <td className="py-2.5 px-3 text-right text-rose-600">{day.expenses > 0 ? `− ${fmtPKR(day.expenses)}` : '—'}</td>
+                                <td className="py-2.5 px-3 text-right text-amber-600">{(day.refunds || 0) > 0 ? `− ${fmtPKR(day.refunds)}` : '—'}</td>
                                 <td className={`py-2.5 px-3 text-right font-bold ${isProfit ? 'text-emerald-800' : 'text-rose-700'}`}>
                                   {fmtPKR(day.netProfit)}
                                 </td>
@@ -744,6 +998,9 @@ export default function AdminAccountsPage() {
                             <td className="py-2.5 px-3 text-right text-rose-700">
                               {fmtPKR(report.dailyPnL.reduce((s, d) => s + d.expenses, 0))}
                             </td>
+                            <td className="py-2.5 px-3 text-right text-amber-700">
+                              {fmtPKR(report.dailyPnL.reduce((s, d) => s + (d.refunds || 0), 0))}
+                            </td>
                             <td className={`py-2.5 px-3 text-right ${report.summary.netProfit >= 0 ? 'text-emerald-800' : 'text-rose-700'}`}>
                               {fmtPKR(report.summary.netProfit)}
                             </td>
@@ -771,6 +1028,7 @@ export default function AdminAccountsPage() {
                             <th className="py-2.5 px-3 text-right">COGS</th>
                             <th className="py-2.5 px-3 text-right">Gross Profit</th>
                             <th className="py-2.5 px-3 text-right">Expenses</th>
+                            <th className="py-2.5 px-3 text-right">Refunds</th>
                             <th className="py-2.5 px-3 text-right">Net Profit</th>
                             <th className="py-2.5 px-3 text-center">Margin</th>
                           </tr>
@@ -789,6 +1047,7 @@ export default function AdminAccountsPage() {
                                 <td className="py-2.5 px-3 text-right text-stone-600">{fmtPKR(m.cogs)}</td>
                                 <td className="py-2.5 px-3 text-right font-semibold text-emerald-700">{fmtPKR(m.grossProfit)}</td>
                                 <td className="py-2.5 px-3 text-right text-rose-600">{m.expenses > 0 ? fmtPKR(m.expenses) : '—'}</td>
+                                <td className="py-2.5 px-3 text-right text-amber-600">{(m.refunds || 0) > 0 ? fmtPKR(m.refunds) : '—'}</td>
                                 <td className={`py-2.5 px-3 text-right font-bold ${isProfit ? 'text-emerald-800' : 'text-rose-700'}`}>
                                   {fmtPKR(m.netProfit)}
                                 </td>
@@ -940,13 +1199,26 @@ export default function AdminAccountsPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <label>
-                    <span className={labelClass}>Invoice / Ref #</span>
-                    <input
-                      className={inputClass}
-                      placeholder="INV-2026-001"
-                      value={purchaseForm.reference}
-                      onChange={(event) => setPurchaseForm((form) => ({ ...form, reference: event.target.value }))}
-                    />
+                    <span className={labelClass}>
+                      Invoice / Ref #
+                      <span className="ml-1 text-[10px] font-normal text-stone-400 normal-case">(auto-generated)</span>
+                    </span>
+                    <div className="flex gap-1">
+                      <input
+                        className={`${inputClass} flex-1 font-mono text-xs`}
+                        placeholder="HN48271936"
+                        value={purchaseForm.reference}
+                        onChange={(event) => setPurchaseForm((form) => ({ ...form, reference: event.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        title="Generate a new reference number"
+                        onClick={() => setPurchaseForm((form) => ({ ...form, reference: generatePurchaseRef() }))}
+                        className="shrink-0 px-2.5 rounded-lg border border-stone-300 bg-stone-100 hover:bg-stone-200 text-stone-600 text-sm transition-colors"
+                      >
+                        ↺
+                      </button>
+                    </div>
                   </label>
                   <label>
                     <span className={labelClass}>Amount Paid (PKR)</span>
@@ -960,6 +1232,105 @@ export default function AdminAccountsPage() {
                       onChange={(event) => setPurchaseForm((form) => ({ ...form, amountPaid: event.target.value }))}
                     />
                   </label>
+                </div>
+
+                {/* Shared Batch Additional Costs (Landed Freight, Packaging, Handling) */}
+                <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                        <span></span> Shared Batch Additional Costs
+                      </span>
+                      <p className="text-[11px] text-stone-500">
+                        Shared costs (transport, handling, packaging) allocated across all items.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-apricot-700 hover:text-apricot-800 underline"
+                      onClick={() => setPurchaseForm((form) => ({
+                        ...form,
+                        additionalCosts: [...(form.additionalCosts || []), newAdditionalCost()],
+                      }))}
+                    >
+                      + Add Cost
+                    </button>
+                  </div>
+
+                  {/* Preset quick chips */}
+                  <div className="flex flex-wrap items-center gap-1 text-xs">
+                    <span className="text-[10px] text-stone-400 font-medium">Quick add:</span>
+                    {[
+                      { label: 'Freight', cat: 'Transportation' },
+                      { label: 'Packaging', cat: 'Packaging' },
+                      { label: 'Handling', cat: 'Handling' },
+                      { label: 'Duty/Tax', cat: 'Customs & Duty' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.cat}
+                        type="button"
+                        className="px-2 py-0.5 rounded-full bg-white border border-stone-200 text-stone-700 hover:border-apricot-400 hover:text-apricot-700 text-[10px] font-medium transition"
+                        onClick={() => setPurchaseForm((form) => ({
+                          ...form,
+                          additionalCosts: [
+                            ...(form.additionalCosts || []),
+                            { ...newAdditionalCost(), category: preset.cat },
+                          ],
+                        }))}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* List of additional costs */}
+                  {(purchaseForm.additionalCosts || []).map((cost, costIdx) => (
+                    <div key={cost.id || costIdx} className="grid grid-cols-1 sm:grid-cols-12 gap-1.5 bg-white p-2 rounded-lg border border-stone-200 items-center">
+                      <div className="sm:col-span-4">
+                        <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">Category</label>
+                        <input
+                          className={inputClass}
+                          placeholder="e.g. Transportation"
+                          value={cost.category}
+                          onChange={(e) => updateAdditionalCost(costIdx, 'category', e.target.value)}
+                        />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">Amount (PKR)</label>
+                        <input
+                          className={inputClass}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={cost.amount}
+                          onChange={(e) => updateAdditionalCost(costIdx, 'amount', e.target.value)}
+                        />
+                      </div>
+                      <div className="sm:col-span-4">
+                        <label className="text-[10px] text-stone-500 font-semibold block mb-0.5">Allocation</label>
+                        <select
+                          className={inputClass}
+                          value={cost.allocationMethod}
+                          onChange={(e) => updateAdditionalCost(costIdx, 'allocationMethod', e.target.value)}
+                        >
+                          <option value="quantity">By Quantity (Units)</option>
+                          <option value="value">By Purchase Value</option>
+                          <option value="equal">Equal Split</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-1 flex justify-end sm:pt-3">
+                        <button
+                          type="button"
+                          className="text-stone-400 hover:text-rose-600 font-bold text-xs p-1"
+                          title="Remove cost"
+                          onClick={() => removeAdditionalCost(costIdx)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Line items */}
@@ -1026,7 +1397,7 @@ export default function AdminAccountsPage() {
                             />
                           </label>
                           <label>
-                            <span className={labelClass}>🚚 Transport Cost</span>
+                            <span className={labelClass}>Transport Cost</span>
                             <input
                               className={inputClass}
                               type="number"
@@ -1038,7 +1409,7 @@ export default function AdminAccountsPage() {
                             />
                           </label>
                           <label>
-                            <span className={labelClass}>📦 Packaging Cost</span>
+                            <span className={labelClass}>Packaging Cost</span>
                             <input
                               className={inputClass}
                               type="number"
@@ -1051,7 +1422,7 @@ export default function AdminAccountsPage() {
                           </label>
                         </div>
 
-                        <PurchaseLineProfitPreview line={line} selectedProduct={selectedProduct} />
+                        <PurchaseLineProfitPreview line={line} selectedProduct={selectedProduct} allocation={purchaseAllocations[index]} />
                         {purchaseForm.lines.length > 1 && (
                           <button
                             type="button"
@@ -1124,9 +1495,26 @@ export default function AdminAccountsPage() {
                               <span className="text-xs font-mono bg-stone-100 px-1.5 py-0.5 rounded text-stone-700">
                                 {purchase.reference || purchase.kind}
                               </span>
-                              <div className="mt-1 text-xs text-stone-500">
-                                {purchase.lines.map((line) => `${line.productName} (${line.variantLabel}) × ${line.quantity}`).join(', ')}
+                              <div className="mt-1 text-xs text-stone-600 space-y-0.5">
+                                {purchase.lines.map((line, lIdx) => (
+                                  <div key={lIdx} className="flex flex-wrap items-center gap-1">
+                                    <span className="font-medium text-stone-800">{line.productName} ({line.variantLabel}) × {line.quantity}</span>
+                                    <span className="text-[11px] text-stone-500">
+                                      @ Rs. {line.landedUnitCost ?? line.unitCost}/u
+                                      {line.landedUnitCost && line.landedUnitCost !== line.unitCost ? ` (Base: Rs. ${line.unitCost})` : ''}
+                                    </span>
+                                  </div>
+                                ))}
                               </div>
+                              {purchase.additionalCosts?.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {purchase.additionalCosts.map((ac, acIdx) => (
+                                    <span key={acIdx} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-stone-100 text-stone-700 border border-stone-200 font-medium">
+                                      <span>🚚</span> {ac.category}: Rs. {ac.amount}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </td>
                             <td className="py-3 px-3 font-semibold">
                               {purchase.kind === 'reversal' ? '−' : ''}{fmtPKR(purchase.totalCost)}
@@ -1660,24 +2048,511 @@ export default function AdminAccountsPage() {
           TAB 5: AUDIT TRAIL
       ───────────────────────────────────────────────────────────── */}
       {activeTab === 'audit' && (
-        <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-xs">
-          <h2 className="text-lg font-bold text-mountain-900">Accounts Audit Trail</h2>
-          <p className="mt-1 text-xs text-stone-500 mb-4">
-            Immutable log of all financial creations, payment entries, adjustments, and report exports.
-          </p>
-          <ul className="divide-y divide-stone-100">
-            {auditLogs.map((entry) => (
-              <li key={`${entry._id || entry.occurredAt}-${entry.action}`} className="flex flex-wrap justify-between gap-2 py-3 text-xs">
-                <div>
-                  <span className="font-bold text-mountain-900">{entry.action}</span>
-                  <span className="text-stone-600 ml-2">· {entry.entity} {entry.entityId}</span>
-                </div>
-                <span className="text-stone-500">{entry.actor?.name || 'Admin'} · {fmtDate(entry.occurredAt)}</span>
-              </li>
-            ))}
-            {auditLogs.length === 0 && <li className="py-6 text-center text-sm text-stone-500">No audit events recorded yet.</li>}
-          </ul>
+        <section className="space-y-4">
+          {/* Audit Header & KPIs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-stone-200 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                  Compliance & Oversight
+                </span>
+                <span className="text-xs text-stone-400">Admin Ledger Trail</span>
+              </div>
+              <h2 className="text-xl font-bold text-mountain-900 mt-1 font-display">
+                Accounts Audit Trail &amp; Verification
+              </h2>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Immutable financial event log. Audit reconciliations, supplier bills, payment vouchers, and expense logs checked by administrators.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAuditCheckModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-indigo-700 text-white hover:bg-indigo-800 transition shadow-xs shrink-0"
+            >
+              <span>📋</span> Conduct Accounts Audit Check
+            </button>
+          </div>
+
+          {/* Audit KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white border border-stone-200 rounded-xl p-3.5 shadow-2xs">
+              <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider block">
+                Total Audit Events
+              </span>
+              <span className="text-2xl font-bold text-mountain-900 mt-1 block">
+                {auditStats.total.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-stone-400 mt-0.5 block">Logged in financial ledger</span>
+            </div>
+
+            <div className="bg-emerald-50/40 border border-emerald-200 rounded-xl p-3.5 shadow-2xs">
+              <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider block">
+                Checked by Admin
+              </span>
+              <span className="text-2xl font-bold text-emerald-700 mt-1 block">
+                {auditStats.verified.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-emerald-600/80 mt-0.5 block">Verified &amp; approved</span>
+            </div>
+
+            <div className="bg-amber-50/40 border border-amber-200 rounded-xl p-3.5 shadow-2xs">
+              <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider block">
+                Pending Admin Check
+              </span>
+              <span className="text-2xl font-bold text-amber-700 mt-1 block">
+                {auditStats.pending.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-amber-700/80 mt-0.5 block">Awaiting sign-off</span>
+            </div>
+
+            <div className="bg-indigo-50/40 border border-indigo-200 rounded-xl p-3.5 shadow-2xs">
+              <span className="text-[11px] font-semibold text-indigo-800 uppercase tracking-wider block">
+                Formal Audit Checks
+              </span>
+              <span className="text-2xl font-bold text-indigo-700 mt-1 block">
+                {auditStats.auditChecks.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-indigo-700/80 mt-0.5 block">Cash &amp; bank reconciliations</span>
+            </div>
+          </div>
+
+          {/* Filters Bar */}
+          <div className="bg-white p-3 rounded-xl border border-stone-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+            <div className="w-full md:w-72">
+              <input
+                type="text"
+                value={auditSearch}
+                onChange={(e) => setAuditSearch(e.target.value)}
+                placeholder="Search reference, admin, entity, notes..."
+                className="w-full px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-stone-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <select
+                value={auditCategoryFilter}
+                onChange={(e) => setAuditCategoryFilter(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-stone-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 font-medium"
+              >
+                <option value="all">All Categories</option>
+                <option value="check">📋 Audit Checks</option>
+                <option value="purchase">🧾 Purchases &amp; Bills</option>
+                <option value="payment">💸 Supplier Payments</option>
+                <option value="expense">📉 Operating Expenses</option>
+                <option value="supplier">🏢 Suppliers</option>
+              </select>
+
+              <select
+                value={auditVerifiedFilter}
+                onChange={(e) => setAuditVerifiedFilter(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-stone-200 bg-stone-50 text-stone-800 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 font-medium"
+              >
+                <option value="all">All Status</option>
+                <option value="verified">✅ Checked by Admin</option>
+                <option value="pending">⏳ Pending Check</option>
+              </select>
+
+              {(auditSearch || auditCategoryFilter !== 'all' || auditVerifiedFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuditSearch('');
+                    setAuditCategoryFilter('all');
+                    setAuditVerifiedFilter('all');
+                  }}
+                  className="px-2 py-1 text-stone-500 hover:text-stone-800 underline text-xs"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Audit Records Table */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-stone-50 border-b border-stone-200 text-stone-600 font-semibold uppercase tracking-wider text-[11px]">
+                  <tr>
+                    <th className="py-3 px-3.5">Date &amp; Time</th>
+                    <th className="py-3 px-3">Action &amp; Type</th>
+                    <th className="py-3 px-3">Given Data / Financial Details</th>
+                    <th className="py-3 px-3">Conducted By</th>
+                    <th className="py-3 px-3 text-right">Admin Check Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {filteredAuditLogs.map((entry) => {
+                    const isAuditCheck = entry.action === 'audit.check_completed';
+                    const isPurchase = entry.action.startsWith('purchase.');
+                    const isPayment = entry.action.startsWith('supplier.payment');
+                    const isExpense = entry.action.startsWith('expense.');
+                    const isReversal = entry.action.includes('reversed');
+
+                    let badgeColor = 'bg-stone-100 text-stone-700 border-stone-200';
+                    let actionIcon = '📝';
+                    let actionLabel = entry.action;
+
+                    if (isAuditCheck) {
+                      badgeColor = 'bg-indigo-100 text-indigo-800 border-indigo-200';
+                      actionIcon = '📋';
+                      actionLabel = 'Accounts Audit Check';
+                    } else if (isPurchase) {
+                      badgeColor = isReversal ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-sky-100 text-sky-800 border-sky-200';
+                      actionIcon = isReversal ? '🔄' : '🧾';
+                      actionLabel = isReversal ? 'Purchase Reversal' : 'Purchase Invoiced';
+                    } else if (isPayment) {
+                      badgeColor = isReversal ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                      actionIcon = isReversal ? '🔄' : '💸';
+                      actionLabel = isReversal ? 'Payment Reversal' : 'Supplier Payment';
+                    } else if (isExpense) {
+                      badgeColor = isReversal ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200';
+                      actionIcon = isReversal ? '🔄' : '📉';
+                      actionLabel = isReversal ? 'Expense Reversal' : 'Expense Recorded';
+                    }
+
+                    return (
+                      <tr key={entry._id || `${entry.occurredAt}-${entry.action}`} className="hover:bg-stone-50/60 transition-colors">
+                        <td className="py-3 px-3.5 text-stone-500 whitespace-nowrap">
+                          <span className="font-medium text-stone-800 block">
+                            {fmtDate(entry.occurredAt)}
+                          </span>
+                          <span className="text-[10px] text-stone-400 font-mono">
+                            {new Date(entry.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${badgeColor}`}>
+                            <span>{actionIcon}</span>
+                            <span>{actionLabel}</span>
+                          </span>
+                          {entry.entityId && (
+                            <span className="block text-[10px] text-stone-400 font-mono mt-0.5">
+                              ID: {entry.entityId}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3">
+                          {isAuditCheck ? (
+                            <div className="space-y-1">
+                              <div className="font-bold text-mountain-900">
+                                {entry.details?.periodLabel || 'Audit Reconciliation'}
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-[11px]">
+                                <span className="bg-stone-100 px-2 py-0.5 rounded text-stone-700">
+                                  Counted: <strong>{fmtPKR(entry.details?.totalCountedPKR || 0)}</strong>
+                                </span>
+                                <span className="bg-stone-100 px-2 py-0.5 rounded text-stone-700">
+                                  System Net: <strong>{fmtPKR(entry.details?.netCashInflowPKR || 0)}</strong>
+                                </span>
+                                <span className={`px-2 py-0.5 rounded font-bold ${entry.details?.isBalanced ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                  {entry.details?.isBalanced ? '✓ Balanced (0 PKR)' : `Variance: ${fmtPKR(entry.details?.variancePKR || 0)}`}
+                                </span>
+                              </div>
+                              {entry.details?.notes && (
+                                <p className="text-[11px] text-stone-500 italic mt-0.5">
+                                  &ldquo;{entry.details.notes}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              {entry.details?.amountMinor != null && (
+                                <span className="font-bold text-mountain-900 block">
+                                  {fmtPKR(fromMinorUnits(entry.details.amountMinor))}
+                                </span>
+                              )}
+                              {entry.details?.amount != null && (
+                                <span className="font-bold text-mountain-900 block">
+                                  {fmtPKR(entry.details.amount)}
+                                </span>
+                              )}
+                              {entry.details?.totalCostMinor != null && (
+                                <span className="font-bold text-mountain-900 block">
+                                  {fmtPKR(fromMinorUnits(entry.details.totalCostMinor))}
+                                </span>
+                              )}
+                              {entry.details?.category && (
+                                <span className="text-[11px] text-stone-600 block">
+                                  Category: {entry.details.category}
+                                </span>
+                              )}
+                              {entry.details?.supplierName && (
+                                <span className="text-[11px] text-stone-600 block">
+                                  Supplier: {entry.details.supplierName}
+                                </span>
+                              )}
+                              {entry.details?.reference && (
+                                <span className="text-[10px] text-stone-400 font-mono block">
+                                  Ref: {entry.details.reference}
+                                </span>
+                              )}
+                              {entry.details?.notes && (
+                                <p className="text-[11px] text-stone-500 italic">
+                                  &ldquo;{entry.details.notes}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <span className="font-semibold text-stone-800 block">
+                            {entry.actor?.name || 'Administrator'}
+                          </span>
+                          <span className="text-[10px] text-stone-400 block">
+                            {entry.actor?.email || 'admin@karakoram.com'}
+                          </span>
+                          {entry.actor?.role && (
+                            <span className="inline-block text-[9px] uppercase px-1.5 py-0.2 rounded bg-stone-100 text-stone-600 font-semibold mt-0.5">
+                              {entry.actor.role}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3 text-right">
+                          {entry.verified ? (
+                            <div className="inline-block text-right">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <span>✅</span> Checked by {entry.verifiedByName || 'Admin'}
+                              </span>
+                              {entry.verifiedAt && (
+                                <span className="block text-[10px] text-stone-400 mt-0.5">
+                                  {fmtDate(entry.verifiedAt)}
+                                </span>
+                              )}
+                              {entry.verificationNotes && (
+                                <span className="block text-[10px] text-emerald-700 italic mt-0.5" title={entry.verificationNotes}>
+                                  &ldquo;{entry.verificationNotes}&rdquo;
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVerifyTargetEntry(entry);
+                                setVerifyNotes('Verified and reconciled with physical records');
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg bg-stone-100 hover:bg-emerald-50 text-stone-700 hover:text-emerald-800 border border-stone-300 hover:border-emerald-300 transition"
+                            >
+                              <span>✓</span> Mark Checked
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredAuditLogs.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="py-8 text-center text-stone-400 text-sm">
+                        No accounts audit events found matching the criteria.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
+      )}
+
+      {/* ── Conduct Accounts Audit Check Modal ── */}
+      {auditCheckModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between border-b border-stone-200 pb-3">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-700">Financial Audit &amp; Control</span>
+                <h3 className="text-lg font-bold text-mountain-900 mt-0.5">Conduct Accounts Audit Check</h3>
+                <p className="text-xs text-stone-500">
+                  Input physical cash drawer and bank balances to reconcile against system ledger.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuditCheckModalOpen(false)}
+                className="rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const cash = Number(auditCheckForm.physicalCashCount) || 0;
+                const bank = Number(auditCheckForm.bankBalanceCount) || 0;
+                auditCheckMutation.mutate({
+                  periodLabel: auditCheckForm.periodLabel,
+                  periodFrom: auditCheckForm.periodFrom,
+                  periodTo: auditCheckForm.periodTo,
+                  physicalCashCount: cash,
+                  bankBalanceCount: bank,
+                  notes: auditCheckForm.notes,
+                  discrepancyReason: auditCheckForm.discrepancyReason,
+                });
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Audit Period Label *</label>
+                <input
+                  type="text"
+                  required
+                  value={auditCheckForm.periodLabel}
+                  onChange={(e) => setAuditCheckForm((prev) => ({ ...prev, periodLabel: e.target.value }))}
+                  placeholder="e.g. Daily Closing Audit — Nov 20"
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-stone-900 font-medium focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">Period From</label>
+                  <input
+                    type="date"
+                    value={auditCheckForm.periodFrom}
+                    onChange={(e) => setAuditCheckForm((prev) => ({ ...prev, periodFrom: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-stone-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">Period To</label>
+                  <input
+                    type="date"
+                    value={auditCheckForm.periodTo}
+                    onChange={(e) => setAuditCheckForm((prev) => ({ ...prev, periodTo: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-stone-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-indigo-50/50 border border-indigo-100">
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Cash in Till / Drawer (PKR) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={auditCheckForm.physicalCashCount}
+                    onChange={(e) => setAuditCheckForm((prev) => ({ ...prev, physicalCashCount: e.target.value }))}
+                    placeholder="e.g. 45000"
+                    className="w-full px-3 py-2 rounded-lg border border-indigo-200 bg-white text-stone-900 font-bold text-sm focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-indigo-900 mb-1">Bank Closing Balance (PKR) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={auditCheckForm.bankBalanceCount}
+                    onChange={(e) => setAuditCheckForm((prev) => ({ ...prev, bankBalanceCount: e.target.value }))}
+                    placeholder="e.g. 150000"
+                    className="w-full px-3 py-2 rounded-lg border border-indigo-200 bg-white text-stone-900 font-bold text-sm focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="col-span-2 text-right font-semibold text-indigo-950 pt-1 border-t border-indigo-200/60">
+                  Total Counted: {fmtPKR((Number(auditCheckForm.physicalCashCount) || 0) + (Number(auditCheckForm.bankBalanceCount) || 0))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">Auditor Review Notes / Findings</label>
+                <textarea
+                  rows="2"
+                  value={auditCheckForm.notes}
+                  onChange={(e) => setAuditCheckForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Physical till verified with petty receipts; bank balance reconciled with statement..."
+                  className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-stone-900 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-stone-200">
+                <button
+                  type="button"
+                  onClick={() => setAuditCheckModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={auditCheckMutation.isPending}
+                  className="px-5 py-2 text-xs font-bold rounded-lg bg-indigo-700 text-white hover:bg-indigo-800 disabled:opacity-50 transition shadow-xs"
+                >
+                  {auditCheckMutation.isPending ? 'Signing Off...' : '✓ Sign Off & Record Audit Check'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Single Entry Mark Checked Modal ── */}
+      {verifyTargetEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between border-b border-stone-200 pb-3">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Verification</span>
+                <h3 className="text-lg font-bold text-mountain-900 mt-0.5">Mark Checked by Admin</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVerifyTargetEntry(null)}
+                className="rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs space-y-1">
+              <div><span className="text-stone-500">Action:</span> <strong>{verifyTargetEntry.action}</strong></div>
+              <div><span className="text-stone-500">Date:</span> {fmtDate(verifyTargetEntry.occurredAt)}</div>
+              <div><span className="text-stone-500">Logged By:</span> {verifyTargetEntry.actor?.name || 'Staff Member'}</div>
+            </div>
+
+            <div className="text-xs">
+              <label className="block font-semibold text-stone-700 mb-1">Admin Verification Note</label>
+              <input
+                type="text"
+                value={verifyNotes}
+                onChange={(e) => setVerifyNotes(e.target.value)}
+                placeholder="e.g. Cross-verified with physical voucher"
+                className="w-full px-3 py-2 rounded-lg border border-stone-200 bg-stone-50 text-stone-900 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 font-medium"
+              />
+            </div>
+
+            <div className="pt-3 flex items-center justify-end gap-2 border-t border-stone-200">
+              <button
+                type="button"
+                onClick={() => setVerifyTargetEntry(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={verifyAuditMutation.isPending}
+                onClick={() => {
+                  verifyAuditMutation.mutate({
+                    id: verifyTargetEntry._id,
+                    notes: verifyNotes,
+                  });
+                }}
+                className="px-5 py-2 text-xs font-bold rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 disabled:opacity-50 transition shadow-xs"
+              >
+                {verifyAuditMutation.isPending ? 'Verifying...' : 'Confirm Checked by Admin'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Printable Supplier Payment Voucher Modal ── */}

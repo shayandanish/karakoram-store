@@ -561,7 +561,7 @@ export const uploadPaymentScreenshot = async (req, res, next) => {
     let uploadResult;
     if (isCloudinaryConfigured()) {
       try {
-        uploadResult = await streamUploadToCloudinary(req.file.buffer, 'karakoram-store/payment-proofs');
+        uploadResult = await streamUploadToCloudinary(req.file.buffer, 'Hunzora/payment-proofs');
       } catch (cloudErr) {
         console.warn('Cloudinary upload error:', cloudErr.message);
         uploadResult = await saveToLocalDisk(req, req.file, 'payment-proofs');

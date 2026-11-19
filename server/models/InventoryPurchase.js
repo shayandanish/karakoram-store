@@ -1,5 +1,22 @@
 import mongoose from 'mongoose';
 
+const costBreakdownSchema = new mongoose.Schema(
+  {
+    category: { type: String, required: true, trim: true },
+    amountMinor: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
+const purchaseAdditionalCostSchema = new mongoose.Schema(
+  {
+    category: { type: String, required: true, trim: true },
+    amountMinor: { type: Number, required: true, min: 0 },
+    allocationMethod: { type: String, enum: ['quantity', 'value', 'equal'], default: 'quantity' },
+  },
+  { _id: false }
+);
+
 const purchaseLineSchema = new mongoose.Schema(
   {
     product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
@@ -8,9 +25,13 @@ const purchaseLineSchema = new mongoose.Schema(
     quantity: { type: Number, required: true, min: 1 },
     unitCostMinor: { type: Number, required: true, min: 0 },
     additionalCostMinor: { type: Number, default: 0, min: 0 },
+    landedUnitCostMinor: { type: Number, default: null, min: 0 },
+    costBreakdown: { type: [costBreakdownSchema], default: [] },
     stockBefore: { type: Number, required: true, min: 0 },
+    warehouseStockBefore: { type: Number, default: 0, min: 0 },
     averageCostBeforeMinor: { type: Number, default: null, min: 0 },
     stockAfter: { type: Number, required: true, min: 0 },
+    warehouseStockAfter: { type: Number, default: 0, min: 0 },
     averageCostAfterMinor: { type: Number, default: null, min: 0 },
   },
   { _id: false }
@@ -26,6 +47,7 @@ const inventoryPurchaseSchema = new mongoose.Schema(
     kind: { type: String, enum: ['purchase', 'opening_stock', 'adjustment', 'reversal'], default: 'purchase' },
     reversalOf: { type: mongoose.Schema.Types.ObjectId, ref: 'InventoryPurchase', default: null },
     lines: { type: [purchaseLineSchema], required: true, validate: [(lines) => lines.length > 0, 'At least one line is required'] },
+    additionalCosts: { type: [purchaseAdditionalCostSchema], default: [] },
     totalCostMinor: { type: Number, required: true, min: 0 },
     amountPaidMinor: { type: Number, required: true, min: 0 },
     paymentRevision: { type: Number, default: 0, select: false },

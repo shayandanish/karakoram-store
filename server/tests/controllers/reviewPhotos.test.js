@@ -58,7 +58,7 @@ describe('createReview photo uploads', () => {
     isCloudinaryConfigured.mockReturnValue(true);
     streamUploadToCloudinary.mockResolvedValue({
       url: 'https://images.example.test/review.png',
-      publicId: 'karakoram-store/reviews/review',
+      publicId: 'Hunzora/reviews/review',
     });
   });
 
@@ -67,12 +67,12 @@ describe('createReview photo uploads', () => {
 
     expect(streamUploadToCloudinary).toHaveBeenCalledWith(
       req.files[0].buffer,
-      'karakoram-store/reviews'
+      'Hunzora/reviews'
     );
     expect(Review.create).toHaveBeenCalledWith(expect.objectContaining({
       images: [{
         url: 'https://images.example.test/review.png',
-        publicId: 'karakoram-store/reviews/review',
+        publicId: 'Hunzora/reviews/review',
       }],
     }));
     expect(res.status).toHaveBeenCalledWith(201);

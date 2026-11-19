@@ -8,6 +8,7 @@ import Order from '../models/Order.js';
 import StockMovement from '../models/StockMovement.js';
 import User from '../models/User.js';
 import Review from '../models/Review.js';
+import AccountExpense from '../models/AccountExpense.js';
 import cloudinary from '../config/cloudinary.js';
 import { deleteFirebaseUser, getFirebaseAuth } from '../utils/firebaseAdmin.js';
 import { dispatchOrderNotifications } from '../utils/notificationService.js';
@@ -24,9 +25,15 @@ const variantSchema = z.object({
   label: z.string().min(1),
   price: z.number().positive(),
   stock: z.number().int().min(0),
+  warehouseStock: z.number().int().min(0).optional().default(0),
   discountPercent: z.number().min(0).max(99).nullable().optional(),
   compareAtPrice: z.number().nullable().optional(),
   discountLabel: z.string().optional().default(''),
+  targetMarkupPercent: z.number().min(0).max(1000).nullable().optional(),
+  minMarginPercent: z.number().min(0).max(100).nullable().optional(),
+  latestUnitCostMinor: z.number().nullable().optional(),
+  latestLandedCostMinor: z.number().nullable().optional(),
+  averageCostMinor: z.number().nullable().optional(),
 });
 
 const imageSchema = z.object({
@@ -131,6 +138,7 @@ export const adminGetProducts = async (req, res, next) => {
 export const adminGetProductById = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id)
+      .select('+variants.averageCostMinor')
       .populate('category', 'name slug')
       .populate('artisan', 'name village')
       .populate('primarySupplier', 'name contactName phone email');
@@ -185,7 +193,24 @@ export const adminUpdateProduct = async (req, res, next) => {
       for (const variant of data.variants) {
         const existing = currentVariants.get(variant.label);
         if (existing) {
-          variant.averageCostMinor = existing.averageCostMinor;
+          if (variant.averageCostMinor === undefined) {
+            variant.averageCostMinor = existing.averageCostMinor;
+          }
+          if (variant.latestUnitCostMinor === undefined) {
+            variant.latestUnitCostMinor = existing.latestUnitCostMinor;
+          }
+          if (variant.latestLandedCostMinor === undefined) {
+            variant.latestLandedCostMinor = existing.latestLandedCostMinor;
+          }
+          if (variant.targetMarkupPercent === undefined) {
+            variant.targetMarkupPercent = existing.targetMarkupPercent;
+          }
+          if (variant.minMarginPercent === undefined) {
+            variant.minMarginPercent = existing.minMarginPercent;
+          }
+          if (variant.warehouseStock === undefined) {
+            variant.warehouseStock = existing.warehouseStock || 0;
+          }
           if (variant.stock !== existing.stock) {
             stockMovementsToLog.push({
               product: currentProduct._id,
@@ -1073,6 +1098,10 @@ export const adminGetStats = async (req, res, next) => {
       overdueProofOldest,
       overdueShipmentCount,
       overdueShipmentOldest,
+      cogsAggregate,
+      expensesAggregate,
+      refundsAggregate,
+      profitableProductsAggregate,
     ] = await Promise.all([
       Order.countDocuments(),
       Order.aggregate([
@@ -1129,7 +1158,102 @@ export const adminGetStats = async (req, res, next) => {
       ]),
       Order.countDocuments(overdueFilters.shipment),
       Order.findOne(overdueFilters.shipment).sort({ 'shipment.lastAdminUpdateAt': 1, 'shipment.shippedAt': 1 }).select('shipment.lastAdminUpdateAt shipment.shippedAt').lean(),
+      Order.aggregate([
+        { $match: revenueFilter },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: null,
+            totalCogsMinor: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ['$items.unitCostMinor', null] }, { $gte: ['$items.unitCostMinor', 0] }] },
+                  { $multiply: ['$items.unitCostMinor', '$items.quantity'] },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      AccountExpense.aggregate([
+        ...(revenueStartDate ? [{ $match: { expenseDate: { $gte: revenueStartDate } } }] : []),
+        {
+          $group: {
+            _id: null,
+            totalExpenseMinor: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$kind', 'reversal'] },
+                  { $multiply: ['$amountMinor', -1] },
+                  '$amountMinor',
+                ],
+              },
+            },
+          },
+        },
+      ]),
+      Order.aggregate([
+        { $match: { paymentStatus: 'refunded', ...(revenueStartDate ? { createdAt: { $gte: revenueStartDate } } : {}) } },
+        { $group: { _id: null, totalRefund: { $sum: '$total' } } },
+      ]),
+      Order.aggregate([
+        { $match: analyticsOrderFilter },
+        { $unwind: '$items' },
+        {
+          $group: {
+            _id: { product: '$items.product', name: '$items.name', variant: '$items.variantLabel' },
+            unitsSold: { $sum: '$items.quantity' },
+            revenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
+            cogs: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $ne: ['$items.unitCostMinor', null] }, { $gte: ['$items.unitCostMinor', 0] }] },
+                  { $divide: [{ $multiply: ['$items.unitCostMinor', '$items.quantity'] }, 100] },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+        {
+          $addFields: {
+            grossProfit: { $subtract: ['$revenue', '$cogs'] },
+            marginPercent: {
+              $cond: [
+                { $gt: ['$revenue', 0] },
+                { $multiply: [{ $divide: [{ $subtract: ['$revenue', '$cogs'] }, '$revenue'] }, 100] },
+                0,
+              ],
+            },
+          },
+        },
+        { $sort: { grossProfit: -1 } },
+        { $limit: 5 },
+        {
+          $project: {
+            _id: 0,
+            productId: '$_id.product',
+            name: '$_id.name',
+            variantLabel: '$_id.variant',
+            unitsSold: 1,
+            revenue: 1,
+            cogs: 1,
+            grossProfit: 1,
+            marginPercent: { $round: ['$marginPercent', 1] },
+          },
+        },
+      ]),
     ]);
+
+    const salesVolume = totalRevenue[0]?.total || 0;
+    const cogsAmount = Math.round((cogsAggregate[0]?.totalCogsMinor || 0) / 100);
+    const grossProfitAmount = Math.max(0, salesVolume - cogsAmount);
+    const grossMarginPercent = salesVolume > 0 ? Number(((grossProfitAmount / salesVolume) * 100).toFixed(1)) : 0;
+    const operatingExpensesAmount = Math.round((expensesAggregate[0]?.totalExpenseMinor || 0) / 100);
+    const customerRefundsAmount = refundsAggregate[0]?.totalRefund || 0;
+    const netProfitAmount = grossProfitAmount - operatingExpensesAmount - customerRefundsAmount;
+    const netMarginPercent = salesVolume > 0 ? Number(((netProfitAmount / salesVolume) * 100).toFixed(1)) : 0;
 
     const isAdministrator = req.user?.role === 'admin';
     const canViewOrders = isAdministrator || req.user?.role === 'orders_manager';
@@ -1140,9 +1264,20 @@ export const adminGetStats = async (req, res, next) => {
       role: req.user?.role,
       ...(canViewAccounts ? {
         totalOrders,
-        totalRevenue: totalRevenue[0]?.total || 0,
+        totalRevenue: salesVolume,
         revenueStartDate,
         totalCustomers,
+        financialOverview: {
+          salesVolume,
+          cogs: cogsAmount,
+          grossProfit: grossProfitAmount,
+          grossMarginPercent,
+          operatingExpenses: operatingExpensesAmount,
+          customerRefunds: customerRefundsAmount,
+          netRealizedIncome: netProfitAmount,
+          netMarginPercent,
+          topProfitableProducts: profitableProductsAggregate,
+        },
         salesOverview: {
         period: analyticsPeriod,
         startDate: analyticsStartDate,

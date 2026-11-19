@@ -138,6 +138,14 @@ export const validateEmail = (raw, { strict = false } = {}) => {
     return { valid: false, warning: null, error: 'Email address is required' };
   }
 
+  if (email.includes('+')) {
+    return {
+      valid: false,
+      warning: null,
+      error: 'Email aliases with "+" are not allowed. Please enter your direct email address.',
+    };
+  }
+
   // Stage 1 — structural check (RFC-5321 simplified)
   // Must have: non-empty local part, @, domain with at least one dot
   const structureOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);

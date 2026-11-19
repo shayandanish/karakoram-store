@@ -266,6 +266,13 @@ export function calculateAccountsReport(orders, expenses) {
   };
 
   for (const order of orders) {
+    if (order.paymentStatus === 'refunded') {
+      const refundDate = order.refundDetails?.refundedAt || order.updatedAt || order.createdAt;
+      const dateKey = dateInPakistan(new Date(refundDate));
+      const day = ensureDay(dateKey);
+      day.refundsMinor += toMinor(order.total);
+      continue;
+    }
     if (order.paymentStatus !== 'paid') continue;
     if (['cancelled', 'returned'].includes(order.orderStatus)) continue;
     const dateKey = dateInPakistan(new Date(order.createdAt));
@@ -300,6 +307,7 @@ export function calculateAccountsReport(orders, expenses) {
         cogs: fromMinor(d.cogsMinor),
         grossProfit: fromMinor(grossProfitMinor),
         expenses: fromMinor(d.expensesMinor),
+        refunds: fromMinor(d.refundsMinor),
         netProfit: fromMinor(netProfitMinor),
         marginPercent: d.salesMinor > 0
           ? Number((grossProfitMinor / d.salesMinor * 100).toFixed(1))
@@ -331,13 +339,14 @@ export function calculateAccountsReport(orders, expenses) {
     m.salesMinor += toMinor(d.sales);
     m.cogsMinor += toMinor(d.cogs);
     m.expensesMinor += toMinor(d.expenses);
+    m.refundsMinor += toMinor(d.refunds);
   }
 
   const monthlyPnL = Array.from(monthlyPnLMap.entries())
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([, m]) => {
       const grossProfitMinor = m.salesMinor - m.cogsMinor;
-      const netProfitMinor = grossProfitMinor - m.expensesMinor;
+      const netProfitMinor = grossProfitMinor - m.expensesMinor - m.refundsMinor;
       return {
         month: m.month,
         orders: m.orders,
@@ -345,6 +354,7 @@ export function calculateAccountsReport(orders, expenses) {
         cogs: fromMinor(m.cogsMinor),
         grossProfit: fromMinor(grossProfitMinor),
         expenses: fromMinor(m.expensesMinor),
+        refunds: fromMinor(m.refundsMinor),
         netProfit: fromMinor(netProfitMinor),
         marginPercent: m.salesMinor > 0
           ? Number((grossProfitMinor / m.salesMinor * 100).toFixed(1))
@@ -364,6 +374,10 @@ export function calculateAccountsReport(orders, expenses) {
       expenses: fromMinor(expensesMinor),
       refunds: fromMinor(refundsMinor),
       netProfit: fromMinor(reportableNetProfitMinor),
+      earnedProfitIncome: fromMinor(reportableNetProfitMinor),
+      netMarginPercent: profitEligibleSalesMinor > 0
+        ? Number((reportableNetProfitMinor / profitEligibleSalesMinor * 100).toFixed(2))
+        : 0,
       paidOrderCount,
       refundedOrderCount,
       ordersWithMissingCost,

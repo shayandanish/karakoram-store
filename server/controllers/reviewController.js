@@ -124,7 +124,7 @@ export const createReview = async (req, res, next) => {
       for (const file of files) {
         let image;
         if (isCloudinaryConfigured()) {
-          image = await streamUploadToCloudinary(file.buffer, 'karakoram-store/reviews');
+          image = await streamUploadToCloudinary(file.buffer, 'Hunzora/reviews');
         } else {
           const extension = {
             'image/jpeg': '.jpg',

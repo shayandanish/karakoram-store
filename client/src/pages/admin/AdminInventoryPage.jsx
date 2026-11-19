@@ -38,6 +38,10 @@ const getMovementTypeBadge = (type) => {
       return { label: 'Count Audit', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' };
     case 'internal_use':
       return { label: 'Internal Sample', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' };
+    case 'warehouse_to_store':
+      return { label: 'Warehouse → Shelf Transfer', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300' };
+    case 'purchase_bill':
+      return { label: 'Warehouse Purchase Receipt', color: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' };
     case 'order_sale':
       return { label: 'POS / Online Sale', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' };
     case 'order_cancelled':
@@ -66,12 +70,24 @@ export default function AdminInventoryPage() {
   const [adjustmentReason, setAdjustmentReason] = useState('');
   const [adjustmentReference, setAdjustmentReference] = useState('');
 
+  // Transfer from Warehouse to Store Modal State
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferTarget, setTransferTarget] = useState({
+    product: null,
+    variantLabel: '',
+    warehouseStock: 0,
+    storeStock: 0,
+  });
+  const [transferQuantity, setTransferQuantity] = useState('');
+  const [transferReason, setTransferReason] = useState('Moved to store shelf');
+  const [transferReference, setTransferReference] = useState('');
+
   // Movements filter
   const [movementTypeFilter, setMovementTypeFilter] = useState('');
   const [movementPage, setMovementPage] = useState(1);
 
   // Fetch Stock Overview
-  const { data: stockData, isLoading: isStockLoading, refetch: refetchStock } = useQuery({
+  const { data: stockData, isLoading: isStockLoading } = useQuery({
     queryKey: ['admin-inventory-stock', search, categoryFilter, supplierFilter, stockStatusFilter, page],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -136,7 +152,7 @@ export default function AdminInventoryPage() {
       const res = await api.post('/admin/inventory/adjust', payload);
       return res.data;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast.success('Stock adjusted successfully');
       queryClient.invalidateQueries({ queryKey: ['admin-inventory-stock'] });
       queryClient.invalidateQueries({ queryKey: ['admin-inventory-movements'] });
@@ -157,6 +173,67 @@ export default function AdminInventoryPage() {
       toast.error(msg);
     },
   });
+
+  // Stock Transfer Mutation (Warehouse -> Store Shelf)
+  const transferMutation = useMutation({
+    mutationFn: async (payload) => {
+      const res = await api.post('/admin/inventory/transfer', payload);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Stock transferred to store shelf successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin-inventory-stock'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-inventory-movements'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-inventory-reorder'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-products'] });
+      setTransferModalOpen(false);
+      setTransferQuantity('');
+      setTransferReason('Moved to store shelf');
+      setTransferReference('');
+    },
+    onError: (err) => {
+      const msg = err.response?.data?.message || err.message || 'Failed to transfer stock';
+      toast.error(msg);
+    },
+  });
+
+  const handleOpenTransfer = (product, variantLabel, warehouseStock, storeStock) => {
+    setTransferTarget({
+      product,
+      variantLabel,
+      warehouseStock: warehouseStock || 0,
+      storeStock: storeStock || 0,
+    });
+    setTransferQuantity(String(warehouseStock > 0 ? warehouseStock : 1));
+    setTransferReason('Moved to store shelf');
+    setTransferReference('');
+    setTransferModalOpen(true);
+  };
+
+  const handleTransferSubmit = (e) => {
+    e.preventDefault();
+    if (!transferTarget.product?._id || !transferTarget.variantLabel) {
+      toast.error('Missing product information');
+      return;
+    }
+    const qty = parseInt(transferQuantity, 10);
+    if (isNaN(qty) || qty <= 0) {
+      toast.error('Please enter a valid positive transfer quantity');
+      return;
+    }
+    if (qty > transferTarget.warehouseStock) {
+      toast.error(`Only ${transferTarget.warehouseStock} units available in warehouse`);
+      return;
+    }
+
+    transferMutation.mutate({
+      productId: transferTarget.product._id,
+      variantLabel: transferTarget.variantLabel,
+      quantity: qty,
+      reason: transferReason.trim(),
+      reference: transferReference.trim(),
+    });
+  };
 
   const handleOpenAdjust = (product, variantLabel) => {
     setSelectedProduct(product);
@@ -179,6 +256,19 @@ export default function AdminInventoryPage() {
       toast.error('Please enter a valid positive quantity');
       return;
     }
+
+    if (adjustmentType === 'goods_received') {
+      const warehouseStock = currentVariantObj?.warehouseStock || 0;
+      if (qty <= 0) {
+        toast.error('Quantity to add must be greater than zero');
+        return;
+      }
+      if (warehouseStock < qty) {
+        toast.error(`Cannot adjust: requested ${qty} units, but warehouse only has ${warehouseStock} units available.`);
+        return;
+      }
+    }
+
     if (!adjustmentReason.trim()) {
       toast.error('Please provide a reason for this stock adjustment');
       return;
@@ -198,6 +288,15 @@ export default function AdminInventoryPage() {
     if (!selectedProduct || !selectedVariant) return null;
     return selectedProduct.variants?.find((v) => v.label === selectedVariant) || null;
   }, [selectedProduct, selectedVariant]);
+
+  const warehouseShortage = useMemo(() => {
+    if (adjustmentType !== 'goods_received' || !currentVariantObj) return false;
+    const warehouseStock = currentVariantObj.warehouseStock || 0;
+    const qty = parseInt(adjustmentQuantity, 10);
+    if (warehouseStock === 0) return 'zero_warehouse';
+    if (!isNaN(qty) && qty > warehouseStock) return 'exceeds_warehouse';
+    return false;
+  }, [adjustmentType, currentVariantObj, adjustmentQuantity]);
 
   const kpis = stockData?.kpis || { totalUnits: 0, totalVariants: 0, lowStockVariants: 0, outOfStockVariants: 0 };
 
@@ -232,45 +331,55 @@ export default function AdminInventoryPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-xs">
-          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-            Total Units On Hand
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs">
+          <div className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+            Store Shelf Stock
           </div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-white">
+          <div className="mt-1.5 text-2xl font-bold text-neutral-900 dark:text-white">
             {kpis.totalUnits.toLocaleString()}
           </div>
-          <div className="mt-1 text-xs text-neutral-500">Across all active items</div>
+          <div className="mt-0.5 text-[11px] text-neutral-500">Sellable on shelf</div>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-xs">
-          <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-            Tracked Variants
+        <div className="bg-white dark:bg-neutral-900 border border-sky-200 dark:border-sky-900/50 bg-sky-50/20 dark:bg-sky-950/10 rounded-xl p-3.5 shadow-xs">
+          <div className="text-[11px] font-medium text-sky-700 dark:text-sky-400 uppercase tracking-wider">
+            Warehouse Stock
           </div>
-          <div className="mt-2 text-2xl font-bold text-neutral-900 dark:text-white">
-            {kpis.totalVariants.toLocaleString()}
+          <div className="mt-1.5 text-2xl font-bold text-sky-700 dark:text-sky-300">
+            {(kpis.totalWarehouseUnits || 0).toLocaleString()}
           </div>
-          <div className="mt-1 text-xs text-neutral-500">Unique SKUs & sizes</div>
+          <div className="mt-0.5 text-[11px] text-sky-600/80">In godown / backroom</div>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 border border-amber-200 dark:border-amber-900/50 bg-amber-50/20 dark:bg-amber-950/10 rounded-xl p-4 shadow-xs">
-          <div className="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+        <div className="bg-white dark:bg-neutral-900 border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/20 dark:bg-indigo-950/10 rounded-xl p-3.5 shadow-xs">
+          <div className="text-[11px] font-medium text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
+            Transfer Needed
+          </div>
+          <div className="mt-1.5 text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+            {(kpis.transferNeededVariants || 0).toLocaleString()}
+          </div>
+          <div className="mt-0.5 text-[11px] text-indigo-600/80">Shelf ≤ 3 &amp; in warehouse</div>
+        </div>
+
+        <div className="bg-white dark:bg-neutral-900 border border-amber-200 dark:border-amber-900/50 bg-amber-50/20 dark:bg-amber-950/10 rounded-xl p-3.5 shadow-xs">
+          <div className="text-[11px] font-medium text-amber-700 dark:text-amber-400 uppercase tracking-wider">
             Low Stock Alerts
           </div>
-          <div className="mt-2 text-2xl font-bold text-amber-600 dark:text-amber-400">
+          <div className="mt-1.5 text-2xl font-bold text-amber-600 dark:text-amber-400">
             {kpis.lowStockVariants.toLocaleString()}
           </div>
-          <div className="mt-1 text-xs text-amber-700/80 dark:text-amber-400/80">Stock ≤ 5 units</div>
+          <div className="mt-0.5 text-[11px] text-amber-700/80">Stock ≤ 5 units</div>
         </div>
 
-        <div className="bg-white dark:bg-neutral-900 border border-red-200 dark:border-red-900/50 bg-red-50/20 dark:bg-red-950/10 rounded-xl p-4 shadow-xs">
-          <div className="text-xs font-medium text-red-700 dark:text-red-400 uppercase tracking-wider">
+        <div className="bg-white dark:bg-neutral-900 border border-red-200 dark:border-red-900/50 bg-red-50/20 dark:bg-red-950/10 rounded-xl p-3.5 shadow-xs col-span-2 md:col-span-1">
+          <div className="text-[11px] font-medium text-red-700 dark:text-red-400 uppercase tracking-wider">
             Out of Stock
           </div>
-          <div className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">
+          <div className="mt-1.5 text-2xl font-bold text-red-600 dark:text-red-400">
             {kpis.outOfStockVariants.toLocaleString()}
           </div>
-          <div className="mt-1 text-xs text-red-700/80 dark:text-red-400/80">Zero inventory</div>
+          <div className="mt-0.5 text-[11px] text-red-700/80">Zero shelf inventory</div>
         </div>
       </div>
 
@@ -279,11 +388,10 @@ export default function AdminInventoryPage() {
         <button
           type="button"
           onClick={() => setActiveTab('monitor')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'monitor'
-              ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
-              : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
-          }`}
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'monitor'
+            ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+            }`}
         >
           📊 Live Stock Monitor
         </button>
@@ -291,11 +399,10 @@ export default function AdminInventoryPage() {
         <button
           type="button"
           onClick={() => setActiveTab('adjust')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'adjust'
-              ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
-              : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
-          }`}
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'adjust'
+            ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+            }`}
         >
           ⚡ Quick Adjustment
         </button>
@@ -303,11 +410,10 @@ export default function AdminInventoryPage() {
         <button
           type="button"
           onClick={() => setActiveTab('movements')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'movements'
-              ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
-              : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
-          }`}
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'movements'
+            ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+            }`}
         >
           📜 Movement Audit Log
         </button>
@@ -315,11 +421,10 @@ export default function AdminInventoryPage() {
         <button
           type="button"
           onClick={() => setActiveTab('reorder')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'reorder'
-              ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
-              : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
-          }`}
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'reorder'
+            ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+            }`}
         >
           🚨 Reorder Center
         </button>
@@ -404,6 +509,7 @@ export default function AdminInventoryPage() {
                   className="w-full text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
                 >
                   <option value="all">All Inventory</option>
+                  <option value="transfer_needed">🚚 Transfer Needed (Shelf ≤ 3 &amp; in warehouse)</option>
                   <option value="in_stock">Healthy (Stock &gt; 5)</option>
                   <option value="low_stock">Low Stock (1 - 5 units)</option>
                   <option value="out_of_stock">Out of Stock (0 units)</option>
@@ -435,7 +541,8 @@ export default function AdminInventoryPage() {
                       <th className="px-4 py-3">Primary Supplier</th>
                       <th className="px-4 py-3">Variant / SKU</th>
                       <th className="px-4 py-3 text-right">Selling Price</th>
-                      <th className="px-4 py-3 text-center">Available Stock</th>
+                      <th className="px-4 py-3 text-center">Warehouse Stock</th>
+                      <th className="px-4 py-3 text-center">Store Shelf Stock</th>
                       <th className="px-4 py-3 text-center">Status</th>
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
@@ -526,10 +633,27 @@ export default function AdminInventoryPage() {
                               {fmtPKR(variant.price)}
                             </td>
 
+                            {/* Warehouse Stock column */}
                             <td className="px-4 py-3 text-center">
-                              <span className="text-sm font-bold text-neutral-900 dark:text-white">
+                              {(variant.warehouseStock || 0) > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 font-mono">
+                                  <span>🏭</span> {variant.warehouseStock}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-neutral-400 font-mono">0</span>
+                              )}
+                            </td>
+
+                            {/* Store Shelf Stock column */}
+                            <td className="px-4 py-3 text-center">
+                              <span className="text-sm font-bold text-neutral-900 dark:text-white font-mono">
                                 {variant.stock}
                               </span>
+                              {variant.stock <= 3 && (variant.warehouseStock || 0) > 0 && (
+                                <span className="block text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5 animate-pulse">
+                                  ⚠️ Restock Shelf
+                                </span>
+                              )}
                             </td>
 
                             <td className="px-4 py-3 text-center">
@@ -543,7 +667,20 @@ export default function AdminInventoryPage() {
 
                             <td className="px-4 py-3 text-right">
                               <div className="flex items-center justify-end gap-1.5">
-                                {variant.stock === 0 && (
+                                {/* If warehouse has stock -> Prominent Transfer button */}
+                                {(variant.warehouseStock || 0) > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenTransfer(product, variant.label, variant.warehouseStock, variant.stock)}
+                                    title={`Transfer ${variant.warehouseStock} units from warehouse to store shelf`}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition-colors shadow-2xs"
+                                  >
+                                    🚚 Transfer ({variant.warehouseStock})
+                                  </button>
+                                )}
+
+                                {/* If shelf is 0 AND warehouse is 0 -> Buy from Vendor */}
+                                {variant.stock === 0 && (variant.warehouseStock || 0) === 0 && (
                                   <Link
                                     to="/admin/accounts?tab=purchases"
                                     title="Out of stock! Purchase from vendor and record in Accounts"
@@ -552,10 +689,13 @@ export default function AdminInventoryPage() {
                                     🛒 Buy from Vendor
                                   </Link>
                                 )}
+
+                                {/* Adjust button: always allowed, draws from warehouse if warehouseStock > 0 */}
                                 <button
                                   type="button"
                                   onClick={() => handleOpenAdjust(product, variant.label)}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+                                  title="Adjust store shelf stock"
                                 >
                                   ⚡ Adjust
                                 </button>
@@ -671,15 +811,19 @@ export default function AdminInventoryPage() {
                       key={v.label}
                       type="button"
                       onClick={() => setSelectedVariant(v.label)}
-                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
-                        selectedVariant === v.label
-                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-1 ring-emerald-500'
-                          : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
-                      }`}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${selectedVariant === v.label
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-1 ring-emerald-500'
+                        : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
+                        }`}
                     >
                       <div className="font-medium">{v.label}</div>
                       <div className="text-[11px] text-neutral-500 mt-0.5">
-                        In Stock: <span className="font-bold text-neutral-900 dark:text-white">{v.stock}</span>
+                        Shelf: <span className="font-bold text-neutral-900 dark:text-white">{v.stock}</span>
+                        {(v.warehouseStock || 0) > 0 && (
+                          <span className="block text-sky-700 dark:text-sky-400 font-semibold mt-0.5">
+                            Warehouse: {v.warehouseStock}
+                          </span>
+                        )}
                       </div>
                     </button>
                   ))}
@@ -687,8 +831,32 @@ export default function AdminInventoryPage() {
               </div>
             )}
 
+            {/* Warehouse Stock Available Notice */}
+            {currentVariantObj && (currentVariantObj.warehouseStock || 0) > 0 && (
+              <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-sky-950 dark:text-sky-200 shadow-2xs">
+                <div className="flex items-start gap-2.5">
+                  <span className="text-xl">🏭</span>
+                  <div>
+                    <div className="font-bold">
+                      {currentVariantObj.warehouseStock} units available in Warehouse!
+                    </div>
+                    <div className="text-[11px] text-sky-800 dark:text-sky-300 mt-0.5">
+                      Adjusting <strong>Goods Received (+)</strong> draws directly from warehouse stock into store shelf. <strong>Physical Count Audits</strong> are done manually.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleOpenTransfer(selectedProduct, currentVariantObj.label, currentVariantObj.warehouseStock, currentVariantObj.stock)}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs transition shadow-2xs"
+                >
+                  <span>🚚</span> Quick Transfer Modal →
+                </button>
+              </div>
+            )}
+
             {/* Zero stock alert & purchase guidance */}
-            {currentVariantObj && currentVariantObj.stock === 0 && (
+            {currentVariantObj && currentVariantObj.stock === 0 && (currentVariantObj.warehouseStock || 0) === 0 && (
               <div className="rounded-xl border border-amber-300 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
                 <div className="flex items-start gap-2.5">
                   <span className="text-xl">⚠️</span>
@@ -715,11 +883,10 @@ export default function AdminInventoryPage() {
               </label>
               <div className="grid grid-cols-2 gap-2.5">
                 <label
-                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    adjustmentType === 'goods_received'
-                      ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 ring-1 ring-emerald-500'
-                      : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${adjustmentType === 'goods_received'
+                    ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 ring-1 ring-emerald-500'
+                    : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                    }`}
                 >
                   <input
                     type="radio"
@@ -740,11 +907,10 @@ export default function AdminInventoryPage() {
                 </label>
 
                 <label
-                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    adjustmentType === 'damage_loss'
-                      ? 'border-red-500 bg-red-50/50 dark:bg-red-950/30 ring-1 ring-red-500'
-                      : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${adjustmentType === 'damage_loss'
+                    ? 'border-red-500 bg-red-50/50 dark:bg-red-950/30 ring-1 ring-red-500'
+                    : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                    }`}
                 >
                   <input
                     type="radio"
@@ -765,11 +931,10 @@ export default function AdminInventoryPage() {
                 </label>
 
                 <label
-                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    adjustmentType === 'physical_count_correction'
-                      ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 ring-1 ring-blue-500'
-                      : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${adjustmentType === 'physical_count_correction'
+                    ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 ring-1 ring-blue-500'
+                    : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                    }`}
                 >
                   <input
                     type="radio"
@@ -781,20 +946,19 @@ export default function AdminInventoryPage() {
                   />
                   <div>
                     <div className="text-xs font-bold text-blue-800 dark:text-blue-300">
-                      🔍 Physical Count Audit (Set)
+                      📋 Manual Count Audit (Set)
                     </div>
                     <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                      Set exact physical inventory count
+                      Directly set verified physical shelf count manually
                     </div>
                   </div>
                 </label>
 
                 <label
-                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    adjustmentType === 'internal_use'
-                      ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/30 ring-1 ring-purple-500'
-                      : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
-                  }`}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${adjustmentType === 'internal_use'
+                    ? 'border-purple-500 bg-purple-50/50 dark:bg-purple-950/30 ring-1 ring-purple-500'
+                    : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                    }`}
                 >
                   <input
                     type="radio"
@@ -806,7 +970,7 @@ export default function AdminInventoryPage() {
                   />
                   <div>
                     <div className="text-xs font-bold text-purple-800 dark:text-purple-300">
-                      🎁 Internal / Sample (-)
+                      Internal / Sample (-)
                     </div>
                     <div className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
                       Deduct marketing samples or display items
@@ -834,10 +998,23 @@ export default function AdminInventoryPage() {
                 />
                 {currentVariantObj && (
                   <span className="absolute right-3 top-2.5 text-xs text-neutral-400">
-                    Current: {currentVariantObj.stock} units
+                    Shelf: {currentVariantObj.stock} units | Warehouse: {currentVariantObj.warehouseStock || 0} units
                   </span>
                 )}
               </div>
+
+              {/* Warehouse Shortage Warning Alerts */}
+              {warehouseShortage === 'zero_warehouse' && (
+                <div className="mt-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 flex items-center justify-between gap-2">
+                  <span>⚠️ <strong>Warehouse has 0 units.</strong> Adding to store shelf is not allowed. Please record a vendor purchase first.</span>
+                  <Link to="/admin/accounts?tab=purchases" className="font-bold underline shrink-0 text-rose-900 dark:text-rose-200">Record Purchase →</Link>
+                </div>
+              )}
+              {warehouseShortage === 'exceeds_warehouse' && (
+                <div className="mt-2 p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300">
+                  ⚠️ <strong>Requested quantity ({adjustmentQuantity}) exceeds available warehouse stock ({currentVariantObj?.warehouseStock || 0})!</strong> Adding more units than available in the warehouse is not allowed.
+                </div>
+              )}
             </div>
 
             {/* Reason */}
@@ -882,10 +1059,24 @@ export default function AdminInventoryPage() {
               </button>
               <button
                 type="submit"
-                disabled={adjustMutation.isPending || !selectedProduct || !selectedVariant}
-                className="px-5 py-2 text-xs font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-xs"
+                disabled={adjustMutation.isPending || !selectedProduct || !selectedVariant || Boolean(warehouseShortage)}
+                className={`px-5 py-2 text-xs font-bold rounded-lg transition-colors shadow-xs ${
+                  warehouseShortage
+                    ? 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 cursor-not-allowed opacity-70'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50'
+                }`}
               >
-                {adjustMutation.isPending ? 'Saving...' : 'Apply Stock Adjustment'}
+                {adjustMutation.isPending
+                  ? 'Saving...'
+                  : warehouseShortage === 'zero_warehouse'
+                    ? '🔒 Blocked: 0 Units in Warehouse'
+                    : warehouseShortage === 'exceeds_warehouse'
+                      ? `🔒 Blocked: Exceeds Warehouse (${currentVariantObj?.warehouseStock || 0})`
+                      : adjustmentType === 'physical_count_correction'
+                        ? 'Apply Manual Count Audit'
+                        : adjustmentType === 'goods_received'
+                          ? 'Apply Adjustment (Draw from Warehouse)'
+                          : 'Apply Stock Adjustment'}
               </button>
             </div>
           </form>
@@ -910,6 +1101,8 @@ export default function AdminInventoryPage() {
                 className="text-xs px-2.5 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white"
               >
                 <option value="">All Movement Types</option>
+                <option value="warehouse_to_store">Warehouse → Store Shelf Transfer</option>
+                <option value="purchase_bill">Purchase Received (Warehouse)</option>
                 <option value="goods_received">Goods Received (+)</option>
                 <option value="damage_loss">Damaged / Loss (-)</option>
                 <option value="physical_count_correction">Count Audit</option>
@@ -936,7 +1129,7 @@ export default function AdminInventoryPage() {
               </div>
             ) : movementsData?.movements?.length === 0 ? (
               <div className="p-12 text-center text-neutral-500">
-                <div className="text-3xl mb-2">📜</div>
+                <div className="text-3xl mb-2"></div>
                 <div className="font-semibold text-neutral-800 dark:text-neutral-200">No stock movements recorded yet</div>
                 <div className="text-xs text-neutral-400 mt-1">Adjustments, orders, and receiving appear here automatically</div>
               </div>
@@ -1065,7 +1258,7 @@ export default function AdminInventoryPage() {
             </div>
           ) : reorderData?.groupedBySupplier?.length === 0 ? (
             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-12 text-center text-neutral-500">
-              <div className="text-3xl mb-2">🎉</div>
+              <div className="text-3xl mb-2"></div>
               <div className="font-semibold text-neutral-800 dark:text-neutral-200">All inventory levels are healthy!</div>
               <div className="text-xs text-neutral-400 mt-1">No items currently have stock ≤ 10 units.</div>
             </div>
@@ -1156,6 +1349,138 @@ export default function AdminInventoryPage() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL: TRANSFER FROM WAREHOUSE TO STORE SHELF
+      ───────────────────────────────────────────────────────────── */}
+      {transferModalOpen && transferTarget.product && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-200 dark:border-neutral-800">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🚚</span>
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900 dark:text-white">
+                    Transfer to Store Shelf
+                  </h3>
+                  <p className="text-xs text-neutral-500">
+                    Move physical units from warehouse to store shelf
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransferModalOpen(false)}
+                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Product & Variant Details */}
+            <div className="p-3.5 rounded-xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 text-xs space-y-2.5">
+              <div>
+                <span className="text-[10px] uppercase font-semibold text-neutral-400 block tracking-wider">
+                  Product
+                </span>
+                <span className="font-bold text-neutral-900 dark:text-white text-sm">
+                  {transferTarget.product.name}
+                </span>
+              </div>
+              <div className="text-neutral-600 dark:text-neutral-300">
+                Variant: <span className="font-semibold text-neutral-900 dark:text-white">{transferTarget.variantLabel}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-neutral-200 dark:border-neutral-700">
+                <div className="p-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800">
+                  <span className="text-[10px] text-sky-700 dark:text-sky-400 block font-semibold uppercase">
+                    Warehouse Available
+                  </span>
+                  <span className="text-lg font-bold text-sky-800 dark:text-sky-200 font-mono">
+                    {transferTarget.warehouseStock} units
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                  <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block font-semibold uppercase">
+                    Current Store Shelf
+                  </span>
+                  <span className="text-lg font-bold text-emerald-800 dark:text-emerald-200 font-mono">
+                    {transferTarget.storeStock} units
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleTransferSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                  Quantity to Transfer (Max {transferTarget.warehouseStock}) *
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max={transferTarget.warehouseStock}
+                    value={transferQuantity}
+                    onChange={(e) => setTransferQuantity(e.target.value)}
+                    className="w-full text-base font-bold px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-mono"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTransferQuantity(String(transferTarget.warehouseStock))}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 shrink-0"
+                  >
+                    Transfer All
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                  Reason / Floor Note
+                </label>
+                <input
+                  type="text"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  placeholder="e.g. Restocked shelf display for evening shift"
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                  Reference # (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={transferReference}
+                  onChange={(e) => setTransferReference(e.target.value)}
+                  placeholder="e.g. Transfer Slip #042"
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-neutral-200 dark:border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setTransferModalOpen(false)}
+                  className="px-4 py-2 text-xs font-medium rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={transferMutation.isPending || !transferQuantity || parseInt(transferQuantity, 10) <= 0}
+                  className="px-5 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-xs"
+                >
+                  {transferMutation.isPending ? 'Transferring...' : 'Confirm Transfer →'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

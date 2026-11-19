@@ -230,6 +230,105 @@ export default function AdminDashboardPage() {
         </div>
       </section>}
 
+      {/* ── Executive Financial Income & Profitability Center ──────────────── */}
+      {canViewAccounts && stats?.financialOverview && (
+        <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-xs p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">💼</span>
+                <h2 className="text-base font-bold font-display text-mountain-900">Executive Financial Income &amp; Profitability</h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                  Realized Take-Home Profit
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Separates total sales revenue from earned income after Landed Product Cost (COGS), Operating Expenses &amp; Refunds.
+              </p>
+            </div>
+            <Link
+              to="/admin/accounts"
+              className="shrink-0 text-xs font-bold text-apricot-700 hover:text-apricot-800 underline"
+            >
+              Open Full Accounts Ledger →
+            </Link>
+          </div>
+
+          {/* Income Flow Steps */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block">1. Gross Sales</span>
+              <div className="text-lg font-bold text-mountain-900 mt-1">{fmtPKR(stats.financialOverview.salesVolume)}</div>
+              <span className="text-[10px] text-stone-500 block mt-0.5">Total customer revenue</span>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block">2. Landed COGS</span>
+              <div className="text-lg font-bold text-stone-700 mt-1">− {fmtPKR(stats.financialOverview.cogs)}</div>
+              <span className="text-[10px] text-stone-500 block mt-0.5">Product purchase + landed costs</span>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-sky-50/70 border border-sky-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 block">3. Gross Profit</span>
+              <div className="text-lg font-bold text-sky-900 mt-1">{fmtPKR(stats.financialOverview.grossProfit)}</div>
+              <span className="text-[10px] text-sky-700 font-semibold block mt-0.5">{stats.financialOverview.grossMarginPercent}% gross margin</span>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block">4. Operating Exp + Refunds</span>
+              <div className="text-lg font-bold text-rose-700 mt-1">
+                − {fmtPKR((stats.financialOverview.operatingExpenses || 0) + (stats.financialOverview.customerRefunds || 0))}
+              </div>
+              <span className="text-[10px] text-stone-500 block mt-0.5">
+                Exp: {fmtPKR(stats.financialOverview.operatingExpenses)} · Ref: {fmtPKR(stats.financialOverview.customerRefunds)}
+              </span>
+            </div>
+
+            <div className={`p-3.5 rounded-xl border ${stats.financialOverview.netRealizedIncome >= 0 ? 'bg-emerald-50/70 border-emerald-300' : 'bg-rose-50/70 border-rose-300'}`}>
+              <span className={`text-[10px] font-bold uppercase tracking-wider block ${stats.financialOverview.netRealizedIncome >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                5. Net Realized Income
+              </span>
+              <div className={`text-xl font-bold mt-1 ${stats.financialOverview.netRealizedIncome >= 0 ? 'text-emerald-900' : 'text-rose-900'}`}>
+                {fmtPKR(stats.financialOverview.netRealizedIncome)}
+              </div>
+              <span className={`text-[10px] font-bold block mt-0.5 ${stats.financialOverview.netRealizedIncome >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                {stats.financialOverview.netMarginPercent}% net take-home
+              </span>
+            </div>
+          </div>
+
+          {/* Top Profitable Products */}
+          {stats.financialOverview.topProfitableProducts?.length > 0 && (
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-stone-800">Top Profitable Products (Highest Profit Contribution):</span>
+                <span className="text-[11px] text-stone-500">Sales − Landed Costs = Earned Profit</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                {stats.financialOverview.topProfitableProducts.map((p, pIdx) => (
+                  <div key={pIdx} className="rounded-xl border border-stone-100 bg-stone-50/60 p-2.5 space-y-1">
+                    <span className="text-[10px] font-bold text-stone-400 block">#{pIdx + 1}</span>
+                    <span className="text-xs font-semibold text-mountain-900 block truncate" title={p.name}>
+                      {p.name}
+                    </span>
+                    <span className="text-[10px] text-stone-500 block">
+                      {p.unitsSold} sold · Rev: {fmtPKR(p.revenue)}
+                    </span>
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-stone-200">
+                      <span className="text-[10px] text-stone-500">Gross Profit:</span>
+                      <span className="font-bold text-emerald-700">{fmtPKR(p.grossProfit)}</span>
+                    </div>
+                    <div className="text-[10px] text-stone-500 text-right font-medium">
+                      {p.marginPercent}% margin
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* ── Metric Cards ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Total Revenue */}

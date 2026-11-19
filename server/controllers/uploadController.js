@@ -69,7 +69,7 @@ export const uploadImage = async (req, res, next) => {
       throw new Error('No file provided');
     }
 
-    const folder = req.query.folder ? req.query.folder.replace(/[^a-zA-Z0-9_-]/g, '') : 'karakoram-store';
+    const folder = req.query.folder ? req.query.folder.replace(/[^a-zA-Z0-9_-]/g, '') : 'Hunzora';
 
     // Vercel has a read-only/ephemeral filesystem. Uploads must use Cloudinary there.
     if (process.env.VERCEL && !isCloudinaryConfigured()) {
@@ -126,7 +126,7 @@ export const deleteStoredImage = async (publicId) => {
 
   // Cloudinary deletion
   if (isCloudinaryConfigured()) {
-    await cloudinary.uploader.destroy(publicId).catch(() => {});
+    await cloudinary.uploader.destroy(publicId).catch(() => { });
   }
 };
 

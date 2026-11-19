@@ -15,6 +15,7 @@ const stockMovementSchema = new mongoose.Schema(
         'purchase_bill',
         'order_sale',
         'order_cancelled',
+        'warehouse_to_store',   // Transfer from warehouse/godown to store shelf
       ],
       required: true,
       index: true,

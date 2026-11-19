@@ -28,10 +28,12 @@ import {
   adminAddSupplierPayment, adminReverseSupplierPayment,
   adminGetExpenses, adminCreateExpense, adminReverseExpense,
   adminGetAccountReport, adminExportAccountReport, adminGetAccountAudit,
+  adminCreateAccountAuditCheck, adminVerifyAccountAuditEntry,
 } from '../controllers/accountsController.js';
 import {
   adminGetStockOverview,
   adminAdjustStock,
+  adminTransferStock,
   adminGetStockMovements,
   adminGetReorderAlerts,
   adminGetSuppliersList,
@@ -57,6 +59,8 @@ router.use('/accounts', requireAdminPermission('accounts'));
 router.get('/accounts/report.xlsx', accountsExportLimiter, requireAdminPermission('accounts'), adminExportAccountReport);
 router.get('/accounts/report', requireAdminPermission('accounts'), adminGetAccountReport);
 router.get('/accounts/audit', requireAdminPermission('accounts'), adminGetAccountAudit);
+router.post('/accounts/audit/check', requireAdminPermission('accounts'), adminCreateAccountAuditCheck);
+router.post('/accounts/audit/:id/verify', requireAdminPermission('accounts'), adminVerifyAccountAuditEntry);
 router.get('/accounts/suppliers', requireAdminPermission('accounts'), adminGetSuppliers);
 router.get('/accounts/suppliers/:id/statement', requireAdminPermission('accounts'), adminGetSupplierStatement);
 router.post('/accounts/suppliers', requireAdminPermission('accounts'), adminCreateSupplier);
@@ -96,6 +100,7 @@ router.post('/products/bulk-update', requireAdminPermission('catalog'), adminBul
 // Inventory & Warehouse Stock Operations (Floor Staff Access)
 router.get('/inventory/stock', requireAnyAdminPermission('catalog', 'orders'), adminGetStockOverview);
 router.post('/inventory/adjust', requireAnyAdminPermission('catalog', 'orders'), adminAdjustStock);
+router.post('/inventory/transfer', requireAnyAdminPermission('catalog', 'orders'), adminTransferStock);
 router.get('/inventory/movements', requireAnyAdminPermission('catalog', 'orders'), adminGetStockMovements);
 router.get('/inventory/reorder-alerts', requireAnyAdminPermission('catalog', 'orders'), adminGetReorderAlerts);
 router.get('/suppliers', requireAnyAdminPermission('catalog', 'accounts', 'orders'), adminGetSuppliersList);

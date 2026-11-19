@@ -10,6 +10,7 @@ import Order from '../models/Order.js';
 import StockMovement from '../models/StockMovement.js';
 import { getAccountsDateRange, calculateAccountsReport, buildAccountsXlsx } from '../utils/accountsReport.js';
 import { fromMinorUnits, toMinorUnits } from '../utils/money.js';
+import { delCacheByPrefix } from '../utils/cache.js';
 
 const supplierInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -22,6 +23,12 @@ const supplierInputSchema = z.object({
 
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+const additionalCostInputSchema = z.object({
+  category: z.string().trim().min(1, 'Category is required').max(80),
+  amount: z.number().min(0, 'Amount cannot be negative').max(100000000),
+  allocationMethod: z.enum(['quantity', 'value', 'equal']).default('quantity'),
+});
+
 const purchaseInputSchema = z.object({
   supplier: z.string().length(24).optional().or(z.literal('')),
   supplierName: z.string().trim().max(120).optional().default(''),
@@ -31,6 +38,7 @@ const purchaseInputSchema = z.object({
   kind: z.enum(['purchase', 'opening_stock', 'adjustment']).default('purchase'),
   amountPaid: z.number().min(0).optional().default(0),
   notes: z.string().trim().max(1000).optional().default(''),
+  additionalCosts: z.array(additionalCostInputSchema).optional().default([]),
   lines: z.array(z.object({
     product: z.string().length(24),
     variantLabel: z.string().trim().min(1).max(80),
@@ -39,6 +47,39 @@ const purchaseInputSchema = z.object({
     additionalCost: z.number().min(0).max(100000000).optional().default(0),
   })).min(1).max(100),
 });
+
+/**
+ * Allocate a total minor unit amount across lines using Hare-Niemeyer (Largest Remainder)
+ * Guarantees zero penny rounding loss across any number of line splits.
+ */
+function allocateLargestRemainder(totalMinor, weights) {
+  const n = weights.length;
+  if (n === 0) return [];
+  if (totalMinor === 0) return new Array(n).fill(0);
+
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  const effectiveWeights = totalWeight > 0 ? weights : new Array(n).fill(1);
+  const effectiveTotal = totalWeight > 0 ? totalWeight : n;
+
+  const exactAllocations = effectiveWeights.map((w) => (totalMinor * w) / effectiveTotal);
+  const floors = exactAllocations.map((val) => Math.floor(val));
+  const allocatedSum = floors.reduce((sum, val) => sum + val, 0);
+  let remainder = totalMinor - allocatedSum;
+
+  const remainders = exactAllocations.map((val, idx) => ({
+    idx,
+    fraction: val - floors[idx],
+  }));
+
+  remainders.sort((a, b) => b.fraction - a.fraction || a.idx - b.idx);
+
+  const result = [...floors];
+  for (let i = 0; i < remainder; i++) {
+    result[remainders[i].idx] += 1;
+  }
+
+  return result;
+}
 
 const expenseInputSchema = z.object({
   category: z.string().trim().min(2).max(80),
@@ -454,10 +495,22 @@ export const adminGetPurchases = async (req, res, next) => {
               ? 'paid'
               : amountPaidMinor > 0 ? 'partial' : 'unpaid',
           canReverse: purchase.kind !== 'reversal' && !reversed && amountPaidMinor === 0,
+          additionalCosts: (purchase.additionalCosts || []).map((ac) => ({
+            category: ac.category,
+            amount: fromMinorUnits(ac.amountMinor),
+            allocationMethod: ac.allocationMethod,
+          })),
           lines: purchase.lines.map((line) => ({
             ...line,
             unitCost: fromMinorUnits(line.unitCostMinor),
             additionalCost: fromMinorUnits(line.additionalCostMinor),
+            landedUnitCost: line.landedUnitCostMinor != null
+              ? fromMinorUnits(line.landedUnitCostMinor)
+              : fromMinorUnits(line.unitCostMinor + Math.round((line.additionalCostMinor || 0) / (line.quantity || 1))),
+            costBreakdown: (line.costBreakdown || []).map((cb) => ({
+              category: cb.category,
+              amount: fromMinorUnits(cb.amountMinor),
+            })),
           })),
         });
       }),
@@ -482,6 +535,41 @@ export const adminCreatePurchase = async (req, res, next) => {
     const amountPaidMinor = toMinorUnits(data.amountPaid, 'Amount paid');
     const purchaseDate = dateToUtc(data.purchaseDate);
 
+    // Parse and validate invoice-level additional costs
+    const parsedAdditionalCosts = (data.additionalCosts || []).map((ac) => ({
+      category: ac.category.trim(),
+      amountMinor: toMinorUnits(ac.amount, ac.category),
+      allocationMethod: ac.allocationMethod,
+    })).filter((ac) => ac.amountMinor > 0);
+
+    // Pre-calculate allocation of invoice-level additional costs across lines
+    const lineCount = data.lines.length;
+    const lineAllocatedBatchCostsMinor = new Array(lineCount).fill(0);
+    const lineCostBreakdowns = Array.from({ length: lineCount }, () => []);
+
+    for (const extraCost of parsedAdditionalCosts) {
+      let weights;
+      if (extraCost.allocationMethod === 'value') {
+        weights = data.lines.map((l) => toMinorUnits(l.unitCost, 'Unit cost') * l.quantity);
+      } else if (extraCost.allocationMethod === 'equal') {
+        weights = data.lines.map(() => 1);
+      } else {
+        // default: 'quantity'
+        weights = data.lines.map((l) => l.quantity);
+      }
+
+      const allocatedShares = allocateLargestRemainder(extraCost.amountMinor, weights);
+      for (let i = 0; i < lineCount; i++) {
+        lineAllocatedBatchCostsMinor[i] += allocatedShares[i];
+        if (allocatedShares[i] > 0) {
+          lineCostBreakdowns[i].push({
+            category: extraCost.category,
+            amountMinor: Math.round(allocatedShares[i] / data.lines[i].quantity),
+          });
+        }
+      }
+    }
+
     await session.withTransaction(async () => {
       if (supplierId) {
         const supplier = await Supplier.findById(supplierId).session(session);
@@ -490,7 +578,8 @@ export const adminCreatePurchase = async (req, res, next) => {
       }
       if (!supplierName) throw Object.assign(new Error('Supplier name is required'), { statusCode: 400 });
 
-      for (const inputLine of data.lines) {
+      for (let i = 0; i < data.lines.length; i++) {
+        const inputLine = data.lines[i];
         const product = await Product.findById(inputLine.product)
           .select('+variants.averageCostMinor')
           .session(session);
@@ -509,28 +598,53 @@ export const adminCreatePurchase = async (req, res, next) => {
         }
 
         const unitCostMinor = toMinorUnits(inputLine.unitCost, 'Unit cost');
-        const additionalCostMinor = toMinorUnits(inputLine.additionalCost, 'Additional cost');
-        const lineCostMinor = unitCostMinor * inputLine.quantity + additionalCostMinor;
+        const directAdditionalCostMinor = toMinorUnits(inputLine.additionalCost || 0, 'Additional cost');
+        const batchAllocatedMinor = lineAllocatedBatchCostsMinor[i];
+        const totalLineAdditionalCostMinor = directAdditionalCostMinor + batchAllocatedMinor;
+        const lineCostMinor = unitCostMinor * inputLine.quantity + totalLineAdditionalCostMinor;
         if (!Number.isSafeInteger(lineCostMinor)) throw Object.assign(new Error('Purchase amount exceeds supported precision'), { statusCode: 400 });
         totalCostMinor += lineCostMinor;
         if (!Number.isSafeInteger(totalCostMinor)) throw Object.assign(new Error('Purchase total exceeds supported precision'), { statusCode: 400 });
+
+        const landedUnitCostMinor = Math.round(lineCostMinor / inputLine.quantity);
+
+        // Build itemized cost breakdown per unit
+        const breakdown = [
+          { category: 'Purchase Price', amountMinor: unitCostMinor },
+        ];
+        if (directAdditionalCostMinor > 0) {
+          breakdown.push({
+            category: 'Direct Extra',
+            amountMinor: Math.round(directAdditionalCostMinor / inputLine.quantity),
+          });
+        }
+        for (const item of lineCostBreakdowns[i]) {
+          breakdown.push(item);
+        }
 
         const previousStock = variant.stock;
         const previousAverageCost = variant.averageCostMinor;
         if (data.kind === 'opening_stock') {
           variant.stock = inputLine.quantity;
-          variant.averageCostMinor = Math.round(lineCostMinor / inputLine.quantity);
+          variant.averageCostMinor = landedUnitCostMinor;
         } else {
-          variant.stock += inputLine.quantity;
+          // ── Purchases go to WAREHOUSE stock, not store shelf ──
+          variant.warehouseStock = (variant.warehouseStock || 0) + inputLine.quantity;
         }
         if (data.kind !== 'opening_stock' && previousStock === 0) {
-          variant.averageCostMinor = Math.round(lineCostMinor / inputLine.quantity);
+          variant.averageCostMinor = landedUnitCostMinor;
         } else if (data.kind !== 'opening_stock' && Number.isSafeInteger(previousAverageCost)) {
           const previousValue = previousStock * previousAverageCost;
           const combinedValue = previousValue + lineCostMinor;
           if (!Number.isSafeInteger(combinedValue)) throw Object.assign(new Error('Inventory valuation exceeds supported precision'), { statusCode: 400 });
-          variant.averageCostMinor = Math.round(combinedValue / variant.stock);
+          // Total inventory = store + warehouse for cost averaging
+          const totalUnits = variant.stock + variant.warehouseStock;
+          variant.averageCostMinor = totalUnits > 0 ? Math.round(combinedValue / totalUnits) : landedUnitCostMinor;
         }
+
+        // Keep product pricing & costing metadata current
+        variant.latestUnitCostMinor = unitCostMinor;
+        variant.latestLandedCostMinor = landedUnitCostMinor;
 
         lines.push({
           product: product._id,
@@ -538,10 +652,14 @@ export const adminCreatePurchase = async (req, res, next) => {
           variantLabel: variant.label,
           quantity: inputLine.quantity,
           unitCostMinor,
-          additionalCostMinor,
+          additionalCostMinor: totalLineAdditionalCostMinor,
+          landedUnitCostMinor,
+          costBreakdown: breakdown,
           stockBefore: previousStock,
+          warehouseStockBefore: (variant.warehouseStock || 0) - inputLine.quantity,
           averageCostBeforeMinor: previousAverageCost ?? null,
           stockAfter: variant.stock,
+          warehouseStockAfter: variant.warehouseStock,
           averageCostAfterMinor: variant.averageCostMinor ?? null,
         });
         await product.save({ session });
@@ -554,14 +672,23 @@ export const adminCreatePurchase = async (req, res, next) => {
         ? 'paid'
         : amountPaidMinor > 0 ? 'partial' : 'unpaid';
       const dueDate = data.dueDate ? dateToUtc(data.dueDate) : null;
+
+      // Auto-generate reference if not provided
+      const autoRef = (() => {
+        const digits = Math.floor(10000000 + Math.random() * 90000000);
+        return `HN${digits}`;
+      })();
+      const resolvedReference = data.reference && data.reference.trim() ? data.reference.trim() : autoRef;
+
       const [purchase] = await InventoryPurchase.create([{
         supplier: supplierId,
         supplierName,
-        reference: data.reference,
+        reference: resolvedReference,
         purchaseDate,
         dueDate,
         kind: data.kind,
         lines,
+        additionalCosts: parsedAdditionalCosts,
         totalCostMinor,
         amountPaidMinor,
         paymentStatus,
@@ -582,9 +709,11 @@ export const adminCreatePurchase = async (req, res, next) => {
         variantLabel: line.variantLabel,
         type: data.kind === 'opening_stock' ? 'goods_received' : 'purchase_bill',
         quantityChange: line.quantity,
-        stockBefore: line.stockBefore,
-        stockAfter: line.stockAfter,
-        reason: `Purchase Bill #${data.reference || purchase._id} (${supplierName})`,
+        stockBefore: data.kind === 'opening_stock' ? line.stockBefore : (line.warehouseStockBefore || 0),
+        stockAfter: data.kind === 'opening_stock' ? line.stockAfter : (line.warehouseStockAfter || 0),
+        reason: data.kind === 'opening_stock'
+          ? `Opening Stock #${data.reference || purchase._id} (${supplierName})`
+          : `Warehouse Stock Received: Purchase Bill #${data.reference || purchase._id} (${supplierName})`,
         reference: data.reference || String(purchase._id),
         actor: req.user._id,
         actorName: req.user.name || 'Accountant',
@@ -595,6 +724,11 @@ export const adminCreatePurchase = async (req, res, next) => {
     });
 
     const purchase = req.createdPurchase;
+
+    // Invalidate product caches so fresh warehouse stock reflects immediately
+    await delCacheByPrefix('products:list:').catch(() => {});
+    await delCacheByPrefix('products:detail:').catch(() => {});
+
     res.status(201).json({
       purchase: {
         ...purchase.toObject(),
@@ -825,12 +959,162 @@ export const adminReverseExpense = async (req, res, next) => {
 export const adminGetAccountAudit = async (req, res, next) => {
   try {
     noStore(res);
-    const auditLogs = await AccountAuditLog.find()
+    const filter = {};
+    if (req.query.action) {
+      filter.action = req.query.action;
+    }
+    if (req.query.verified === 'true') {
+      filter.verified = true;
+    } else if (req.query.verified === 'false') {
+      filter.verified = false;
+    }
+
+    const auditLogs = await AccountAuditLog.find(filter)
       .sort({ occurredAt: -1 })
-      .limit(100)
-      .populate('actor', 'name email')
+      .limit(200)
+      .populate('actor', 'name email role')
+      .populate('verifiedBy', 'name email role')
       .lean();
     res.json({ auditLogs });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminCreateAccountAuditCheck = async (req, res, next) => {
+  try {
+    const schema = z.object({
+      periodLabel: z.string().trim().min(1).max(120),
+      periodFrom: z.string().optional(),
+      periodTo: z.string().optional(),
+      physicalCashCount: z.number().min(0).max(100000000),
+      bankBalanceCount: z.number().min(0).max(100000000),
+      notes: z.string().trim().max(1000).optional().default(''),
+      discrepancyReason: z.string().trim().max(1000).optional().default(''),
+    });
+
+    const data = schema.parse(req.body);
+
+    // Calculate system totals for the specified period or today
+    let fromDate = new Date();
+    fromDate.setHours(0, 0, 0, 0);
+    let toDate = new Date();
+    toDate.setHours(23, 59, 59, 999);
+
+    if (data.periodFrom && data.periodTo) {
+      fromDate = new Date(`${data.periodFrom}T00:00:00.000Z`);
+      toDate = new Date(`${data.periodTo}T23:59:59.999Z`);
+    }
+
+    const [orders, expenses, purchases, supplierPayments] = await Promise.all([
+      Order.find({
+        createdAt: { $gte: fromDate, $lte: toDate },
+        paymentStatus: 'paid',
+        orderStatus: { $nin: ['cancelled', 'returned'] },
+      }).select('total subtotal discount').lean(),
+      AccountExpense.find({
+        expenseDate: { $gte: fromDate, $lte: toDate },
+      }).select('amountMinor kind').lean(),
+      InventoryPurchase.find({
+        purchaseDate: { $gte: fromDate, $lte: toDate },
+      }).select('totalCostMinor amountPaidMinor kind').lean(),
+      SupplierPayment.find({
+        paymentDate: { $gte: fromDate, $lte: toDate },
+      }).select('amountMinor kind').lean(),
+    ]);
+
+    const systemSalesPKR = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const systemExpensesPKR = expenses.reduce((sum, e) => {
+      const amt = fromMinorUnits(e.amountMinor);
+      return e.kind === 'reversal' ? sum - amt : sum + amt;
+    }, 0);
+    const systemPurchasesPKR = purchases.reduce((sum, p) => {
+      const amt = fromMinorUnits(p.totalCostMinor);
+      return p.kind === 'reversal' ? sum - amt : sum + amt;
+    }, 0);
+    const supplierPaidPKR = supplierPayments.reduce((sum, sp) => {
+      const amt = fromMinorUnits(sp.amountMinor);
+      return sp.kind === 'reversal' ? sum - amt : sum + amt;
+    }, 0);
+
+    const netCashInflowPKR = systemSalesPKR - systemExpensesPKR - supplierPaidPKR;
+    const totalPhysicalAndBankPKR = data.physicalCashCount + data.bankBalanceCount;
+    const variancePKR = totalPhysicalAndBankPKR - netCashInflowPKR;
+    const isBalanced = Math.abs(variancePKR) < 1;
+
+    const auditEntry = await AccountAuditLog.create({
+      actor: req.user._id,
+      action: 'audit.check_completed',
+      entity: 'accounts_audit',
+      entityId: `AUDIT-${Date.now().toString().slice(-6)}`,
+      verified: true,
+      verifiedBy: req.user._id,
+      verifiedByName: req.user?.name || 'Administrator',
+      verifiedAt: new Date(),
+      verificationNotes: data.notes || 'Verified and signed off by administrator',
+      details: {
+        periodLabel: data.periodLabel,
+        periodFrom: data.periodFrom || fromDate.toISOString().slice(0, 10),
+        periodTo: data.periodTo || toDate.toISOString().slice(0, 10),
+        systemSalesPKR,
+        systemExpensesPKR,
+        systemPurchasesPKR,
+        supplierPaidPKR,
+        netCashInflowPKR,
+        physicalCashCount: data.physicalCashCount,
+        bankBalanceCount: data.bankBalanceCount,
+        totalCountedPKR: totalPhysicalAndBankPKR,
+        variancePKR,
+        isBalanced,
+        notes: data.notes,
+        discrepancyReason: data.discrepancyReason,
+        checkedBy: req.user?.name || 'Administrator',
+        checkedEmail: req.user?.email || '',
+        checkedRole: req.user?.role || 'admin',
+      },
+    });
+
+    res.status(201).json({
+      success: true,
+      message: isBalanced
+        ? 'Accounts audit completed and balanced successfully!'
+        : `Accounts audit completed with variance of ${variancePKR > 0 ? '+' : ''}${variancePKR.toLocaleString()} PKR.`,
+      auditEntry,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminVerifyAccountAuditEntry = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const schema = z.object({
+      notes: z.string().trim().max(500).optional().default('Checked and verified by admin'),
+    });
+    const { notes } = schema.parse(req.body);
+
+    const auditEntry = await AccountAuditLog.findByIdAndUpdate(
+      id,
+      {
+        verified: true,
+        verifiedBy: req.user._id,
+        verifiedByName: req.user?.name || 'Administrator',
+        verifiedAt: new Date(),
+        verificationNotes: notes,
+      },
+      { returnDocument: 'after' }
+    ).populate('actor', 'name email role').populate('verifiedBy', 'name email role');
+
+    if (!auditEntry) {
+      throw Object.assign(new Error('Audit log entry not found'), { statusCode: 404 });
+    }
+
+    res.json({
+      success: true,
+      message: 'Audit entry verified and marked as checked by admin.',
+      auditEntry,
+    });
   } catch (error) {
     next(error);
   }

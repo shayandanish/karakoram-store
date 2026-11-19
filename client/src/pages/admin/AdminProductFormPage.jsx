@@ -25,6 +25,17 @@ function toVariantRows(variants = []) {
     label: v.label,
     price: v.price,
     stock: v.stock,
+    latestUnitCostMinor: v.latestUnitCostMinor ?? null,
+    latestLandedCostMinor: v.latestLandedCostMinor ?? null,
+    averageCostMinor: v.averageCostMinor ?? null,
+    targetMarkupPercent: v.targetMarkupPercent != null ? v.targetMarkupPercent : '',
+    minMarginPercent: v.minMarginPercent != null ? v.minMarginPercent : '',
+    costPrice: v.latestLandedCostMinor != null
+      ? (v.latestLandedCostMinor / 100).toFixed(2)
+      : v.averageCostMinor != null
+        ? (v.averageCostMinor / 100).toFixed(2)
+        : '',
+    profitMargin: '',
     discountPercent: v.discountPercent != null ? v.discountPercent : (
       (v.compareAtPrice && v.compareAtPrice > v.price)
         ? Math.round(((v.compareAtPrice - v.price) / v.compareAtPrice) * 100)
@@ -42,6 +53,17 @@ function normalizeWeightVariants(variants = []) {
     label: String(v.label || '').trim(),
     price: v.price === undefined || v.price === null ? '' : v.price,
     stock: v.stock === undefined || v.stock === null ? '' : v.stock,
+    latestUnitCostMinor: v.latestUnitCostMinor ?? null,
+    latestLandedCostMinor: v.latestLandedCostMinor ?? null,
+    averageCostMinor: v.averageCostMinor ?? null,
+    targetMarkupPercent: v.targetMarkupPercent != null ? v.targetMarkupPercent : '',
+    minMarginPercent: v.minMarginPercent != null ? v.minMarginPercent : '',
+    costPrice: v.latestLandedCostMinor != null
+      ? (v.latestLandedCostMinor / 100).toFixed(2)
+      : v.averageCostMinor != null
+        ? (v.averageCostMinor / 100).toFixed(2)
+        : '',
+    profitMargin: '',
     discountPercent: v.discountPercent !== undefined && v.discountPercent !== null ? v.discountPercent : '',
     discountLabel: v.discountLabel || '',
   }));
@@ -92,6 +114,19 @@ function normalizeWeightVariants(variants = []) {
           : stockPerKg !== ''
           ? Math.max(0, Math.round(stockPerKg * multiplier))
           : 0,
+      latestUnitCostMinor: existing?.latestUnitCostMinor ?? null,
+      latestLandedCostMinor: existing?.latestLandedCostMinor ?? null,
+      averageCostMinor: existing?.averageCostMinor ?? null,
+      targetMarkupPercent: existing?.targetMarkupPercent != null ? existing.targetMarkupPercent : '',
+      minMarginPercent: existing?.minMarginPercent != null ? existing.minMarginPercent : '',
+      costPrice: existing?.costPrice || (
+        existing?.latestLandedCostMinor != null
+          ? (existing.latestLandedCostMinor / 100).toFixed(2)
+          : existing?.averageCostMinor != null
+            ? (existing.averageCostMinor / 100).toFixed(2)
+            : ''
+      ),
+      profitMargin: '',
       discountPercent: existing?.discountPercent != null ? existing.discountPercent : '',
       discountLabel:  existing?.discountLabel || '',
     };
@@ -428,6 +463,12 @@ function ProductForm({ initialData, categories, artisans, suppliers = [], isEdit
         label:          v.label.trim(),
         price:          Number(v.price),
         stock:          parseInt(v.stock, 10),
+        targetMarkupPercent: v.targetMarkupPercent !== '' && !isNaN(Number(v.targetMarkupPercent))
+          ? Number(v.targetMarkupPercent)
+          : null,
+        minMarginPercent: v.minMarginPercent !== '' && !isNaN(Number(v.minMarginPercent))
+          ? Number(v.minMarginPercent)
+          : null,
         discountPercent: v.discountPercent !== '' && !isNaN(Number(v.discountPercent)) && Number(v.discountPercent) > 0
                           ? Math.min(99, Math.max(1, Math.round(Number(v.discountPercent))))
                           : null,
@@ -671,104 +712,105 @@ function ProductForm({ initialData, categories, artisans, suppliers = [], isEdit
                   )}
                 </div>
 
-                <div className="w-full sm:w-28">
+                <div className="w-full sm:w-32">
                   <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Cost Price (PKR)
+                    Landed Cost (PKR)
                   </label>
                   <input
                     type="number"
                     min="0"
-                    step="1"
+                    step="0.01"
                     value={v.costPrice || ''}
-                    onChange={(e) => {
-                      const costVal = e.target.value;
-                      const costNum = Number(costVal);
-                      const marginNum = Number(v.profitMargin || 0);
-                      const newPrice = costVal !== '' && !isNaN(costNum) && marginNum >= 0
-                        ? String(costNum + marginNum)
-                        : v.price;
-                      setVariants((prev) =>
-                        prev.map((row, i) =>
-                          i === idx ? { ...row, costPrice: costVal, price: newPrice } : row
-                        )
-                      );
-                    }}
-                    placeholder="e.g. 20"
+                    onChange={(e) => updateVariantRow(idx, 'costPrice', e.target.value)}
+                    placeholder="e.g. 24"
                     className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
                   />
-                  <span className="text-[10px] text-stone-400 block mt-0.5">Supplier cost</span>
+                  <span className="text-[10px] text-stone-400 block mt-0.5">
+                    {v.latestLandedCostMinor != null
+                      ? 'From supplier bill'
+                      : v.averageCostMinor != null
+                        ? 'Weighted AVCO'
+                        : 'Actual landed cost'}
+                  </span>
                 </div>
 
-                <div className="w-full sm:w-32">
+                <div className="w-full sm:w-36">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-[11px] font-semibold text-stone-600">
-                      Profit Margin
+                      Target Markup (%)
                     </label>
-                    {v.costPrice !== '' && Number(v.costPrice) > 0 && (
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="1000"
+                      step="1"
+                      value={v.targetMarkupPercent}
+                      onChange={(e) => updateVariantRow(idx, 'targetMarkupPercent', e.target.value)}
+                      placeholder="25"
+                      className="w-full px-3 py-2 pr-7 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
+                    />
+                    <span className="absolute right-2.5 top-2 text-xs text-stone-400 pointer-events-none">%</span>
+                  </div>
+                  {/* Quick Markup Presets */}
+                  <div className="flex items-center gap-1 mt-1">
+                    {[15, 20, 25, 35].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          const costNum = Number(v.costPrice || 0);
+                          const suggested = costNum > 0 ? Math.round(costNum * (1 + preset / 100)) : '';
+                          setVariants((prev) =>
+                            prev.map((row, i) =>
+                              i === idx
+                                ? {
+                                    ...row,
+                                    targetMarkupPercent: String(preset),
+                                    price: suggested ? String(suggested) : row.price,
+                                  }
+                                : row
+                            )
+                          );
+                        }}
+                        className="px-1.5 py-0.5 rounded text-[10px] bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold"
+                        title={`Set ${preset}% markup and update selling price`}
+                      >
+                        {preset}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="w-full sm:w-40">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-stone-600">
+                      Selling Price (PKR) <span className="text-rose-500">*</span>
+                    </label>
+                    {Number(v.costPrice) > 0 && v.targetMarkupPercent !== '' && (
                       <button
                         type="button"
                         onClick={() => {
                           const costNum = Number(v.costPrice);
-                          setVariants((prev) =>
-                            prev.map((row, i) =>
-                              i === idx ? { ...row, profitMargin: '0', price: String(costNum) } : row
-                            )
-                          );
+                          const markupNum = Number(v.targetMarkupPercent || 0);
+                          const suggested = Math.round(costNum * (1 + markupNum / 100));
+                          updateVariantRow(idx, 'price', String(suggested));
                         }}
-                        className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold underline"
-                        title="Sell at original purchase cost with 0 profit margin"
+                        className="text-[10px] text-apricot-700 hover:text-apricot-900 font-bold underline"
+                        title="Apply suggested price"
                       >
-                        At Cost
+                        Use Suggested
                       </button>
                     )}
                   </div>
                   <input
                     type="number"
-                    min="0"
-                    step="1"
-                    value={v.profitMargin || ''}
-                    onChange={(e) => {
-                      const marginVal = e.target.value;
-                      const marginNum = Number(marginVal);
-                      const costNum = Number(v.costPrice || 0);
-                      const newPrice = v.costPrice !== '' && !isNaN(marginNum)
-                        ? String(costNum + marginNum)
-                        : v.price;
-                      setVariants((prev) =>
-                        prev.map((row, i) =>
-                          i === idx ? { ...row, profitMargin: marginVal, price: newPrice } : row
-                        )
-                      );
-                    }}
-                    placeholder="+5"
-                    className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden"
-                  />
-                  <span className="text-[10px] text-stone-400 block mt-0.5">Added markup</span>
-                </div>
-
-                <div className="w-full sm:w-36">
-                  <label className="block text-[11px] font-semibold text-stone-600 mb-1">
-                    Selling Price (PKR) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
                     min="1"
                     step="1"
                     value={v.price}
-                    onChange={(e) => {
-                      const pVal = e.target.value;
-                      const pNum = Number(pVal);
-                      const costNum = Number(v.costPrice || 0);
-                      const newMargin = v.costPrice !== '' && pNum >= costNum
-                        ? String(pNum - costNum)
-                        : v.profitMargin;
-                      setVariants((prev) =>
-                        prev.map((row, i) =>
-                          i === idx ? { ...row, price: pVal, profitMargin: newMargin } : row
-                        )
-                      );
-                    }}
-                    placeholder="25"
+                    onChange={(e) => updateVariantRow(idx, 'price', e.target.value)}
+                    placeholder="30"
                     className="w-full px-3 py-2 text-sm bg-white border border-stone-200 rounded-lg focus:ring-2 focus:ring-apricot-500 focus:outline-hidden font-semibold text-mountain-900"
                   />
                   {errors[`variant_${idx}_price`] && (
@@ -776,13 +818,28 @@ function ProductForm({ initialData, categories, artisans, suppliers = [], isEdit
                       {errors[`variant_${idx}_price`]}
                     </span>
                   )}
-                  {Number(v.costPrice) > 0 && Number(v.price) > 0 && (
-                    <span className={`text-[10px] font-bold block mt-0.5 ${Number(v.price) >= Number(v.costPrice) ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {Number(v.price) === Number(v.costPrice)
-                        ? 'At cost (0% margin)'
-                        : `+${fmtPKR(Number(v.price) - Number(v.costPrice))} (${Math.round(((Number(v.price) - Number(v.costPrice)) / Number(v.price)) * 100)}%)`}
-                    </span>
-                  )}
+                  {Number(v.costPrice) > 0 && Number(v.price) > 0 && (() => {
+                    const costNum = Number(v.costPrice);
+                    const priceNum = Number(v.price);
+                    const profitNum = priceNum - costNum;
+                    const marginPct = (profitNum / priceNum) * 100;
+                    const markupPct = (profitNum / costNum) * 100;
+                    const isProfit = profitNum >= 0;
+                    return (
+                      <div className="mt-1 text-[10px] space-y-0.5">
+                        <span className={`font-bold block ${isProfit ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {profitNum === 0
+                            ? 'At cost (0% margin)'
+                            : `${profitNum > 0 ? '+' : ''}${fmtPKR(profitNum)} / unit`}
+                        </span>
+                        <div className="flex items-center gap-2 text-stone-500">
+                          <span>Margin: <strong className={marginPct < 15 ? 'text-amber-700' : 'text-stone-800'}>{marginPct.toFixed(1)}%</strong></span>
+                          <span>•</span>
+                          <span>Markup: <strong>{markupPct.toFixed(1)}%</strong></span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="w-full sm:w-32">

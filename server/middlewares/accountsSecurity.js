@@ -3,7 +3,7 @@ export const requireTrustedAccountsOrigin = (req, res, next) => {
   if (!origin) return next();
 
   const allowedOrigins = new Set([
-    'https://karakoram-store.vercel.app',
+    'https://Hunzora.vercel.app',
     ...(process.env.CLIENT_URL || '')
       .split(',')
       .map((value) => value.trim().replace(/\/+$/, ''))

@@ -93,7 +93,7 @@ inventory and accounts management.
 ## Repository layout
 
 ```text
-karakoram-store/
+Hunzora/
 ├── client/                  # React storefront and admin dashboard
 │   ├── src/
 │   │   ├── components/      # Layout, UI, and admin components
