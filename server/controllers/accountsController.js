@@ -8,6 +8,7 @@ import AccountAuditLog from '../models/AccountAuditLog.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import StockMovement from '../models/StockMovement.js';
+import RawMaterial from '../models/RawMaterial.js';
 import { getAccountsDateRange, calculateAccountsReport, buildAccountsXlsx } from '../utils/accountsReport.js';
 import { fromMinorUnits, toMinorUnits } from '../utils/money.js';
 import { delCacheByPrefix } from '../utils/cache.js';
@@ -40,9 +41,11 @@ const purchaseInputSchema = z.object({
   notes: z.string().trim().max(1000).optional().default(''),
   additionalCosts: z.array(additionalCostInputSchema).optional().default([]),
   lines: z.array(z.object({
-    product: z.string().length(24),
-    variantLabel: z.string().trim().min(1).max(80),
-    quantity: z.number().int().min(1).max(100000),
+    itemType: z.enum(['product', 'raw_material']).optional().default('product'),
+    product: z.string().length(24).optional().or(z.literal('')),
+    variantLabel: z.string().trim().max(80).optional().default(''),
+    rawMaterial: z.string().length(24).optional().or(z.literal('')),
+    quantity: z.number().positive().max(100000),
     unitCost: z.number().min(0).max(100000000),
     additionalCost: z.number().min(0).max(100000000).optional().default(0),
   })).min(1).max(100),
@@ -141,20 +144,33 @@ export const adminReversePurchase = async (req, res, next) => {
       }
 
       for (const line of original.lines) {
-        const product = await Product.findById(line.product)
-          .select('+variants.averageCostMinor')
-          .session(session);
-        const variant = product?.variants.find((item) => item.label === line.variantLabel);
-        if (!variant) throw Object.assign(new Error(`Inventory variant not found: ${line.productName} (${line.variantLabel})`), { statusCode: 409 });
-        if (
-          variant.stock !== line.stockAfter
-          || (variant.averageCostMinor ?? null) !== (line.averageCostAfterMinor ?? null)
-        ) {
-          throw Object.assign(new Error(`Inventory changed since this purchase. Record a corrective stock adjustment instead of reversing it.`), { statusCode: 409 });
+        if (line.itemType === 'raw_material') {
+          const rm = await RawMaterial.findById(line.rawMaterial).session(session);
+          if (!rm) throw Object.assign(new Error(`Raw material not found: ${line.rawMaterialName}`), { statusCode: 409 });
+          if (rm.currentStock < line.quantity) {
+            throw Object.assign(new Error(`Cannot reverse purchase: raw material "${rm.name}" has already been consumed in packaging/production`), { statusCode: 409 });
+          }
+          rm.currentStock -= line.quantity;
+          if (line.averageCostBeforeMinor != null) {
+            rm.averageCostMinor = line.averageCostBeforeMinor;
+          }
+          await rm.save({ session });
+        } else {
+          const product = await Product.findById(line.product)
+            .select('+variants.averageCostMinor')
+            .session(session);
+          const variant = product?.variants.find((item) => item.label === line.variantLabel);
+          if (!variant) throw Object.assign(new Error(`Inventory variant not found: ${line.productName} (${line.variantLabel})`), { statusCode: 409 });
+          if (
+            variant.stock !== line.stockAfter
+            || (variant.averageCostMinor ?? null) !== (line.averageCostAfterMinor ?? null)
+          ) {
+            throw Object.assign(new Error(`Inventory changed since this purchase. Record a corrective stock adjustment instead of reversing it.`), { statusCode: 409 });
+          }
+          variant.stock = line.stockBefore;
+          variant.averageCostMinor = line.averageCostBeforeMinor ?? null;
+          await product.save({ session });
         }
-        variant.stock = line.stockBefore;
-        variant.averageCostMinor = line.averageCostBeforeMinor ?? null;
-        await product.save({ session });
       }
 
       [reversal] = await InventoryPurchase.create([{
@@ -165,9 +181,13 @@ export const adminReversePurchase = async (req, res, next) => {
         kind: 'reversal',
         reversalOf: original._id,
         lines: original.lines.map((line) => ({
+          itemType: line.itemType || 'product',
           product: line.product,
           productName: line.productName,
           variantLabel: line.variantLabel,
+          rawMaterial: line.rawMaterial,
+          rawMaterialName: line.rawMaterialName,
+          unit: line.unit,
           quantity: line.quantity,
           unitCostMinor: line.unitCostMinor,
           additionalCostMinor: line.additionalCostMinor,
@@ -524,9 +544,11 @@ export const adminCreatePurchase = async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
     const data = purchaseInputSchema.parse(req.body);
-    const lineKeys = data.lines.map((line) => `${line.product}:${line.variantLabel}`);
+    const lineKeys = data.lines.map((line) =>
+      line.itemType === 'raw_material' ? `rm:${line.rawMaterial}` : `prod:${line.product}:${line.variantLabel}`
+    );
     if (new Set(lineKeys).size !== lineKeys.length) {
-      return sendError(res, 400, 'A purchase can contain each product variant only once');
+      return sendError(res, 400, 'A purchase cannot contain duplicate product variants or raw materials');
     }
     const supplierId = data.supplier || null;
     let supplierName = data.supplierName.trim();
@@ -580,89 +602,153 @@ export const adminCreatePurchase = async (req, res, next) => {
 
       for (let i = 0; i < data.lines.length; i++) {
         const inputLine = data.lines[i];
-        const product = await Product.findById(inputLine.product)
-          .select('+variants.averageCostMinor')
-          .session(session);
-        if (!product) throw Object.assign(new Error('Product not found'), { statusCode: 404 });
-        const variant = product.variants.find((item) => item.label === inputLine.variantLabel);
-        if (!variant) throw Object.assign(new Error(`Variant not found for ${product.name}`), { statusCode: 400 });
 
-        if (data.kind === 'opening_stock') {
-          const openingAlreadyRecorded = await InventoryPurchase.exists({
-            kind: 'opening_stock',
-            lines: { $elemMatch: { product: product._id, variantLabel: variant.label } },
-          }).session(session);
-          if (openingAlreadyRecorded) {
-            throw Object.assign(new Error(`Opening inventory was already recorded for ${product.name} (${variant.label})`), { statusCode: 409 });
+        if (inputLine.itemType === 'raw_material') {
+          const rm = await RawMaterial.findById(inputLine.rawMaterial).session(session);
+          if (!rm || !rm.isActive) throw Object.assign(new Error('Active raw material not found'), { statusCode: 404 });
+
+          const unitCostMinor = toMinorUnits(inputLine.unitCost, 'Unit cost');
+          const directAdditionalCostMinor = toMinorUnits(inputLine.additionalCost || 0, 'Additional cost');
+          const batchAllocatedMinor = lineAllocatedBatchCostsMinor[i];
+          const totalLineAdditionalCostMinor = directAdditionalCostMinor + batchAllocatedMinor;
+          const lineCostMinor = Math.round(unitCostMinor * inputLine.quantity + totalLineAdditionalCostMinor);
+          if (!Number.isSafeInteger(lineCostMinor)) throw Object.assign(new Error('Purchase amount exceeds supported precision'), { statusCode: 400 });
+          totalCostMinor += lineCostMinor;
+          if (!Number.isSafeInteger(totalCostMinor)) throw Object.assign(new Error('Purchase total exceeds supported precision'), { statusCode: 400 });
+
+          const landedUnitCostMinor = Math.round(lineCostMinor / inputLine.quantity);
+
+          const breakdown = [
+            { category: 'Purchase Price', amountMinor: unitCostMinor },
+          ];
+          if (directAdditionalCostMinor > 0) {
+            breakdown.push({
+              category: 'Direct Extra',
+              amountMinor: Math.round(directAdditionalCostMinor / inputLine.quantity),
+            });
           }
-        }
+          for (const item of lineCostBreakdowns[i]) {
+            breakdown.push(item);
+          }
 
-        const unitCostMinor = toMinorUnits(inputLine.unitCost, 'Unit cost');
-        const directAdditionalCostMinor = toMinorUnits(inputLine.additionalCost || 0, 'Additional cost');
-        const batchAllocatedMinor = lineAllocatedBatchCostsMinor[i];
-        const totalLineAdditionalCostMinor = directAdditionalCostMinor + batchAllocatedMinor;
-        const lineCostMinor = unitCostMinor * inputLine.quantity + totalLineAdditionalCostMinor;
-        if (!Number.isSafeInteger(lineCostMinor)) throw Object.assign(new Error('Purchase amount exceeds supported precision'), { statusCode: 400 });
-        totalCostMinor += lineCostMinor;
-        if (!Number.isSafeInteger(totalCostMinor)) throw Object.assign(new Error('Purchase total exceeds supported precision'), { statusCode: 400 });
+          const previousStock = rm.currentStock || 0;
+          const previousAverageCost = rm.averageCostMinor || 0;
 
-        const landedUnitCostMinor = Math.round(lineCostMinor / inputLine.quantity);
+          rm.currentStock = previousStock + inputLine.quantity;
+          if (previousStock === 0 || !previousAverageCost) {
+            rm.averageCostMinor = landedUnitCostMinor;
+          } else {
+            const previousValue = previousStock * previousAverageCost;
+            const combinedValue = previousValue + lineCostMinor;
+            rm.averageCostMinor = rm.currentStock > 0 ? Math.round(combinedValue / rm.currentStock) : landedUnitCostMinor;
+          }
+          rm.latestUnitCostMinor = landedUnitCostMinor;
+          if (supplierId && !rm.primarySupplier) {
+            rm.primarySupplier = supplierId;
+          }
+          await rm.save({ session });
 
-        // Build itemized cost breakdown per unit
-        const breakdown = [
-          { category: 'Purchase Price', amountMinor: unitCostMinor },
-        ];
-        if (directAdditionalCostMinor > 0) {
-          breakdown.push({
-            category: 'Direct Extra',
-            amountMinor: Math.round(directAdditionalCostMinor / inputLine.quantity),
+          lines.push({
+            itemType: 'raw_material',
+            rawMaterial: rm._id,
+            rawMaterialName: rm.name,
+            unit: rm.unit,
+            quantity: inputLine.quantity,
+            unitCostMinor,
+            additionalCostMinor: totalLineAdditionalCostMinor,
+            landedUnitCostMinor,
+            costBreakdown: breakdown,
+            stockBefore: previousStock,
+            stockAfter: rm.currentStock,
+            averageCostBeforeMinor: previousAverageCost || null,
+            averageCostAfterMinor: rm.averageCostMinor || null,
           });
-        }
-        for (const item of lineCostBreakdowns[i]) {
-          breakdown.push(item);
-        }
-
-        const previousStock = variant.stock;
-        const previousAverageCost = variant.averageCostMinor;
-        if (data.kind === 'opening_stock') {
-          variant.stock = inputLine.quantity;
-          variant.averageCostMinor = landedUnitCostMinor;
         } else {
-          // ── Purchases go to WAREHOUSE stock, not store shelf ──
-          variant.warehouseStock = (variant.warehouseStock || 0) + inputLine.quantity;
-        }
-        if (data.kind !== 'opening_stock' && previousStock === 0) {
-          variant.averageCostMinor = landedUnitCostMinor;
-        } else if (data.kind !== 'opening_stock' && Number.isSafeInteger(previousAverageCost)) {
-          const previousValue = previousStock * previousAverageCost;
-          const combinedValue = previousValue + lineCostMinor;
-          if (!Number.isSafeInteger(combinedValue)) throw Object.assign(new Error('Inventory valuation exceeds supported precision'), { statusCode: 400 });
-          // Total inventory = store + warehouse for cost averaging
-          const totalUnits = variant.stock + variant.warehouseStock;
-          variant.averageCostMinor = totalUnits > 0 ? Math.round(combinedValue / totalUnits) : landedUnitCostMinor;
-        }
+          const product = await Product.findById(inputLine.product)
+            .select('+variants.averageCostMinor')
+            .session(session);
+          if (!product) throw Object.assign(new Error('Product not found'), { statusCode: 404 });
+          const variant = product.variants.find((item) => item.label === inputLine.variantLabel);
+          if (!variant) throw Object.assign(new Error(`Variant not found for ${product.name}`), { statusCode: 400 });
 
-        // Keep product pricing & costing metadata current
-        variant.latestUnitCostMinor = unitCostMinor;
-        variant.latestLandedCostMinor = landedUnitCostMinor;
+          if (data.kind === 'opening_stock') {
+            const openingAlreadyRecorded = await InventoryPurchase.exists({
+              kind: 'opening_stock',
+              lines: { $elemMatch: { product: product._id, variantLabel: variant.label } },
+            }).session(session);
+            if (openingAlreadyRecorded) {
+              throw Object.assign(new Error(`Opening inventory was already recorded for ${product.name} (${variant.label})`), { statusCode: 409 });
+            }
+          }
 
-        lines.push({
-          product: product._id,
-          productName: product.name,
-          variantLabel: variant.label,
-          quantity: inputLine.quantity,
-          unitCostMinor,
-          additionalCostMinor: totalLineAdditionalCostMinor,
-          landedUnitCostMinor,
-          costBreakdown: breakdown,
-          stockBefore: previousStock,
-          warehouseStockBefore: (variant.warehouseStock || 0) - inputLine.quantity,
-          averageCostBeforeMinor: previousAverageCost ?? null,
-          stockAfter: variant.stock,
-          warehouseStockAfter: variant.warehouseStock,
-          averageCostAfterMinor: variant.averageCostMinor ?? null,
-        });
-        await product.save({ session });
+          const unitCostMinor = toMinorUnits(inputLine.unitCost, 'Unit cost');
+          const directAdditionalCostMinor = toMinorUnits(inputLine.additionalCost || 0, 'Additional cost');
+          const batchAllocatedMinor = lineAllocatedBatchCostsMinor[i];
+          const totalLineAdditionalCostMinor = directAdditionalCostMinor + batchAllocatedMinor;
+          const lineCostMinor = unitCostMinor * inputLine.quantity + totalLineAdditionalCostMinor;
+          if (!Number.isSafeInteger(lineCostMinor)) throw Object.assign(new Error('Purchase amount exceeds supported precision'), { statusCode: 400 });
+          totalCostMinor += lineCostMinor;
+          if (!Number.isSafeInteger(totalCostMinor)) throw Object.assign(new Error('Purchase total exceeds supported precision'), { statusCode: 400 });
+
+          const landedUnitCostMinor = Math.round(lineCostMinor / inputLine.quantity);
+
+          // Build itemized cost breakdown per unit
+          const breakdown = [
+            { category: 'Purchase Price', amountMinor: unitCostMinor },
+          ];
+          if (directAdditionalCostMinor > 0) {
+            breakdown.push({
+              category: 'Direct Extra',
+              amountMinor: Math.round(directAdditionalCostMinor / inputLine.quantity),
+            });
+          }
+          for (const item of lineCostBreakdowns[i]) {
+            breakdown.push(item);
+          }
+
+          const previousStock = variant.stock;
+          const previousAverageCost = variant.averageCostMinor;
+          if (data.kind === 'opening_stock') {
+            variant.stock = inputLine.quantity;
+            variant.averageCostMinor = landedUnitCostMinor;
+          } else {
+            // ── Purchases go to WAREHOUSE stock, not store shelf ──
+            variant.warehouseStock = (variant.warehouseStock || 0) + inputLine.quantity;
+          }
+          if (data.kind !== 'opening_stock' && previousStock === 0) {
+            variant.averageCostMinor = landedUnitCostMinor;
+          } else if (data.kind !== 'opening_stock' && Number.isSafeInteger(previousAverageCost)) {
+            const previousValue = previousStock * previousAverageCost;
+            const combinedValue = previousValue + lineCostMinor;
+            if (!Number.isSafeInteger(combinedValue)) throw Object.assign(new Error('Inventory valuation exceeds supported precision'), { statusCode: 400 });
+            // Total inventory = store + warehouse for cost averaging
+            const totalUnits = variant.stock + variant.warehouseStock;
+            variant.averageCostMinor = totalUnits > 0 ? Math.round(combinedValue / totalUnits) : landedUnitCostMinor;
+          }
+
+          // Keep product pricing & costing metadata current
+          variant.latestUnitCostMinor = unitCostMinor;
+          variant.latestLandedCostMinor = landedUnitCostMinor;
+
+          lines.push({
+            itemType: 'product',
+            product: product._id,
+            productName: product.name,
+            variantLabel: variant.label,
+            quantity: inputLine.quantity,
+            unitCostMinor,
+            additionalCostMinor: totalLineAdditionalCostMinor,
+            landedUnitCostMinor,
+            costBreakdown: breakdown,
+            stockBefore: previousStock,
+            warehouseStockBefore: (variant.warehouseStock || 0) - inputLine.quantity,
+            averageCostBeforeMinor: previousAverageCost ?? null,
+            stockAfter: variant.stock,
+            warehouseStockAfter: variant.warehouseStock,
+            averageCostAfterMinor: variant.averageCostMinor ?? null,
+          });
+          await product.save({ session });
+        }
       }
 
       if (amountPaidMinor > totalCostMinor) {

@@ -16,6 +16,7 @@ const stockMovementSchema = new mongoose.Schema(
         'order_sale',
         'order_cancelled',
         'warehouse_to_store',   // Transfer from warehouse/godown to store shelf
+        'packaging_production', // Finished product created from raw materials
       ],
       required: true,
       index: true,

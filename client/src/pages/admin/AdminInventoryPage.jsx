@@ -5,6 +5,9 @@ import api from '../../lib/axios';
 import { fmtPKR, cloudinaryImage } from '../../lib/utils';
 import { useToast } from '../../context/ToastContext';
 import SEO from '../../components/ui/SEO';
+import ProductionRunModal from '../../components/admin/ProductionRunModal';
+import RawMaterialModal from '../../components/admin/RawMaterialModal';
+import RawMaterialAdjustModal from '../../components/admin/RawMaterialAdjustModal';
 
 const getStockBadgeConfig = (stock) => {
   if (stock === 0) {
@@ -46,6 +49,8 @@ const getMovementTypeBadge = (type) => {
       return { label: 'POS / Online Sale', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' };
     case 'order_cancelled':
       return { label: 'Cancelled Restock', color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-300' };
+    case 'packaging_production':
+      return { label: 'Packaging Run (+Finished)', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' };
     default:
       return { label: type, color: 'bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300' };
   }
@@ -120,6 +125,53 @@ export default function AdminInventoryPage() {
     },
   });
   const suppliers = suppliersData || [];
+
+  // Raw Materials Tab State
+  const [rawSearch, setRawSearch] = useState('');
+  const [rawTypeFilter, setRawTypeFilter] = useState('');
+  const [rawCategoryFilter, setRawCategoryFilter] = useState('');
+  const [rawStockFilter, setRawStockFilter] = useState('all');
+  const [rawPage, setRawPage] = useState(1);
+  const [rawModalOpen, setRawModalOpen] = useState(false);
+  const [rawEditTarget, setRawEditTarget] = useState(null);
+  const [rawAdjustModalOpen, setRawAdjustModalOpen] = useState(false);
+  const [rawAdjustTarget, setRawAdjustTarget] = useState(null);
+
+  // Production Batches Tab State
+  const [productionModalOpen, setProductionModalOpen] = useState(false);
+  const [productionPage, setProductionPage] = useState(1);
+  const [productionProductFilter, setProductionProductFilter] = useState('');
+
+  // Fetch Raw Materials
+  const { data: rawMaterialsData, isLoading: isRawLoading } = useQuery({
+    queryKey: ['rawMaterials', rawSearch, rawTypeFilter, rawCategoryFilter, rawStockFilter, rawPage],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (rawSearch.trim()) params.append('search', rawSearch.trim());
+      if (rawTypeFilter) params.append('type', rawTypeFilter);
+      if (rawCategoryFilter) params.append('category', rawCategoryFilter);
+      if (rawStockFilter !== 'all') params.append('stockStatus', rawStockFilter);
+      params.append('page', rawPage);
+      params.append('limit', 20);
+
+      const res = await api.get(`/admin/inventory/raw-materials?${params.toString()}`);
+      return res.data;
+    },
+  });
+
+  // Fetch Production Batches
+  const { data: productionBatchesData, isLoading: isProductionLoading } = useQuery({
+    queryKey: ['productionBatches', productionProductFilter, productionPage],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (productionProductFilter) params.append('targetProduct', productionProductFilter);
+      params.append('page', productionPage);
+      params.append('limit', 20);
+
+      const res = await api.get(`/admin/inventory/production-batches?${params.toString()}`);
+      return res.data;
+    },
+  });
 
   // Fetch Movements Log
   const { data: movementsData, isLoading: isMovementsLoading, refetch: refetchMovements } = useQuery({
@@ -233,6 +285,33 @@ export default function AdminInventoryPage() {
       reason: transferReason.trim(),
       reference: transferReference.trim(),
     });
+  };
+
+  // Reversal Mutation for Production Batches
+  const reverseBatchMutation = useMutation({
+    mutationFn: async ({ id, reason }) => {
+      const res = await api.post(`/admin/inventory/production-batches/${id}/reverse`, { reason });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-inventory-stock'] });
+      queryClient.invalidateQueries({ queryKey: ['rawMaterials'] });
+      queryClient.invalidateQueries({ queryKey: ['productionBatches'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-inventory-movements'] });
+      toast.success(data?.message || 'Production batch reversed successfully');
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to reverse production batch');
+    },
+  });
+
+  const handleReverseBatch = (batch) => {
+    const reason = window.prompt(
+      `Are you sure you want to reverse Production Batch #${batch.batchNumber}?\nThis will remove ${batch.outputQuantity} finished packages from stock and restore all consumed raw materials.\n\nEnter reason for reversal:`,
+      'Correction of production entry error'
+    );
+    if (!reason || !reason.trim()) return;
+    reverseBatchMutation.mutate({ id: batch._id, reason: reason.trim() });
   };
 
   const handleOpenAdjust = (product, variantLabel) => {
@@ -384,22 +463,44 @@ export default function AdminInventoryPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex border-b border-neutral-200 dark:border-neutral-800 space-x-1 sm:space-x-4">
+      <div className="flex border-b border-neutral-200 dark:border-neutral-800 space-x-1 sm:space-x-4 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab('monitor')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'monitor'
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'monitor'
             ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
             : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
         >
-          📊 Live Stock Monitor
+          📊 Live Finished Stock
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('production')}
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'production'
+            ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+            }`}
+        >
+          🏭 Packaging &amp; Production
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('raw_materials')}
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'raw_materials'
+            ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+            : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
+            }`}
+        >
+          🌾 Raw Materials &amp; Supplies
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('adjust')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'adjust'
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'adjust'
             ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
             : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
@@ -410,7 +511,7 @@ export default function AdminInventoryPage() {
         <button
           type="button"
           onClick={() => setActiveTab('movements')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'movements'
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'movements'
             ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
             : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
@@ -421,7 +522,7 @@ export default function AdminInventoryPage() {
         <button
           type="button"
           onClick={() => setActiveTab('reorder')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'reorder'
+          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'reorder'
             ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
             : 'border-transparent text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
@@ -1267,7 +1368,11 @@ export default function AdminInventoryPage() {
               {reorderData?.groupedBySupplier?.map((group) => {
                 // Prepare WhatsApp message
                 const itemList = group.items
-                  .map((it) => `• ${it.productName} (${it.variantLabel}): current stock ${it.currentStock}, need ${it.recommendedReorder} pcs`)
+                  .map((it) =>
+                    it.itemType === 'raw_material'
+                      ? `• 🌾 [Bulk Material] ${it.name} (${it.sku}): current stock ${it.currentStock} ${it.unit}, need ${it.recommendedReorder} ${it.unit}`
+                      : `• 📦 [Product] ${it.productName} (${it.variantLabel}): current stock ${it.currentStock}, need ${it.recommendedReorder} pcs`
+                  )
                   .join('%0A');
                 const whatsappMessage = `Assalam-o-alaikum ${group.supplierName},%0A%0AWe would like to place a restock order for Karakoram Store:%0A${itemList}%0A%0APlease confirm availability and timeline. Thank you!`;
                 const cleanPhone = (group.supplierPhone || '').replace(/[^0-9]/g, '');
@@ -1314,30 +1419,30 @@ export default function AdminInventoryPage() {
                       <table className="w-full text-left text-xs">
                         <thead className="bg-neutral-50 dark:bg-neutral-800/20 text-neutral-500 border-b border-neutral-100 dark:border-neutral-800">
                           <tr>
-                            <th className="px-4 py-2.5">Product</th>
-                            <th className="px-4 py-2.5">Variant</th>
+                            <th className="px-4 py-2.5">Item Name</th>
+                            <th className="px-4 py-2.5">Variant / SKU</th>
                             <th className="px-4 py-2.5 text-center">Current Stock</th>
                             <th className="px-4 py-2.5 text-center">Suggested Reorder</th>
-                            <th className="px-4 py-2.5 text-right">Selling Price</th>
+                            <th className="px-4 py-2.5 text-right">Unit Price / Rate</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/40">
                           {group.items.map((it, idx) => (
-                            <tr key={`${it.productId}-${it.variantLabel}-${idx}`}>
+                            <tr key={`${it.itemType || 'p'}-${it.productId || it.rawMaterialId}-${it.variantLabel || it.sku}-${idx}`}>
                               <td className="px-4 py-2.5 font-medium text-neutral-900 dark:text-white">
-                                {it.productName}
+                                {it.itemType === 'raw_material' ? `🌾 ${it.name}` : it.productName}
                               </td>
                               <td className="px-4 py-2.5 text-neutral-600 dark:text-neutral-400">
-                                {it.variantLabel}
+                                {it.itemType === 'raw_material' ? `${it.sku} (${it.unit})` : it.variantLabel}
                               </td>
                               <td className="px-4 py-2.5 text-center font-bold text-red-600 dark:text-red-400">
-                                {it.currentStock}
+                                {it.currentStock} {it.itemType === 'raw_material' ? it.unit : ''}
                               </td>
                               <td className="px-4 py-2.5 text-center font-semibold text-emerald-600 dark:text-emerald-400">
-                                +{it.recommendedReorder} units
+                                +{it.recommendedReorder} {it.itemType === 'raw_material' ? it.unit : 'units'}
                               </td>
                               <td className="px-4 py-2.5 text-right font-medium text-neutral-700 dark:text-neutral-300">
-                                {fmtPKR(it.price)}
+                                {fmtPKR(it.itemType === 'raw_material' ? it.rate : it.price)}
                               </td>
                             </tr>
                           ))}
@@ -1349,6 +1454,422 @@ export default function AdminInventoryPage() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 5: PACKAGING & PRODUCTION RUNS
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'production' && (
+        <div className="space-y-4">
+          {/* Header Action & KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs">
+              <div className="text-[11px] font-medium text-neutral-500 uppercase tracking-wider">
+                Total Production Batches
+              </div>
+              <div className="mt-1.5 text-2xl font-bold text-neutral-900 dark:text-white">
+                {productionBatchesData?.pagination?.total || 0}
+              </div>
+              <div className="mt-0.5 text-[11px] text-neutral-400">Recorded conversions</div>
+            </div>
+
+            <div className="bg-white dark:bg-neutral-900 border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/20 dark:bg-emerald-950/10 rounded-xl p-3.5 shadow-xs">
+              <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                Total Finished Packages
+              </div>
+              <div className="mt-1.5 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                {productionBatchesData?.totals?.totalPackages?.toLocaleString() || 0}
+              </div>
+              <div className="mt-0.5 text-[11px] text-emerald-700/80">Added to inventory</div>
+            </div>
+
+            <div className="bg-white dark:bg-neutral-900 border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/20 dark:bg-indigo-950/10 rounded-xl p-3.5 shadow-xs">
+              <div className="text-[11px] font-medium text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
+                Total Manufacturing Value
+              </div>
+              <div className="mt-1.5 text-2xl font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                {fmtPKR((productionBatchesData?.totals?.totalProductionCostMinor || 0) / 100)}
+              </div>
+              <div className="mt-0.5 text-[11px] text-indigo-700/80">Landed production cost</div>
+            </div>
+
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs flex flex-col justify-center items-stretch">
+              <button
+                type="button"
+                onClick={() => setProductionModalOpen(true)}
+                className="w-full py-2.5 px-3 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-md transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span>🏭</span> + New Packaging Run
+              </button>
+            </div>
+          </div>
+
+          {/* Batches Table */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+                  Historical Processing &amp; Packaging Runs
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Full batch-level trace: raw material consumption, labour/expenses, and finished landed package costs
+                </p>
+              </div>
+
+              <select
+                value={productionProductFilter}
+                onChange={(e) => {
+                  setProductionProductFilter(e.target.value);
+                  setProductionPage(1);
+                }}
+                className="text-xs px-3 py-1.5 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white"
+              >
+                <option value="">All Finished Products</option>
+                {stockData?.products?.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {isProductionLoading ? (
+              <div className="p-8 text-center text-xs text-neutral-500">Loading production records...</div>
+            ) : !productionBatchesData?.batches?.length ? (
+              <div className="p-12 text-center text-xs text-neutral-400">
+                <span className="text-3xl block mb-2">🏭</span>
+                No packaging runs recorded yet. Click &quot;+ New Packaging Run&quot; above to convert raw materials into finished packages.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-neutral-50 dark:bg-neutral-800/40 text-neutral-500 border-b border-neutral-100 dark:border-neutral-800">
+                    <tr>
+                      <th className="px-4 py-3">Batch Number</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Finished Product &amp; Variant</th>
+                      <th className="px-4 py-3 text-center">Output Packages</th>
+                      <th className="px-4 py-3 text-right">Raw Material Cost</th>
+                      <th className="px-4 py-3 text-right">Packaging Cost</th>
+                      <th className="px-4 py-3 text-right">Labour &amp; Expenses</th>
+                      <th className="px-4 py-3 text-right">Total Batch Cost</th>
+                      <th className="px-4 py-3 text-right font-bold text-indigo-700 dark:text-indigo-400">Cost / Pkg</th>
+                      <th className="px-4 py-3 text-right">Selling Price</th>
+                      <th className="px-4 py-3 text-right">Profit / Pkg</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/50">
+                    {productionBatchesData.batches.map((batch) => {
+                      const costPerPkg = (batch.costPerPackageMinor || 0) / 100;
+                      const sellPrice = batch.sellingPriceSnapshot || 0;
+                      const unitProfit = sellPrice > 0 ? sellPrice - costPerPkg : 0;
+
+                      return (
+                        <tr key={batch._id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/30 transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-neutral-900 dark:text-white">
+                            {batch.batchNumber}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-500 whitespace-nowrap">
+                            {new Date(batch.productionDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-neutral-900 dark:text-white">
+                              {batch.targetProductName}
+                            </div>
+                            <span className="inline-block mt-0.5 px-2 py-0.5 text-[10px] font-bold rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                              {batch.targetVariantLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                            +{batch.outputQuantity}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-neutral-600 dark:text-neutral-400">
+                            {fmtPKR(batch.totalRawMaterialCostMinor / 100)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-neutral-600 dark:text-neutral-400">
+                            {fmtPKR(batch.totalPackagingCostMinor / 100)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-neutral-600 dark:text-neutral-400">
+                            {fmtPKR(batch.totalExpensesMinor / 100)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-neutral-900 dark:text-white">
+                            {fmtPKR(batch.totalBatchCostMinor / 100)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-extrabold text-indigo-700 dark:text-indigo-400 text-sm bg-indigo-50/30 dark:bg-indigo-950/20">
+                            {fmtPKR(costPerPkg)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-neutral-700 dark:text-neutral-300">
+                            {sellPrice > 0 ? fmtPKR(sellPrice) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {sellPrice > 0 ? fmtPKR(unitProfit) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {batch.status === 'reversed' ? (
+                              <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+                                Reversed
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleReverseBatch(batch)}
+                                disabled={reverseBatchMutation.isPending}
+                                className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline disabled:opacity-50"
+                                title="Reverse production batch and restore raw materials"
+                              >
+                                Reverse
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          TAB 6: RAW MATERIALS & PACKAGING SUPPLIES
+      ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'raw_materials' && (
+        <div className="space-y-4">
+          {/* Header Action & KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs">
+              <div className="text-[11px] font-medium text-neutral-500 uppercase tracking-wider">
+                Total Materials
+              </div>
+              <div className="mt-1.5 text-2xl font-bold text-neutral-900 dark:text-white">
+                {rawMaterialsData?.stats?.totalItems || 0}
+              </div>
+              <div className="mt-0.5 text-[11px] text-neutral-400">Raw &amp; packaging items</div>
+            </div>
+
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs">
+              <div className="text-[11px] font-medium text-neutral-500 uppercase tracking-wider">
+                Bulk Raw Stock
+              </div>
+              <div className="mt-1.5 text-2xl font-bold text-amber-600 dark:text-amber-400">
+                {rawMaterialsData?.stats?.rawCount || 0} items
+              </div>
+              <div className="mt-0.5 text-[11px] text-neutral-400">Walnuts, herbs, seeds</div>
+            </div>
+
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs">
+              <div className="text-[11px] font-medium text-neutral-500 uppercase tracking-wider">
+                Packaging Supplies
+              </div>
+              <div className="mt-1.5 text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                {rawMaterialsData?.stats?.packagingCount || 0} items
+              </div>
+              <div className="mt-0.5 text-[11px] text-neutral-400">Pouches, jars, labels</div>
+            </div>
+
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs">
+              <div className="text-[11px] font-medium text-neutral-500 uppercase tracking-wider">
+                Total Raw Valuation
+              </div>
+              <div className="mt-1.5 text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                {fmtPKR((rawMaterialsData?.stats?.totalValuationMinor || 0) / 100)}
+              </div>
+              <div className="mt-0.5 text-[11px] text-neutral-400">In warehouse storage</div>
+            </div>
+
+            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-3.5 shadow-xs flex flex-col justify-center items-stretch col-span-2 md:col-span-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setRawEditTarget(null);
+                  setRawModalOpen(true);
+                }}
+                className="w-full py-2.5 px-3 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-md transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span>➕</span> Add Material / Supply
+              </button>
+            </div>
+          </div>
+
+          {/* Filters Bar */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
+                  Search Material or SKU
+                </label>
+                <input
+                  type="text"
+                  value={rawSearch}
+                  onChange={(e) => {
+                    setRawSearch(e.target.value);
+                    setRawPage(1);
+                  }}
+                  placeholder="e.g. Walnuts, Pouch, Label..."
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
+                  Material Classification
+                </label>
+                <select
+                  value={rawTypeFilter}
+                  onChange={(e) => {
+                    setRawTypeFilter(e.target.value);
+                    setRawPage(1);
+                  }}
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                >
+                  <option value="">All Classifications</option>
+                  <option value="raw_material">🌾 Bulk Raw Material</option>
+                  <option value="packaging_material">📦 Packaging Supply</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">
+                  Stock Health
+                </label>
+                <select
+                  value={rawStockFilter}
+                  onChange={(e) => {
+                    setRawStockFilter(e.target.value);
+                    setRawPage(1);
+                  }}
+                  className="w-full text-xs px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 text-neutral-900 dark:text-white"
+                >
+                  <option value="all">All Items</option>
+                  <option value="in_stock">In Stock (&gt; 0)</option>
+                  <option value="out_of_stock">Out of Stock (0)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Raw Materials Inventory Table */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-xs overflow-hidden">
+            {isRawLoading ? (
+              <div className="p-8 text-center text-xs text-neutral-500">Loading raw materials...</div>
+            ) : !rawMaterialsData?.rawMaterials?.length ? (
+              <div className="p-12 text-center text-xs text-neutral-400">
+                <span className="text-3xl block mb-2">🌾</span>
+                No raw materials or packaging supplies found. Click &quot;Add Material / Supply&quot; to register your bulk stock.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-neutral-50 dark:bg-neutral-800/40 text-neutral-500 border-b border-neutral-100 dark:border-neutral-800">
+                    <tr>
+                      <th className="px-4 py-3">Material Name</th>
+                      <th className="px-4 py-3">SKU / Code</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Unit</th>
+                      <th className="px-4 py-3 text-center">Warehouse Balance</th>
+                      <th className="px-4 py-3 text-center">Reorder Threshold</th>
+                      <th className="px-4 py-3 text-right">Avg Unit Cost</th>
+                      <th className="px-4 py-3 text-right">Total Valuation</th>
+                      <th className="px-4 py-3">Supplier</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800/50">
+                    {rawMaterialsData.rawMaterials.map((rm) => {
+                      const avgCost = (rm.averageCostMinor || rm.latestUnitCostMinor || 0) / 100;
+                      const val = (rm.currentStock || 0) * avgCost;
+                      const isLow = rm.currentStock <= rm.reorderLevel;
+
+                      return (
+                        <tr key={rm._id} className="hover:bg-neutral-50/70 dark:hover:bg-neutral-800/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-neutral-900 dark:text-white">
+                              {rm.name}
+                            </div>
+                            <span className="text-[11px] text-neutral-400">
+                              {rm.category || 'General'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-medium text-neutral-600 dark:text-neutral-400">
+                            {rm.sku}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                rm.type === 'packaging_material'
+                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-900/50'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50'
+                              }`}
+                            >
+                              <span>{rm.type === 'packaging_material' ? '📦' : '🌾'}</span>
+                              {rm.type === 'packaging_material' ? 'Packaging' : 'Raw Material'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 font-medium text-neutral-600 dark:text-neutral-400">
+                            {rm.unit}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`font-mono font-bold text-sm ${
+                                isLow ? 'text-amber-600 dark:text-amber-400' : 'text-neutral-900 dark:text-white'
+                              }`}
+                            >
+                              {rm.currentStock} {rm.unit}
+                            </span>
+                            {isLow && (
+                              <span className="block text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
+                                ⚠️ Low Bulk Stock
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono text-neutral-500">
+                            {rm.reorderLevel} {rm.unit}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-neutral-700 dark:text-neutral-300">
+                            {fmtPKR(avgCost)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-neutral-900 dark:text-white">
+                            {fmtPKR(val)}
+                          </td>
+                          <td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">
+                            {rm.primarySupplier?.name || <span className="text-neutral-400 italic">Unassigned</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRawAdjustTarget(rm);
+                                  setRawAdjustModalOpen(true);
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+                              >
+                                ⚡ Adjust
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRawEditTarget(rm);
+                                  setRawModalOpen(true);
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-medium rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1483,6 +2004,34 @@ export default function AdminInventoryPage() {
           </div>
         </div>
       )}
+      {/* Modal: Production / Packaging Run */}
+      <ProductionRunModal
+        isOpen={productionModalOpen}
+        onClose={() => setProductionModalOpen(false)}
+        products={stockData?.products || []}
+        rawMaterials={rawMaterialsData?.rawMaterials || []}
+      />
+
+      {/* Modal: Add / Edit Raw Material */}
+      <RawMaterialModal
+        isOpen={rawModalOpen}
+        onClose={() => {
+          setRawModalOpen(false);
+          setRawEditTarget(null);
+        }}
+        initialData={rawEditTarget}
+        suppliers={suppliers}
+      />
+
+      {/* Modal: Adjust Raw Material Stock */}
+      <RawMaterialAdjustModal
+        isOpen={rawAdjustModalOpen}
+        onClose={() => {
+          setRawAdjustModalOpen(false);
+          setRawAdjustTarget(null);
+        }}
+        material={rawAdjustTarget}
+      />
     </div>
   );
 }

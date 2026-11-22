@@ -37,6 +37,13 @@ import {
   adminGetStockMovements,
   adminGetReorderAlerts,
   adminGetSuppliersList,
+  adminGetRawMaterials,
+  adminCreateRawMaterial,
+  adminUpdateRawMaterial,
+  adminAdjustRawMaterialStock,
+  adminCreateProductionBatch,
+  adminGetProductionBatches,
+  adminReverseProductionBatch,
 } from '../controllers/inventoryController.js';
 import { accountsExportLimiter, accountsLimiter } from '../utils/rateLimiters.js';
 import { requireTrustedAccountsOrigin } from '../middlewares/accountsSecurity.js';
@@ -104,6 +111,17 @@ router.post('/inventory/transfer', requireAnyAdminPermission('catalog', 'orders'
 router.get('/inventory/movements', requireAnyAdminPermission('catalog', 'orders'), adminGetStockMovements);
 router.get('/inventory/reorder-alerts', requireAnyAdminPermission('catalog', 'orders'), adminGetReorderAlerts);
 router.get('/suppliers', requireAnyAdminPermission('catalog', 'accounts', 'orders'), adminGetSuppliersList);
+
+// Raw Materials & Packaging Supplies
+router.get('/inventory/raw-materials', requireAnyAdminPermission('catalog', 'accounts', 'orders'), adminGetRawMaterials);
+router.post('/inventory/raw-materials', requireAnyAdminPermission('catalog', 'accounts'), adminCreateRawMaterial);
+router.put('/inventory/raw-materials/:id', requireAnyAdminPermission('catalog', 'accounts'), adminUpdateRawMaterial);
+router.post('/inventory/raw-materials/adjust', requireAnyAdminPermission('catalog', 'accounts', 'orders'), adminAdjustRawMaterialStock);
+
+// Packaging & Production Batches
+router.get('/inventory/production-batches', requireAnyAdminPermission('catalog', 'accounts', 'orders'), adminGetProductionBatches);
+router.post('/inventory/production-batches', requireAnyAdminPermission('catalog', 'accounts', 'orders'), adminCreateProductionBatch);
+router.post('/inventory/production-batches/:id/reverse', requireAnyAdminPermission('catalog', 'accounts'), adminReverseProductionBatch);
 
 // Categories
 router.post('/categories', requireAdminPermission('catalog'), adminCreateCategory);

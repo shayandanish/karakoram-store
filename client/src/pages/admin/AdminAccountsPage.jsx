@@ -37,8 +37,10 @@ const generatePurchaseRef = () => {
 };
 
 const newPurchaseLine = () => ({
+  itemType: 'product',
   product: '',
   variantLabel: '',
+  rawMaterial: '',
   quantity: '1',
   unitCost: '',
   transportCost: '0',
@@ -371,6 +373,14 @@ export default function AdminAccountsPage() {
     },
   });
 
+  const rawMaterialsQuery = useQuery({
+    queryKey: ['admin-accounts', 'raw-materials'],
+    queryFn: async () => {
+      const { data } = await api.get('/admin/inventory/raw-materials?limit=200');
+      return data.rawMaterials || [];
+    },
+  });
+
   const reportParams = useMemo(() => ({
     period,
     ...(period === 'custom' ? { startDate, endDate } : {}),
@@ -521,6 +531,7 @@ export default function AdminAccountsPage() {
 
   const records = accountsQuery.data;
   const products = productsQuery.data ?? EMPTY_ARRAY;
+  const rawMaterials = rawMaterialsQuery.data ?? EMPTY_ARRAY;
   const report = reportQuery.data;
   const suppliers = records?.suppliers ?? EMPTY_ARRAY;
   const activeSuppliers = suppliers.filter((supplier) => supplier.isActive);
@@ -1340,48 +1351,111 @@ export default function AdminAccountsPage() {
                     const selectedProduct = products.find((product) => product._id === line.product);
                     return (
                       <div key={index} className="space-y-2 rounded-xl border border-stone-200 bg-stone-50 p-3">
-                        <label className="block">
-                          <span className={labelClass}>Product</span>
-                          <select
-                            className={inputClass}
-                            required
-                            value={line.product}
-                            onChange={(event) => updatePurchaseLine(index, 'product', event.target.value)}
-                          >
-                            <option value="">Select product</option>
-                            {products.map((product) => (
-                              <option key={product._id} value={product._id}>{product.name}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label>
-                            <span className={labelClass}>Variant</span>
-                            <select
-                              className={inputClass}
-                              required
-                              value={line.variantLabel}
-                              onChange={(event) => updatePurchaseLine(index, 'variantLabel', event.target.value)}
-                            >
-                              <option value="">Select variant</option>
-                              {selectedProduct?.variants?.map((variant) => (
-                                <option key={variant._id || variant.label} value={variant.label}>{variant.label}</option>
-                              ))}
-                            </select>
-                          </label>
-                          <label>
-                            <span className={labelClass}>Qty</span>
+                        {/* Item Type: Catalog Product vs Raw Material */}
+                        <div className="flex items-center gap-4 pb-1">
+                          <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-700 cursor-pointer">
                             <input
-                              className={inputClass}
-                              required
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={line.quantity}
-                              onChange={(event) => updatePurchaseLine(index, 'quantity', event.target.value)}
+                              type="radio"
+                              name={`itemType-${index}`}
+                              value="product"
+                              checked={line.itemType !== 'raw_material'}
+                              onChange={() => updatePurchaseLine(index, 'itemType', 'product')}
+                              className="text-stone-900 focus:ring-stone-500"
                             />
+                            <span>Finished Catalog Product</span>
+                          </label>
+                          <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-700 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`itemType-${index}`}
+                              value="raw_material"
+                              checked={line.itemType === 'raw_material'}
+                              onChange={() => updatePurchaseLine(index, 'itemType', 'raw_material')}
+                              className="text-stone-900 focus:ring-stone-500"
+                            />
+                            <span>🌾 Bulk Raw Material / Packaging Supply</span>
                           </label>
                         </div>
+
+                        {line.itemType === 'raw_material' ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <label className="block">
+                              <span className={labelClass}>Raw Material / Packaging Item *</span>
+                              <select
+                                className={inputClass}
+                                required
+                                value={line.rawMaterial || ''}
+                                onChange={(event) => updatePurchaseLine(index, 'rawMaterial', event.target.value)}
+                              >
+                                <option value="">Select raw material...</option>
+                                {rawMaterials.map((rm) => (
+                                  <option key={rm._id} value={rm._id}>
+                                    {rm.name} ({rm.sku}) — Unit: {rm.unit} ({rm.currentStock} in warehouse)
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              <span className={labelClass}>
+                                Quantity Received ({rawMaterials.find((rm) => rm._id === line.rawMaterial)?.unit || 'units'}) *
+                              </span>
+                              <input
+                                className={inputClass}
+                                required
+                                type="number"
+                                min="0.001"
+                                step="any"
+                                value={line.quantity}
+                                onChange={(event) => updatePurchaseLine(index, 'quantity', event.target.value)}
+                              />
+                            </label>
+                          </div>
+                        ) : (
+                          <>
+                            <label className="block">
+                              <span className={labelClass}>Product</span>
+                              <select
+                                className={inputClass}
+                                required
+                                value={line.product}
+                                onChange={(event) => updatePurchaseLine(index, 'product', event.target.value)}
+                              >
+                                <option value="">Select product</option>
+                                {products.map((product) => (
+                                  <option key={product._id} value={product._id}>{product.name}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <label>
+                                <span className={labelClass}>Variant</span>
+                                <select
+                                  className={inputClass}
+                                  required
+                                  value={line.variantLabel}
+                                  onChange={(event) => updatePurchaseLine(index, 'variantLabel', event.target.value)}
+                                >
+                                  <option value="">Select variant</option>
+                                  {selectedProduct?.variants?.map((variant) => (
+                                    <option key={variant._id || variant.label} value={variant.label}>{variant.label}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label>
+                                <span className={labelClass}>Qty</span>
+                                <input
+                                  className={inputClass}
+                                  required
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={line.quantity}
+                                  onChange={(event) => updatePurchaseLine(index, 'quantity', event.target.value)}
+                                />
+                              </label>
+                            </div>
+                          </>
+                        )}
                         <div className="grid grid-cols-3 gap-2">
                           <label>
                             <span className={labelClass}>Unit Cost (PKR) *</span>
@@ -1498,9 +1572,13 @@ export default function AdminAccountsPage() {
                               <div className="mt-1 text-xs text-stone-600 space-y-0.5">
                                 {purchase.lines.map((line, lIdx) => (
                                   <div key={lIdx} className="flex flex-wrap items-center gap-1">
-                                    <span className="font-medium text-stone-800">{line.productName} ({line.variantLabel}) × {line.quantity}</span>
+                                    <span className="font-medium text-stone-800">
+                                      {line.itemType === 'raw_material'
+                                        ? `🌾 ${line.rawMaterialName || 'Raw Material'} (${line.quantity} ${line.unit || ''})`
+                                        : `${line.productName} (${line.variantLabel}) × ${line.quantity}`}
+                                    </span>
                                     <span className="text-[11px] text-stone-500">
-                                      @ Rs. {line.landedUnitCost ?? line.unitCost}/u
+                                      @ Rs. {line.landedUnitCost ?? line.unitCost}/{line.itemType === 'raw_material' ? (line.unit || 'unit') : 'u'}
                                       {line.landedUnitCost && line.landedUnitCost !== line.unitCost ? ` (Base: Rs. ${line.unitCost})` : ''}
                                     </span>
                                   </div>
